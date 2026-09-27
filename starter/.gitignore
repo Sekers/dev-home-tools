@@ -1,0 +1,18 @@
+# Scratch space for text that leaves this repo, such as GitHub issue bodies
+.drafts/
+
+# Windows thumbnail cache files
+Thumbs.db
+ehthumbs.db
+
+# Folder config file
+[Dd]esktop.ini
+
+# Windows shortcuts
+*.lnk
+
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!*.code-workspace

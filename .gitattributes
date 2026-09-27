@@ -1,0 +1,12 @@
+# Store and check out every text file as LF, so every PC gets byte-identical files whatever its
+# core.autocrlf says. Git hides line-ending differences when diffing, so pinning them here is the
+# only reliable guard.
+* text=auto eol=lf
+*.md    text eol=lf
+*.ps1   text eol=lf
+*.json  text eol=lf
+*.toml  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.txt   text eol=lf
+LICENSE text eol=lf

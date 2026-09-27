@@ -1,0 +1,14 @@
+# Store and check out every text file as LF, so every PC gets byte-identical files whatever its
+# core.autocrlf says.
+* text=auto eol=lf
+*.md    text eol=lf
+*.ps1   text eol=lf
+*.json  text eol=lf
+*.toml  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.txt   text eol=lf
+
+# The knowledge index is one row per line, so merge it line by line: rows added on two PCs
+# combine instead of conflicting. Review the result after a merge.
+knowledge/README.md merge=union
