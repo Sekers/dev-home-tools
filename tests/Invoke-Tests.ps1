@@ -671,6 +671,8 @@ function Test-Locate {
         $result = Invoke-Locate -Script $locate -Folder $repo
         $v = $result.Values
         Test-Check 'prints the service, the name, and the draft path' (($v['service'] -ceq 'github') -and ($v['name'] -ceq 'you/tool') -and ($v['draft'] -ceq '.drafts/github/you/tool/issue.md')) $result.Lines
+        # The sandbox keeps dev-home beside the sample repo.
+        Test-Check 'prints the handoff''s path relative to the project folder' ($v['link'] -ceq '../dev-home/handoffs/github/you/tool/HANDOFF.md') $result.Lines
 
         Invoke-Git @('-C', $repo, 'remote', 'set-url', 'origin', 'https://git.example.com/team/app.git') | Out-Null
         $result = Invoke-Locate -Script $locate -Folder $repo

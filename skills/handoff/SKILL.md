@@ -39,10 +39,16 @@ Change the handoff only when the user asked for a change: through `update`, `nex
 or by creating it (see "Find this project's handoff"). When a request could be a read or a
 change, such as `/handoff next steps?`, treat it as a read and ask.
 
+Whenever you tell the user about the handoff (a summary, Next up, or what an `update`, `next`,
+or `issue` changed), link to it once, with the `link` path from `locate.ps1` as the target, so
+they can open it. Link the project files you name, too, by their path in the project. Some
+editors, such as the VS Code extension, can't open a link whose path has a drive letter or a
+space, so use these relative paths, and write a path that has a space as code instead.
+
 ## Find this project's handoff
 
 1. In the project, run `pwsh -NoProfile -File {{SKILL_DIR}}/locate.ps1`. It reads the
-   project's address from its git config, without the network, and prints four lines. The steps
+   project's address from its git config, without the network, and prints five lines. The steps
    below use them by name:
    - `service`: where the project is hosted: `github`, `gitlab`, `bitbucket`, `azure-devops`,
      `other` for anywhere else, or `local` for a project with no remote.
@@ -50,6 +56,7 @@ change, such as `/handoff next steps?`, treat it as a read and ask.
      name plus the start of the project's first commit, such as `tools-3f9c2ab`.
    - `handoff`: the handoff's path in dev-home, such as `handoffs/github/you/tool/HANDOFF.md`.
    - `draft`: where a GitHub issue draft goes.
+   - `link`: the handoff's path relative to the project folder, for links in your replies.
 
    If it prints an error instead, show the error and stop: without the script's answer, there's
    no telling which handoff is this project's.

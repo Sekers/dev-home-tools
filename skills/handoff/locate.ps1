@@ -5,15 +5,20 @@
 
 .DESCRIPTION
     Run it in the project's folder. It reads the project's origin address from the project's own
-    git config, so it needs no network and no sign-in, and prints four lines:
+    git config, so it needs no network and no sign-in, and prints five lines:
 
         service: github
         name: you/tool
         handoff: handoffs/github/you/tool/HANDOFF.md
         draft: .drafts/github/you/tool/issue.md
+        link: ../dev-home/handoffs/github/you/tool/HANDOFF.md
 
     The handoff and draft paths are relative to dev-home. Everything is lowercase, so two PCs
     whose addresses differ only in case get the same handoff.
+
+    The link is the handoff's path relative to the current folder, for links in an agent's
+    replies: some editors can't open a link to a full path that starts with a drive letter. When
+    dev-home is on another drive, there's no relative path, so it's the full path.
 
     A project hosted on a service in $Services gets a folder under that service's name, with the
     rest of the address after it: <owner>/<repo> for GitHub and Bitbucket, <group>/<project> for
@@ -49,6 +54,11 @@ $Services = @{
     'dev.azure.com'     = 'azure-devops'
     'ssh.dev.azure.com' = 'azure-devops'
 }
+
+# dev-home's folder, filled in by setup. A here-string, so a path with an apostrophe still works.
+$ContentDir = @'
+{{CONTENT_DIR}}
+'@
 
 # Git's messages in English, so "not a git repository" can be told apart from other failures.
 $env:LC_ALL = 'C'
@@ -215,7 +225,10 @@ if ($null -eq $parts) {
 }
 
 $relative = (@($service) + $parts) -join '/'
+$handoff = 'handoffs/{0}/HANDOFF.md' -f $relative
+$link = [System.IO.Path]::GetRelativePath($PWD.ProviderPath, ('{0}/{1}' -f $ContentDir, $handoff)).Replace('\', '/')
 Write-Output ('service: {0}' -f $service)
 Write-Output ('name: {0}' -f ($parts -join '/'))
-Write-Output ('handoff: handoffs/{0}/HANDOFF.md' -f $relative)
+Write-Output ('handoff: {0}' -f $handoff)
 Write-Output ('draft: .drafts/{0}/issue.md' -f $relative)
+Write-Output ('link: {0}' -f $link)

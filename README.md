@@ -159,7 +159,7 @@ These read and update the current project's handoff, which lives in your dev-hom
 
 | Command | What it does |
 | --- | --- |
-| `/handoff` | Syncs your dev-home with GitHub, then summarizes this project's handoff, starting with Next up. |
+| `/handoff` | Syncs your dev-home with GitHub, then summarizes this project's handoff, starting with Next up, with a link to the file. |
 | `/handoff <question>` | The same, then answers the question. |
 | `/handoff update` | Brings the whole handoff up to date. If Next up looks done, asks before removing it. |
 | `/handoff update <text>` | The same, with your text worked in, in any words. The text can also set, add to, or clear Next up. |
