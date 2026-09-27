@@ -71,7 +71,7 @@ If you can't fill in the evidence from this session, don't offer it.
 
 Agents read the knowledge base only when they look something up, so a stored pitfall may not
 stop the next one. For a pitfall that hits often and costs real time, you may also offer one
-line for `{{CONTENT_DIR}}/instructions/global.md`, which loads in every session. Every line
+line for `{{CONTENT_DIR}}/rules/global.md`, which loads in every session. Every line
 there costs tokens in every session, so offer it separately, and only for the worst ones.
 
 ## Add or update (only when asked, or after a yes)

@@ -541,8 +541,7 @@ function Sync-Link {
 
 function Sync-CodexRules {
     # Codex reads a single always-on file, so setup writes the core rules and the person's own
-    # rules into it, joined. It replaces only a file it wrote, a link to the personal rules file
-    # (from an older setup), or a link whose target is gone.
+    # rules into it, joined. It replaces only a file it wrote, or a link whose target is gone.
     param(
         [Parameter(Mandatory)][string]$CorePath,
         [Parameter(Mandatory)][string]$PersonalPath
@@ -550,7 +549,7 @@ function Sync-CodexRules {
     $path = Join-Path $HomeDir '.codex' 'AGENTS.md'
     $label = 'Codex always-on rules'
     $parts = [System.Collections.Generic.List[string]]::new()
-    $parts.Add($CodexMarker + ', from its core rules and your dev-home instructions/global.md. Edit those instead: setup rewrites this file after every sync. -->')
+    $parts.Add($CodexMarker + ', from its core rules and your dev-home rules/global.md. Edit those instead: setup rewrites this file after every sync. -->')
     foreach ($source in @($CorePath, $PersonalPath)) {
         if (Test-Path -LiteralPath $source -PathType Leaf) {
             $parts.Add([System.IO.File]::ReadAllText($source).Replace("`r`n", "`n").TrimEnd("`n"))
@@ -561,7 +560,7 @@ function Sync-CodexRules {
     $existing = Get-LinkInfo -Path $path
     if ($null -ne $existing) {
         if ($existing.IsLink) {
-            if (($existing.Target -ne (ConvertTo-ComparablePath -Path $PersonalPath)) -and (Test-Path -LiteralPath $existing.Target)) {
+            if (Test-Path -LiteralPath $existing.Target) {
                 Write-Status -State PROBLEM -Message ('{0}: {1} links to {2}. Left alone. Move anything you want to keep into {3}, delete the link, then run setup.ps1 again.' -f $label, $path, $existing.Target, $PersonalPath)
                 return
             }
@@ -1343,9 +1342,18 @@ if (Test-Path -LiteralPath $generatedSkills) {
         }
     }
 }
-Sync-GeneratedFolder -Source (Join-Path $ToolsRoot 'instructions') -Destination (Join-Path $GeneratedRoot 'instructions') -Values $Values
+Sync-GeneratedFolder -Source (Join-Path $ToolsRoot 'rules') -Destination (Join-Path $GeneratedRoot 'rules') -Values $Values
 
-$note = "Setup writes everything in this folder from the templates in skills/ and instructions/, with`nthis PC's paths filled in. Don't edit it: the next setup run rewrites it.`n"
+# A folder here with no templates, such as one left from an older layout, is removed.
+if (Test-Path -LiteralPath $GeneratedRoot) {
+    foreach ($folder in @(Get-ChildItem -LiteralPath $GeneratedRoot -Directory -Force)) {
+        if (@('skills', 'rules') -notcontains $folder.Name) {
+            Sync-GeneratedFolder -Destination $folder.FullName -Values $Values
+        }
+    }
+}
+
+$note = "Setup writes everything in this folder from the templates in skills/ and rules/, with`nthis PC's paths filled in. Don't edit it: the next setup run rewrites it.`n"
 $notePath = Join-Path $GeneratedRoot 'README.txt'
 if (((-not (Test-Path -LiteralPath $notePath)) -or ([System.IO.File]::ReadAllText($notePath) -cne $note)) -and
     (Test-Path -LiteralPath $GeneratedRoot) -and $script:Cmdlet.ShouldProcess($notePath, 'Write a note about this folder')) {
@@ -1426,10 +1434,11 @@ foreach ($folder in $toolSkillFolders) {
 }
 
 # 5. Always-on rules: the core rules from here, and the person's own from dev-home. Claude Code
-# loads every file in its rules folder; Codex reads one file, so setup writes the two joined.
+# loads every file in the rules folder of each Claude folder; Codex reads one file, so setup
+# writes the two joined.
 
-$coreRules = Join-Path $GeneratedRoot 'instructions'
-$personalRules = Join-Path $ContentRoot 'instructions'
+$coreRules = Join-Path $GeneratedRoot 'rules'
+$personalRules = Join-Path $ContentRoot 'rules'
 foreach ($claudeDir in $claudeDirs) {
     $claudeName = Split-Path -Leaf $claudeDir
     Sync-Link -LinkPath (Join-Path $claudeDir 'rules' 'dev-home-tools') -TargetPath $coreRules -Label ('Claude Code core rules in {0}' -f $claudeName)

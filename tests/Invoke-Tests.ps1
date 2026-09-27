@@ -227,7 +227,7 @@ function New-Sandbox {
     Invoke-Git @('init', '--quiet', '--bare', '-b', 'main', $box.Remote) | Out-Null
     Invoke-Git @('clone', '--quiet', $box.Remote, $box.Content) | Out-Null
     $files = [ordered]@{
-        'instructions/global.md'   = "# My rules`n`n- Personal rule one.`n"
+        'rules/global.md'          = "# My rules`n`n- Personal rule one.`n"
         'knowledge/README.md'      = "# Knowledge base`n"
         'handoffs/demo/HANDOFF.md' = "# demo handoff`n"
         'skills/mine/SKILL.md'     = "---`nname: mine`ndescription: A personal test skill.`n---`n"
@@ -331,8 +331,8 @@ function Test-Setup {
         Test-Link "links the knowledge skill in $folder" (Join-Path $box.Profile "$folder/knowledge") (Join-Path $generated 'skills/knowledge')
         Test-Link "links the personal skill in $folder" (Join-Path $box.Profile "$folder/mine") (Join-Path $box.Content 'skills/mine')
     }
-    Test-Link 'links the core rules for Claude Code' (Join-Path $box.Profile '.claude/rules/dev-home-tools') (Join-Path $generated 'instructions')
-    Test-Link 'links the personal rules for Claude Code' (Join-Path $box.Profile '.claude/rules/dev-home') (Join-Path $box.Content 'instructions')
+    Test-Link 'links the core rules for Claude Code' (Join-Path $box.Profile '.claude/rules/dev-home-tools') (Join-Path $generated 'rules')
+    Test-Link 'links the personal rules for Claude Code' (Join-Path $box.Profile '.claude/rules/dev-home') (Join-Path $box.Content 'rules')
 
     $codex = Get-Content -LiteralPath $codexRules -Raw
     $core = $codex.IndexOf('# Private repo: dev-home (rules loaded)')
@@ -352,10 +352,20 @@ function Test-Setup {
     Copy-Item -LiteralPath (Join-Path $box.Root 'claude-settings.json') -Destination (Join-Path $box.Profile '.claude/settings.json') -Force
     Copy-Item -LiteralPath (Join-Path $box.Root 'config.toml') -Destination (Join-Path $box.Profile '.codex/config.toml') -Force
 
-    $coreTemplate = Join-Path $box.Tools 'instructions/core.md'
+    $coreTemplate = Join-Path $box.Tools 'rules/core.md'
     Add-Content -LiteralPath $coreTemplate -Value '- A line added to the core rules.'
     $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
-    Test-Check 'a changed template reaches the generated copy and Codex''s rules' ((Get-Content -LiteralPath $codexRules -Raw).Contains('A line added to the core rules.') -and (Get-Content -LiteralPath "$generated/instructions/core.md" -Raw).Contains('A line added to the core rules.')) $run.Lines
+    Test-Check 'a changed template reaches the generated copy and Codex''s rules' ((Get-Content -LiteralPath $codexRules -Raw).Contains('A line added to the core rules.') -and (Get-Content -LiteralPath "$generated/rules/core.md" -Raw).Contains('A line added to the core rules.')) $run.Lines
+
+    # A generated folder from an older layout, with the core rules link still pointing into it.
+    $oldCore = Join-Path $generated 'instructions'
+    Write-TextFile -Path (Join-Path $oldCore 'core.md') -Text "old core rules`n"
+    $coreLink = Join-Path $box.Profile '.claude/rules/dev-home-tools'
+    [System.IO.Directory]::Delete($coreLink, $false)
+    New-Item -ItemType Junction -Path $coreLink -Target $oldCore | Out-Null
+    $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
+    Test-Check 'removes a generated folder that has no templates' (($run.ExitCode -eq 0) -and (-not (Test-Path -LiteralPath $oldCore))) $run.Lines
+    Test-Link 'moves the core rules link off the removed folder' $coreLink (Join-Path $generated 'rules')
 
     # Two paths in a skill: one starts as a file and becomes a folder, the other the reverse.
     $toFolder = Join-Path $box.Tools 'skills/handoff/to-folder'
@@ -394,15 +404,16 @@ function Test-Setup {
 
     $madeLink = $false
     try {
-        New-Item -ItemType SymbolicLink -Path $codexRules -Target (Join-Path $box.Content 'instructions/global.md') -ErrorAction Stop | Out-Null
+        New-Item -ItemType SymbolicLink -Path $codexRules -Target (Join-Path $box.Content 'rules/global.md') -ErrorAction Stop | Out-Null
         $madeLink = $true
     }
     catch {
-        Write-Result -State SKIP -Name 'replaces an older Codex rules link to global.md' -Detail @('Creating a file symlink needs admin rights or Developer Mode on this PC.')
+        Write-Result -State SKIP -Name 'leaves alone a Codex rules link whose target exists' -Detail @('Creating a file symlink needs admin rights or Developer Mode on this PC.')
     }
     if ($madeLink) {
         $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
-        Test-Check 'replaces an older Codex rules link to global.md' (($null -eq (Get-LinkTarget $codexRules)) -and (Get-Content -LiteralPath $codexRules -Raw).StartsWith('<!-- Written by') -and (Test-Path -LiteralPath (Join-Path $box.Content 'instructions/global.md'))) $run.Lines
+        Test-Check 'leaves alone a Codex rules link whose target exists' (($run.ExitCode -eq 1) -and (Test-HasLine $run.Lines 'Left alone') -and ($null -ne (Get-LinkTarget $codexRules))) $run.Lines
+        [System.IO.File]::Delete($codexRules)
     }
 
     $handoffTemplate = Join-Path $box.Tools 'skills/handoff/template.md'

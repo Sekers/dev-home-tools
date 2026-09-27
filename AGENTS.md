@@ -6,6 +6,23 @@ for Claude Code and Codex. This repo holds the `handoff` and `knowledge` skills,
 core rules, `setup.ps1`, `sync.ps1`, and the starter files for a new private repo. It never holds
 anyone's handoffs, knowledge, or personal rules. README.md describes how people use it.
 
+## The two repos
+
+This repo and each person's dev-home have folders and files with the same names. Before writing
+about a path or a rule, check which repo it belongs to.
+
+| What | dev-home-tools (this repo, public) | dev-home (each person's, private) |
+| --- | --- | --- |
+| `rules/` | `core.md`: the core rules, the same for everyone | `global.md`: that person's own rules |
+| `skills/` | The `handoff` and `knowledge` skills, as templates | That person's own skills |
+| `AGENTS.md`, `CLAUDE.md`, `README.md` | About dev-home-tools, and working on it | About that dev-home, and working in it |
+| Only here | `setup.ps1`, `sync.ps1`, `update.ps1`, `starter/`, `tests/` | `handoffs/`, `knowledge/` |
+
+- `starter/` holds a new dev-home's first files. Setup copies them in once, and after that
+  they're the person's own: a change to `starter/` never reaches an existing dev-home.
+- Whenever both repos come up, name the one you mean: "dev-home-tools" or "your dev-home". Never
+  call the tooling "dev-home".
+
 ## Privacy
 
 - This repo is public, and its users keep private things in their own dev-home. Never put
@@ -19,7 +36,7 @@ anyone's handoffs, knowledge, or personal rules. README.md describes how people 
 
 ## Placeholders and generated files
 
-- Every file under `skills/`, plus `instructions/core.md`, is a template. Setup replaces these
+- Every file under `skills/`, plus `rules/core.md`, is a template. Setup replaces these
   placeholders with forward-slash absolute paths and writes the results to `.generated/`, which
   is what gets linked into the tools:
   - `{{TOOLS_DIR}}`: this repo's folder on that PC.
@@ -43,25 +60,25 @@ anyone's handoffs, knowledge, or personal rules. README.md describes how people 
 - Leave commands that publish outside dev-home, such as `gh issue create`, out of
   `allowed-tools`. Whether they ask first is each person's choice, in their own settings.
 
-## Always-on rules (instructions/core.md)
+## Always-on rules (rules/core.md)
 
 - Keep the first heading, "Private repo: dev-home (rules loaded)". The handoff skill checks for
   it.
 - Only rules the skills and scripts depend on belong here. Personal preferences go in each
-  person's own `instructions/global.md`, which loads after this file and wins where they
-  conflict.
-- Claude Code loads both files from its rules folder. Codex reads only one file, so setup writes
-  `~/.codex/AGENTS.md` as the two joined. Keep this file short: it loads in every session.
+  person's own `rules/global.md`, which loads along with this file and wins where they conflict.
+- Claude Code loads both files through links in each Claude folder's `rules/`, such as
+  `~/.claude/rules/`. Codex reads only one file, so setup writes `~/.codex/AGENTS.md` as the two
+  joined. Keep this file short: it loads in every session.
 
 ## setup.ps1 and sync.ps1
 
 - ASCII only. Both require PowerShell 7.2 or later, and support Windows only for now.
 - Safe to re-run. setup.ps1 never overwrites or deletes anything except its own generated files,
-  links it made to skills that no longer exist, and settings files the person said yes to
-  changing. A settings change is shown as a diff first, waits for a typed yes, saves a dated
-  backup, and is never offered for a file the script can't fully parse. sync.ps1 never stages,
-  commits, or discards a file it wasn't given, and runs no destructive git command: no
-  `add -A`, stash, `reset`, `checkout`, `clean`, or rebase.
+  links whose target is gone, links it made to skills that no longer exist, and settings files
+  the person said yes to changing. A settings change is shown as a diff first, waits for a typed
+  yes, saves a dated backup, and is never offered for a file the script can't fully parse.
+  sync.ps1 never stages, commits, or discards a file it wasn't given, and runs no destructive git
+  command: no `add -A`, stash, `reset`, `checkout`, `clean`, or rebase.
 - Never remove links with `Remove-Item -Recurse`; it follows junctions. Use `cmd /c rmdir`.
 - Agents run setup.ps1 only with `-Quiet`, which never prompts: no elevation, no settings
   changes, and no creating repos. sync.ps1 runs it that way after every sync. Only a person runs

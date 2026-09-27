@@ -21,8 +21,8 @@ and sync.ps1) lives in my clone of dev-home-tools, at `{{TOOLS_DIR}}`.
   handoff skill finds, reads, and updates them.
 - `knowledge/`: my general knowledge base. `knowledge/README.md` is its index; the rules for
   files come with the knowledge skill.
-- `instructions/global.md`: my own always-on rules. Every session loads them after the core
-  rules from dev-home-tools. Keep the file short: every line costs tokens in every session.
+- `rules/global.md`: my own always-on rules. Every session loads them along with the core rules
+  from dev-home-tools. Keep the file short: every line costs tokens in every session.
 - `skills/`: my personal skills, if any. Setup links them into Claude Code and Codex.
 - `.drafts/`: git-ignored scratch space for text that leaves this repo, such as GitHub issue
   bodies. Nothing in it is ever committed.

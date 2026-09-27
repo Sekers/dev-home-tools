@@ -18,5 +18,5 @@
   Evidence: <what we ran or read>. Add it?" Most sessions have none; don't re-offer a no.
 - Findings specific to one project go where that project's AGENTS.md says research goes.
   Anything about a project that shouldn't be public goes in its handoff.
-- My own rules in `{{CONTENT_DIR}}/instructions/global.md` add to these, and win where the two
+- My own rules in `{{CONTENT_DIR}}/rules/global.md` add to these, and win where the two
   conflict.

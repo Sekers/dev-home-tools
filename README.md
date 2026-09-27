@@ -167,7 +167,7 @@ These read and update the current project's handoff, which lives in your dev-hom
 | `/handoff next <text>` | Replaces Next up. Nothing else changes. |
 | `/handoff next clear` | Removes Next up. |
 | `/handoff issue` | Lists the items that could become GitHub issues. |
-| `/handoff issue <item>` | Files an item as an issue in the project's GitHub repo, and replaces the item with a link to it. |
+| `/handoff issue <item>` | Files an item as an issue in the project's GitHub repo, and replaces the item with a link to it. For now, only in Claude Code, for projects on GitHub, with `gh` signed in. |
 
 A command that changes the handoff commits and pushes only that file. Some examples:
 
@@ -230,11 +230,12 @@ These read and update the knowledge base in your dev-home.
 
 ### Your own rules and skills
 
-- **Rules.** Put your own always-on rules in `instructions/global.md` in your dev-home. Every
-  session, in both tools and on every PC, loads them along with the core rules, and yours win
-  where the two conflict, because the core rules say so. The file starts as the empty template
-  from `starter/`, and after that it's yours. Keep it short: every line costs tokens in every
-  session.
+- **Rules.** Put your own always-on rules in `rules/global.md` in your dev-home. Every session,
+  in both tools and on every PC, loads them along with the core rules: the always-on rules that
+  come with dev-home-tools, in its `rules/core.md`, which the skills and scripts need every
+  session to follow. Yours win where the two conflict, because the core rules say so. Your file
+  starts as the empty template from `starter/`, and after that it's yours. Keep it short: every
+  line costs tokens in every session.
   - **How it loads.** The file name is this project's own. Setup hooks it into each tool's
     standard place for always-on instructions: Claude Code's
     [user-level rules](https://code.claude.com/docs/en/memory#user-level-rules) folder, and
@@ -259,7 +260,7 @@ These read and update the knowledge base in your dev-home.
 | --- | --- |
 | `handoffs/` | One handoff per project, filed by where the project is hosted (see [Handoffs](#handoffs)). |
 | `knowledge/` | Your knowledge base. `knowledge/README.md` is its index. |
-| `instructions/global.md` | Your own rules, loaded in every session. |
+| `rules/global.md` | Your own rules, loaded in every session. |
 | `skills/` | Skills of your own, if you add any. |
 | `AGENTS.md`, `README.md` | Notes on working in dev-home itself, for agents and for you. |
 | `.drafts/` | Scratch space for text that leaves dev-home, such as GitHub issue bodies. Git ignores it. |
@@ -341,8 +342,7 @@ rights.
     The scripts read it to find your dev-home.
 - **In each Claude Code folder** (`~\.claude`, plus any extra ones):
   - Links in `skills\` to each skill (this repo's, and your own from dev-home),
-    `rules\dev-home-tools` to the core rules, and `rules\dev-home` to your dev-home's
-    `instructions\`.
+    `rules\dev-home-tools` to the core rules, and `rules\dev-home` to your dev-home's `rules\`.
   - After your yes, `settings.json` gets your dev-home and dev-home-tools folders in
     `permissions.additionalDirectories`, so Claude Code can use them from any project.
   - Your own `CLAUDE.md` there is never touched.
@@ -384,7 +384,7 @@ dev-home stays as it is.
 - **Never run `Remove-Item -Recurse`** on `~\.claude`, `~\.claude-*`, or `~\.agents`. It follows
   the links into your dev-home and deletes what's there. Remove a single link with
   `cmd /c rmdir <link>`.
-- **Edit your rules in dev-home,** in `instructions/global.md`, never in `~\.codex\AGENTS.md`,
+- **Edit your rules in dev-home,** in `rules/global.md`, never in `~\.codex\AGENTS.md`,
   which setup rewrites.
 - If PowerShell says a script isn't digitally signed (after downloading this repo as a zip, for
   example), run `Unblock-File <script>` once.
@@ -406,7 +406,7 @@ dev-home stays as it is.
 | Path | What it is |
 | --- | --- |
 | `skills/` | The skills, one folder each, with placeholders where paths go. Setup fills them in for each PC. |
-| `instructions/core.md` | The core rules every session loads, along with your own. |
+| `rules/core.md` | The core rules every session loads, along with your own. |
 | `setup.ps1`, `sync.ps1`, `update.ps1` | The scripts (see [The scripts](#the-scripts)). |
 | `starter/` | The files setup copies into a brand-new dev-home. |
 | `tests/` | The test runner. |
