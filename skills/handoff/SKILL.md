@@ -21,7 +21,8 @@ Never stage, commit, stash, or discard a file yourself.
 
 The first word after `/handoff` (`$handoff` in Codex) picks the command: `update`, `next`, or
 `issue`. Any other text is a question or request about the handoff. When the user asks in plain
-words instead, such as "update the handoff", use the command that matches.
+words instead, such as "update the handoff", use the command that matches, and draft first (see
+below).
 
 | Command | What it does |
 | --- | --- |
@@ -35,9 +36,21 @@ words instead, such as "update the handoff", use the command that matches.
 | `/handoff issue` | Lists the items that could become GitHub issues. |
 | `/handoff issue <item>` | Files that item as a GitHub issue, then links to it from the handoff. |
 
-Change the handoff only when the user asked for a change: through `update`, `next`, or `issue`,
-or by creating it (see "Find this project's handoff"). When a request could be a read or a
-change, such as `/handoff next steps?`, treat it as a read and ask.
+Change the handoff only when the user asks for a change, and only like this:
+
+- A command the user typed, `/handoff update`, `next`, or `issue` (`$handoff` in Codex), is the
+  go-ahead: make the change and commit it.
+- A request in plain words, such as "update the handoff" or "add these to-dos to the handoff",
+  gets a draft first. Show the exact text you'd add, change, or remove, and edit and commit only
+  after the user says yes to it. If you change the draft, show it again.
+- Anything else isn't a request, so leave the file alone: a plan the user approved that mentions
+  the handoff, a remark such as "a to-do should test X", or something you think belongs there.
+  Say what you'd add, and suggest the command that would do it.
+- When a request could be a read or a change, such as `/handoff next steps?`, treat it as a read
+  and ask.
+
+Creating or moving a handoff (see "Find this project's handoff") happens only after a yes to
+your offer.
 
 Whenever you tell the user about the handoff (a summary, Next up, or what an `update`, `next`,
 or `issue` changed), link to it once, with the `link` path from `locate.ps1` as the target, so
@@ -224,7 +237,8 @@ credentials there. Mention that the handoff may be behind another PC.
 
 ## Rules for every handoff
 
-1. Change the handoff only when the user asks (see Commands). If it looks stale, say so and ask.
+1. Change the handoff only when the user asks, and draft first unless they typed a command (see
+   Commands). If it looks stale, say so and ask.
 2. Current state only. An update brings the whole file up to date. No "done" markers,
    dated entries, or running logs; git history holds the history.
 3. Private. Never copy, quote, paraphrase, or mention handoff content or dev-home paths in

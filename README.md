@@ -181,6 +181,9 @@ A command that changes the handoff commits and pushes only that file. Some examp
 | `/handoff next steps?` | Reads as a question, so the agent answers it and asks before changing anything. |
 | `/handoff issue Bugs 1` | Drafts an issue from that item, files it after your yes, and replaces the item with a link. |
 
+- **Only a command changes the handoff right away.** Ask in plain words, such as "add these
+  to-dos to the handoff", and the agent shows you the exact text first, and saves it only after
+  your yes. A plan you approved, or a passing remark, never changes it.
 - **Next up changes only when you say so.** When an update finishes it, the agent asks before
   removing it.
 - **Issues.** After an update, the agent may suggest up to three items as issues, only when
