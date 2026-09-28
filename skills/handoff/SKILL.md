@@ -44,10 +44,11 @@ Creating or moving a handoff (see "Find this project's handoff") happens only af
 your offer, asked as one question, such as "Create it, commit, and push?".
 
 Whenever you tell the user about the handoff (a summary, Next up, or what an `update`, `next`,
-or `issue` changed), link to it once, with the `link` path from `locate.ps1` as the target, so
-they can open it. Link the project files you name, too, by their path in the project. Some
-editors, such as the VS Code extension, can't open a link whose path has a drive letter or a
-space, so use these relative paths, and write a path that has a space as code instead.
+or `issue` changed), link to it once, with the `link` path from `locate.ps1` as the target,
+exactly as printed, so they can open it. Link the project files you name, too, by their path in
+the project, with each space written as `%20`. Some editors, such as the VS Code extension,
+can't open a link whose path has a drive letter, so use these relative paths. Some also can't
+open a link with `%20` in it yet; link it anyway, since the link itself is right.
 
 ## When to change, commit, and push
 
@@ -127,7 +128,8 @@ about this project doesn't belong here either.
      name plus the start of the project's first commit, such as `tools-3f9c2ab`.
    - `handoff`: the handoff's path in dev-home, such as `handoffs/github/you/tool/HANDOFF.md`.
    - `draft`: where a GitHub issue draft goes.
-   - `link`: the handoff's path relative to the project folder, for links in your replies.
+   - `link`: the handoff's path relative to the project folder, for links in your replies,
+     already encoded as a link target, such as `%20` for a space.
 
    If it prints an error instead, show the error and stop: without the script's answer, there's
    no telling which handoff is this project's.

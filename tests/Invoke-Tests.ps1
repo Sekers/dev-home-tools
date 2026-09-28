@@ -685,6 +685,11 @@ function Test-Locate {
         # The sandbox keeps dev-home beside the sample repo.
         Test-Check 'prints the handoff''s path relative to the project folder' ($v['link'] -ceq '../dev-home/handoffs/github/you/tool/HANDOFF.md') $result.Lines
 
+        # A repo named with an accent, a space, #, %, and parentheses: a link target can't hold them as is.
+        Invoke-Git @('-C', $repo, 'remote', 'set-url', 'origin', 'https://dev.azure.com/Org/My%20Project/_git/R%C3%A9po%20%231%20(100%25)') | Out-Null
+        $result = Invoke-Locate -Script $locate -Folder $repo
+        Test-Check 'the link percent-encodes what a link target can''t hold' ($result.Values['link'] -ceq '../dev-home/handoffs/azure-devops/org/my%20project/r%C3%A9po%20%231%20%28100%25%29/HANDOFF.md') $result.Lines
+
         Invoke-Git @('-C', $repo, 'remote', 'set-url', 'origin', 'https://git.example.com/team/app.git') | Out-Null
         $result = Invoke-Locate -Script $locate -Folder $repo
         $v = $result.Values
@@ -694,6 +699,7 @@ function Test-Locate {
         $result = Invoke-Locate -Script $locate -Folder $repo
         $v = $result.Values
         Test-Check 'no origin: service local, named by folder and first commit' (($v['service'] -ceq 'local') -and ($v['name'] -ceq "sample repo-$id") -and ($v['handoff'] -ceq "handoffs/local/sample repo-$id/HANDOFF.md")) $result.Lines
+        Test-Check 'the link writes a space in the folder name as %20' ($v['link'] -ceq "../dev-home/handoffs/local/sample%20repo-$id/HANDOFF.md") $result.Lines
 
         # Merging in unrelated history gives the repo a second first commit.
         Invoke-Git @('-C', $repo, 'checkout', '--quiet', '--orphan', 'other-history') | Out-Null

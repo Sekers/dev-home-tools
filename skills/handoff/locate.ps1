@@ -18,7 +18,8 @@
 
     The link is the handoff's path relative to the current folder, for links in an agent's
     replies: some editors can't open a link to a full path that starts with a drive letter. When
-    dev-home is on another drive, there's no relative path, so it's the full path.
+    dev-home is on another drive, there's no relative path, so it's the full path. It's written
+    as a link target, percent-encoded like a URL path, so a space becomes %20.
 
     A project hosted on a service in $Services gets a folder under that service's name, with the
     rest of the address after it: <owner>/<repo> for GitHub and Bitbucket, <group>/<project> for
@@ -168,6 +169,18 @@ function Get-FirstCommitId {
     return $first.Line.Substring(0, 7)
 }
 
+function ConvertTo-LinkTarget {
+    # Percent-encodes a forward-slash path the way a URL path is written, so it works as a markdown
+    # link's target: a space becomes %20. Letters, digits, and the marks a URL path allows stay as
+    # they are, except parentheses, which could end the link early. A drive letter stays too.
+    param([Parameter(Mandatory)][string]$Path)
+    $parts = foreach ($part in ($Path -split '/')) {
+        if ($part -match '^[A-Za-z]:$') { $part; continue }
+        [regex]::Replace($part, '[^A-Za-z0-9._~!$&''*+,;=@-]+', { param($m) [System.Uri]::EscapeDataString($m.Value) })
+    }
+    return $parts -join '/'
+}
+
 if (-not (Get-Command git -CommandType Application -ErrorAction SilentlyContinue)) {
     Stop-Locate 'git was not found, so the handoff can''t be found. Install Git, or add it to PATH.'
 }
@@ -226,7 +239,7 @@ if ($null -eq $parts) {
 
 $relative = (@($service) + $parts) -join '/'
 $handoff = 'handoffs/{0}/HANDOFF.md' -f $relative
-$link = [System.IO.Path]::GetRelativePath($PWD.ProviderPath, ('{0}/{1}' -f $ContentDir, $handoff)).Replace('\', '/')
+$link = ConvertTo-LinkTarget -Path ([System.IO.Path]::GetRelativePath($PWD.ProviderPath, ('{0}/{1}' -f $ContentDir, $handoff)).Replace('\', '/'))
 Write-Output ('service: {0}' -f $service)
 Write-Output ('name: {0}' -f ($parts -join '/'))
 Write-Output ('handoff: {0}' -f $handoff)
