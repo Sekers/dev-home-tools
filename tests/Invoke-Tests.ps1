@@ -639,6 +639,10 @@ function Test-Locate {
     # Git also looks for a repo in parent folders, and the sandbox is inside this repo.
     $ceiling = $env:GIT_CEILING_DIRECTORIES
     $env:GIT_CEILING_DIRECTORIES = $box.Root.Replace('\', '/')
+    # locate.ps1 picks the link form from CLAUDE_CODE_ENTRYPOINT, which the session running the
+    # tests may have set. The checks run without it, except where they set it.
+    $entrypoint = $env:CLAUDE_CODE_ENTRYPOINT
+    $env:CLAUDE_CODE_ENTRYPOINT = $null
     try {
         $repo = Join-Path $box.Root 'Sample Repo'
         Invoke-Git @('init', '--quiet', '-b', 'main', $repo) | Out-Null
@@ -683,7 +687,7 @@ function Test-Locate {
         $v = $result.Values
         Test-Check 'prints the service, the name, and the draft path' (($v['service'] -ceq 'github') -and ($v['name'] -ceq 'you/tool') -and ($v['draft'] -ceq '.drafts/github/you/tool/issue.md')) $result.Lines
         # The sandbox keeps dev-home beside the sample repo.
-        Test-Check 'prints the handoff''s path relative to the project folder' ($v['link'] -ceq '../dev-home/handoffs/github/you/tool/HANDOFF.md') $result.Lines
+        Test-Check 'prints the handoff and the project folder relative to the current folder' (($v['link'] -ceq '../dev-home/handoffs/github/you/tool/HANDOFF.md') -and ($v['project'] -ceq '.')) $result.Lines
 
         # A repo named with an accent, a space, #, %, and parentheses: a link target can't hold them as is.
         Invoke-Git @('-C', $repo, 'remote', 'set-url', 'origin', 'https://dev.azure.com/Org/My%20Project/_git/R%C3%A9po%20%231%20(100%25)') | Out-Null
@@ -700,6 +704,23 @@ function Test-Locate {
         $v = $result.Values
         Test-Check 'no origin: service local, named by folder and first commit' (($v['service'] -ceq 'local') -and ($v['name'] -ceq "sample repo-$id") -and ($v['handoff'] -ceq "handoffs/local/sample repo-$id/HANDOFF.md")) $result.Lines
         Test-Check 'the link writes a space in the folder name as %20' ($v['link'] -ceq "../dev-home/handoffs/local/sample%20repo-$id/HANDOFF.md") $result.Lines
+
+        $sub = Join-Path $repo 'docs'
+        New-Item -ItemType Directory -Path $sub | Out-Null
+        $result = Invoke-Locate -Script $locate -Folder $sub
+        Test-Check 'in a subfolder, the links lead up to the handoff and the project folder' (($result.Values['link'] -ceq "../../dev-home/handoffs/local/sample%20repo-$id/HANDOFF.md") -and ($result.Values['project'] -ceq '..')) $result.Lines
+
+        # Claude Code's CLI shows replies in a terminal, which opens file:/// URLs but not relative
+        # paths. Git may spell the project folder's drive letter in another case.
+        $env:CLAUDE_CODE_ENTRYPOINT = 'cli'
+        try { $result = Invoke-Locate -Script $locate -Folder $sub } finally { $env:CLAUDE_CODE_ENTRYPOINT = $null }
+        $handoffUrl = 'file:///{0}/handoffs/local/sample%20repo-{1}/HANDOFF.md' -f $box.Content.Replace('\', '/'), $id
+        $projectUrl = 'file:///{0}' -f $repo.Replace('\', '/').Replace(' ', '%20')
+        Test-Check 'in Claude Code''s CLI, the links are file:/// URLs, and project is the top of the checkout' (($result.Values['link'] -ceq $handoffUrl) -and ($result.Values['project'] -eq $projectUrl)) $result.Lines
+
+        $env:CLAUDE_CODE_ENTRYPOINT = 'claude-vscode'
+        try { $result = Invoke-Locate -Script $locate -Folder $repo } finally { $env:CLAUDE_CODE_ENTRYPOINT = $null }
+        Test-Check 'anywhere else Claude Code runs, the links stay relative' (($result.Values['link'] -ceq "../dev-home/handoffs/local/sample%20repo-$id/HANDOFF.md") -and ($result.Values['project'] -ceq '.')) $result.Lines
 
         # Merging in unrelated history gives the repo a second first commit.
         Invoke-Git @('-C', $repo, 'checkout', '--quiet', '--orphan', 'other-history') | Out-Null
@@ -728,7 +749,7 @@ function Test-Locate {
         $plain = Join-Path $box.Root 'Plain Folder'
         New-Item -ItemType Directory -Path $plain | Out-Null
         $result = Invoke-Locate -Script $locate -Folder $plain
-        Test-Check 'a folder outside git goes under local, by its name' ($result.Values['handoff'] -ceq 'handoffs/local/plain folder/HANDOFF.md') $result.Lines
+        Test-Check 'a folder outside git goes under local, by its name, and is the project folder' (($result.Values['handoff'] -ceq 'handoffs/local/plain folder/HANDOFF.md') -and ($result.Values['project'] -ceq '.')) $result.Lines
 
         $main = Join-Path $box.Root 'Main Checkout'
         $worktree = Join-Path $box.Root 'worktree'
@@ -757,6 +778,7 @@ function Test-Locate {
     }
     finally {
         $env:GIT_CEILING_DIRECTORIES = $ceiling
+        $env:CLAUDE_CODE_ENTRYPOINT = $entrypoint
     }
 
     Test-RealProfile -Box $box

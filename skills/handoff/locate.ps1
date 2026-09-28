@@ -5,21 +5,28 @@
 
 .DESCRIPTION
     Run it in the project's folder. It reads the project's origin address from the project's own
-    git config, so it needs no network and no sign-in, and prints five lines:
+    git config, so it needs no network and no sign-in, and prints six lines:
 
         service: github
         name: you/tool
         handoff: handoffs/github/you/tool/HANDOFF.md
         draft: .drafts/github/you/tool/issue.md
         link: ../dev-home/handoffs/github/you/tool/HANDOFF.md
+        project: .
 
     The handoff and draft paths are relative to dev-home. Everything is lowercase, so two PCs
     whose addresses differ only in case get the same handoff.
 
-    The link is the handoff's path relative to the current folder, for links in an agent's
-    replies: some editors can't open a link to a full path that starts with a drive letter. When
-    dev-home is on another drive, there's no relative path, so it's the full path. It's written
-    as a link target, percent-encoded like a URL path, so a space becomes %20.
+    The link is the handoff, and project is the project's folder (the top of this checkout), as
+    link targets for an agent's replies: an agent links a project file as project, a slash, and
+    the file's path in the project. Both are percent-encoded like a URL path, so a space becomes
+    %20, and both take the form that opens where the agent is running:
+    - In Claude Code's CLI, file:/// URLs, such as file:///C:/Users/you/dev-home/handoffs/...: the
+      CLI's terminal opens those, but not a relative path. Claude Code says where it's running in
+      CLAUDE_CODE_ENTRYPOINT, which is cli there.
+    - Everywhere else, paths relative to the current folder: some editors can't open a link to a
+      full path that starts with a drive letter. When dev-home is on another drive, there's no
+      relative path, so the link is the full path.
 
     A project hosted on a service in $Services gets a folder under that service's name, with the
     rest of the address after it: <owner>/<repo> for GitHub and Bitbucket, <group>/<project> for
@@ -181,6 +188,15 @@ function ConvertTo-LinkTarget {
     return $parts -join '/'
 }
 
+function ConvertTo-FileUrl {
+    # A full path as a file:/// URL, percent-encoded as ConvertTo-LinkTarget does. A network path,
+    # such as //server/share, becomes file://server/share.
+    param([Parameter(Mandatory)][string]$Path)
+    $full = [System.IO.Path]::GetFullPath($Path).Replace('\', '/').TrimEnd('/')
+    if ($full.StartsWith('//')) { return 'file:' + (ConvertTo-LinkTarget -Path $full) }
+    return 'file:///' + (ConvertTo-LinkTarget -Path $full)
+}
+
 if (-not (Get-Command git -CommandType Application -ErrorAction SilentlyContinue)) {
     Stop-Locate 'git was not found, so the handoff can''t be found. Install Git, or add it to PATH.'
 }
@@ -239,9 +255,27 @@ if ($null -eq $parts) {
 
 $relative = (@($service) + $parts) -join '/'
 $handoff = 'handoffs/{0}/HANDOFF.md' -f $relative
-$link = ConvertTo-LinkTarget -Path ([System.IO.Path]::GetRelativePath($PWD.ProviderPath, ('{0}/{1}' -f $ContentDir, $handoff)).Replace('\', '/'))
+
+# The project's folder: the top of this checkout, or the current folder outside one, such as in
+# a bare repo.
+$projectRoot = $PWD.ProviderPath
+if ($inRepo) {
+    $top = Invoke-Git -Arguments @('rev-parse', '--show-toplevel')
+    if (($top.ExitCode -eq 0) -and $top.Line) { $projectRoot = $top.Line }
+}
+
+$handoffPath = '{0}/{1}' -f $ContentDir, $handoff
+if ($env:CLAUDE_CODE_ENTRYPOINT -ceq 'cli') {
+    $link = ConvertTo-FileUrl -Path $handoffPath
+    $project = ConvertTo-FileUrl -Path $projectRoot
+}
+else {
+    $link = ConvertTo-LinkTarget -Path ([System.IO.Path]::GetRelativePath($PWD.ProviderPath, $handoffPath).Replace('\', '/'))
+    $project = ConvertTo-LinkTarget -Path ([System.IO.Path]::GetRelativePath($PWD.ProviderPath, $projectRoot).Replace('\', '/'))
+}
 Write-Output ('service: {0}' -f $service)
 Write-Output ('name: {0}' -f ($parts -join '/'))
 Write-Output ('handoff: {0}' -f $handoff)
 Write-Output ('draft: .drafts/{0}/issue.md' -f $relative)
 Write-Output ('link: {0}' -f $link)
+Write-Output ('project: {0}' -f $project)

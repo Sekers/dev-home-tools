@@ -44,11 +44,14 @@ Creating or moving a handoff (see "Find this project's handoff") happens only af
 your offer, asked as one question, such as "Create it, commit, and push?".
 
 Whenever you tell the user about the handoff (a summary, Next up, or what an `update`, `next`,
-or `issue` changed), link to it once, with the `link` path from `locate.ps1` as the target,
-exactly as printed, so they can open it. Link the project files you name, too, by their path in
-the project, with each space written as `%20`. Some editors, such as the VS Code extension,
-can't open a link whose path has a drive letter, so use these relative paths. Some also can't
-open a link with `%20` in it yet; link it anyway, since the link itself is right.
+or `issue` changed), link to it once, with `link` from `locate.ps1` as the target, exactly as
+printed, so they can open it. Link the project files you name, too: the target is `project`
+from `locate.ps1`, a slash, and the file's path in the project, with each space written as
+`%20`, such as `./docs/setup%20guide.md`. `locate.ps1` gives both in the form that opens where
+you're running, so never rewrite them: a relative path in most tools, because some editors
+can't open a link whose path has a drive letter, and a `file:///` URL in Claude Code's CLI,
+whose terminal can't open a relative path. Some tools also can't open a link with `%20` in it
+yet; link it anyway, since the link itself is right.
 
 ## When to change, commit, and push
 
@@ -120,7 +123,7 @@ about this project doesn't belong here either.
 ## Find this project's handoff
 
 1. In the project, run `pwsh -NoProfile -File {{SKILL_DIR}}/locate.ps1`. It reads the
-   project's address from its git config, without the network, and prints five lines. The steps
+   project's address from its git config, without the network, and prints six lines. The steps
    below use them by name:
    - `service`: where the project is hosted: `github`, `gitlab`, `bitbucket`, `azure-devops`,
      `other` for anywhere else, or `local` for a project with no remote.
@@ -128,8 +131,11 @@ about this project doesn't belong here either.
      name plus the start of the project's first commit, such as `tools-3f9c2ab`.
    - `handoff`: the handoff's path in dev-home, such as `handoffs/github/you/tool/HANDOFF.md`.
    - `draft`: where a GitHub issue draft goes.
-   - `link`: the handoff's path relative to the project folder, for links in your replies,
-     already encoded as a link target, such as `%20` for a space.
+   - `link`: the handoff, as the target for links to it in your replies.
+   - `project`: the project's folder, as the start of the target for links to its files.
+
+   `link` and `project` are already encoded as link targets, such as `%20` for a space, and
+   already in the form that opens where you're running (see "Commands").
 
    If it prints an error instead, show the error and stop: without the script's answer, there's
    no telling which handoff is this project's.
