@@ -8,8 +8,6 @@
 
 ## Work in progress
 
-## To decide
-
 ## To do
 
 ## Bugs

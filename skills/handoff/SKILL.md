@@ -83,7 +83,9 @@ pushing happen together, in one run of `sync.ps1`, so they're approved together.
 
 Every handoff has these sections, with these names, in this order, even when one is empty: leave
 an empty section's heading with nothing under it. Never rename a section or add one; if an item
-fits none of them, ask the user.
+fits none of them, ask the user. In any section, start an item with "For the user:" when only the
+user can do it, and only when that's known. If work shows an item needs the user, or doesn't,
+change the label.
 
 - **State line:** the date, what was checked (such as a commit or tag), and the result, such as
   tests passing.
@@ -91,11 +93,10 @@ fits none of them, ask the user.
   "Next up").
 - **Work in progress:** work started but not finished: what's done, what's left, and how to pick
   it up, such as a branch or uncommitted files.
-- **To decide:** choices waiting on the user, with the options and what's known about each. Never
-  pick one yourself.
-- **To do:** planned work an agent can start without asking. Start an item with what it changes
-  when that helps, such as "Wiki:" or "README:". A decision already made but not built yet goes
-  here, with enough detail to build it.
+- **To do:** planned work, and decisions still to make. For a decision, start the item with
+  "Decide whether" or similar: research it and recommend, but the user decides. Start an item
+  with what it changes when that helps, such as "Wiki:" or "README:". A decision already made
+  but not built yet goes here, with enough detail to build it.
 - **Bugs:** defects found but not fixed yet. One may become an issue in the project's tracker,
   public or private (see "GitHub issues").
 - **Waiting on others:** work blocked on someone or something outside the project: who, what,
