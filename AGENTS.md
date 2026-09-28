@@ -61,6 +61,8 @@ about a path or a rule, check which repo it belongs to.
   `allowed-tools`. Whether they ask first is each person's choice, in their own settings.
 - Each skill stands on its own. Mention another skill only where that's part of how this one
   works.
+- A skill's rules for when it may change, commit, and push live in that skill, not in the core
+  rules or anyone's `global.md`.
 - Some skills have similar rules. When you change a rule in one skill, check whether another skill
   has a similar rule that might need the same change. That it does is never a given: decide from
   how each skill works.
@@ -68,6 +70,8 @@ about a path or a rule, check which repo it belongs to.
   sentence taken literally, including every section that points to what changed. Look for
   anything an agent could misread or slip through: two rules that disagree, a question whose
   answer is unclear, a step the scripts can't do, or wording that only fits Claude Code.
+- The handoff template has no line pointing agents to the handoff skill; the core rules do that,
+  in every session.
 
 ## Always-on rules (rules/core.md)
 
@@ -78,6 +82,10 @@ about a path or a rule, check which repo it belongs to.
 - Claude Code loads both files through links in each Claude folder's `rules/`, such as
   `~/.claude/rules/`. Codex reads only one file, so setup writes `~/.codex/AGENTS.md` as the two
   joined. Keep this file short: it loads in every session.
+- Both repos keep their always-on rules in `rules/`: the README and this file call them rules, and
+  Claude Code loads them from its own `rules/` folder. Codex's own `~/.codex/rules/` holds command
+  policies instead, and setup never touches it. `global.md` stays lowercase: no tool looks it up
+  by name, and it pairs with `core.md`.
 
 ## setup.ps1 and sync.ps1
 
@@ -92,6 +100,8 @@ about a path or a rule, check which repo it belongs to.
 - Agents run setup.ps1 only with `-Quiet`, which never prompts: no elevation, no settings
   changes, and no creating repos. sync.ps1 runs it that way after every sync. Only a person runs
   it without `-Quiet`.
+- update.ps1 pulls exactly the commit it showed the user, so nothing new can slip in between their
+  yes and the pull.
 
 ## Testing
 
@@ -106,6 +116,10 @@ about a path or a rule, check which repo it belongs to.
 - Add a check to it for every behavior you add or change. It can't cover what needs a person:
   setup's first-run questions, cloning or creating dev-home with gh, and a yes to a settings
   change. Say which of those a change affects, so they get checked by hand.
+- The tests stay a plain script, not Pester: each group's checks are ordered steps in one sandbox,
+  the sandbox's safety code would stay custom anyway, and Pester 5 or later would be a new install
+  (Windows ships 3.4). Revisit if CI is added, if setup's functions need unit tests, or if the
+  suite gets slow (try a `-Group` parameter first).
 
 ## Style
 
