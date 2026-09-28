@@ -2,28 +2,22 @@
 
 ---
 
-**State as of YYYY-MM-DD.** <What this was checked against, such as a tag or commit.>
+**State as of YYYY-MM-DD.** <What was checked, such as a commit or tag, and the result.>
 
 ## Next up
 
 ## Work in progress
 
-## Settled design decisions
+## To decide
 
 ## To do
 
 ## Bugs
 
-## Known problems
+## Waiting on others
 
-## Traps
+## Private notes
 
-## Backlog
+## Needs a real system (ask the user before running anything)
 
-## Wiki
-
-## Needs a live environment (ask the user before running anything)
-
-## Local environment: <PC name>
-
-<!-- Delete every section that stays empty. -->
+## Environments

@@ -32,7 +32,7 @@ see skills in the [Claude Code docs](https://code.claude.com/docs/en/skills) and
 
 | Skill | What it does |
 | --- | --- |
-| `handoff` | Keeps one private note per project in your dev-home: what's next, what's in progress, what's been decided, and what to watch out for. Start a session with `/handoff`, and the agent picks up where the last one stopped, on any of your PCs. |
+| `handoff` | Keeps one private note per project in your dev-home: what's next, what's in progress, what's waiting on you or on others, and what's left to do. Start a session with `/handoff`, and the agent picks up where the last one stopped, on any of your PCs. |
 | `knowledge` | Keeps your own knowledge base in your dev-home: general things you've learned about languages, tools, and AI agents, so no session has to work them out twice. Agents check it before researching a question from scratch. |
 
 Works with Claude Code, Codex, or both. Windows only, for now. To start, see
@@ -161,11 +161,11 @@ These read and update the current project's handoff, which lives in your dev-hom
 | --- | --- |
 | `/handoff` | Syncs your dev-home with GitHub, then summarizes this project's handoff, starting with Next up, with a link to the file. |
 | `/handoff <question>` | The same, then answers the question. |
-| `/handoff update` | Brings the whole handoff up to date. If Next up looks done, asks before removing it. |
+| `/handoff update` | Brings the whole handoff up to date. If Next up looks done, asks before clearing it. |
 | `/handoff update <text>` | The same, with your text worked in, in any words. The text can also set, add to, or clear Next up. |
 | `/handoff next` | Shows Next up. |
 | `/handoff next <text>` | Replaces Next up. Nothing else changes. |
-| `/handoff next clear` | Removes Next up. |
+| `/handoff next clear` | Empties Next up. |
 | `/handoff issue` | Lists the items that could become GitHub issues. |
 | `/handoff issue <item>` | Files an item as an issue in the project's GitHub repo, and replaces the item with a link to it. For now, only in Claude Code, for projects on GitHub, with `gh` signed in. |
 
@@ -175,10 +175,10 @@ is your go-ahead. Some examples:
 | You type | What happens |
 | --- | --- |
 | `/handoff what's left before the release?` | Summarizes the handoff, then answers. |
-| `/handoff update we're keeping the old config format` | Updates the handoff, with that decision under Settled design decisions. |
+| `/handoff update the vendor says the fix ships Friday` | Updates the handoff, with that under Waiting on others. |
 | `/handoff update next: release 1.2.0` | Updates the handoff, and Next up becomes "Release 1.2.0". |
 | `/handoff next also push the wiki after the release` | Adds that to Next up. |
-| `/handoff next clear the old wiki pages` | Next up becomes "Clear the old wiki pages". Only `clear` on its own removes Next up. |
+| `/handoff next clear the old wiki pages` | Next up becomes "Clear the old wiki pages". Only `clear` on its own empties Next up. |
 | `/handoff next steps?` | Reads as a question, so the agent answers it and asks before changing anything. |
 | `/handoff issue Bugs 1` | Drafts an issue from that item, files it after your yes, and replaces the item with a link. |
 
@@ -189,7 +189,10 @@ is your go-ahead. Some examples:
   never later ones, and "save it" saves without committing. A plan you approved, or a passing
   remark, never changes the handoff.
 - **Next up changes only when you say so.** When an update finishes it, the agent asks before
-  removing it.
+  clearing it.
+- **Every handoff has the same sections,** from `skills/handoff/template.md`; the handoff skill
+  says what goes in each. `/handoff update` brings an older handoff in line, and asks before it
+  moves anything out.
 - **Issues.** After an update, the agent may suggest up to three items as issues, only when
   filing one really makes sense. Say no, and it marks the item so it never suggests it again,
   then commits and pushes that; the question says so. Filing always shows you the draft and waits
