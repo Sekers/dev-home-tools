@@ -59,8 +59,7 @@ Every section carries one, with its own date and versions:
 ## Content
 
 - The general test: still true in a brand-new project, and names none of your functions, files,
-  or tenants. Otherwise it belongs in that project's research notes, or in its handoff if it
-  shouldn't be public.
+  or tenants. Anything that fails it stays out of the knowledge base.
 - Worth its cost: the index is read on every lookup, and a file is read whole when it's opened.
   Keep entries short, add to an existing file before creating one, and remove what no longer
   earns its place.

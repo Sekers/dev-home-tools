@@ -25,7 +25,7 @@ lookup reads the local copy and never syncs.
    Pass on anything it prints beyond `OK`:
    - `OFFLINE`: say the knowledge base may be stale, and continue.
    - `LEFT`: leave the file alone. Another session may be editing it.
-   - `STALE`: nobody has touched the file for 15 minutes. Ask whether to commit it. On a yes, run
+   - `STALE`: nobody has touched the file for 15 minutes. Ask "Commit and push it?". On a yes, run
      `pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 -Message "sync: <what changed>" "<path>"`.
    - `UPDATE`: new dev-home-tools commits are available. Tell the user, and continue.
    - `PROBLEM`: show it to the user.
@@ -66,24 +66,45 @@ offer:
 
 Offer it in one line at a natural stopping point, and wait for a yes:
 "Knowledge candidate: <folder>/<file>: <what we learned>. Evidence: <the test we ran or the page
-we read; for a pitfall, also how we know it recurs>. Add it?"
+we read; for a pitfall, also how we know it recurs>. Add it, commit, and push?"
 If you can't fill in the evidence from this session, don't offer it.
 
-Agents read the knowledge base only when they look something up, so a stored pitfall may not
-stop the next one. For a pitfall that hits often and costs real time, you may also offer one
-line for `{{CONTENT_DIR}}/rules/global.md`, which loads in every session. Every line
-there costs tokens in every session, so offer it separately, and only for the worst ones.
+## When to change, commit, and push
 
-## Add or update (only when asked, or after a yes)
+These rules say when you may save a change, and when you may commit and push it. Committing and
+pushing happen together, in one run of `sync.ps1`, so they're approved together.
+
+- A command the user typed is the go-ahead for that one change: make it, commit it, and push it.
+- A request in plain words works the same way only when it's a direct instruction to do exactly
+  what one command does, such as "add this to the knowledge base: ...". Say which command you're
+  treating it as, then act. None of these is a direct instruction: hedged wording ("we should",
+  "maybe", "I wonder"), a question, several requests at once, or anything you're unsure about.
+- Any other request for a change gets a draft first: the exact text you'd add, change, or remove,
+  and where, ending with one question: "Save, commit, and push this?". A plain yes covers all
+  three, for that draft only. If you change the draft, show it again and ask again.
+- If the reply names only some of the three, such as "save it", do only those, and say what you
+  left undone. `sync.ps1` pushes every commit it makes, so for "commit, but don't push", say so
+  and leave the change uncommitted.
+- When a request could be a read or a change, treat it as a read and ask.
+- Not a request at all, so change nothing: a remark, or a plan the user approved that mentions
+  the knowledge base. Say what you'd add, and name the command that would do it.
+- When you offer a change yourself that would be its own commit, such as adding a finding, say
+  in the same question that it will be committed and pushed: "Add it, commit, and push?".
+- One command or one yes covers only the change it was given for, never a later one, even in the
+  same session or for the same file. An earlier "commit everything" doesn't cover changes made
+  after it.
+- A plain sync, `sync.ps1` with no `-Message`, needs no yes, because it never commits a changed
+  file. It brings in other PCs' commits, merging them when both PCs have new ones, and pushes
+  commits already made on this PC.
+
+## Add or update
+
+The typed command is `/knowledge add <what you learned>`. Go ahead only as "When to change,
+commit, and push" says, or after a yes to a candidate you offered.
 
 1. Apply the general test: it would still be true in a brand-new project, and it names none of
-   the user's functions, files, or tenants. If it fails:
-   - About the project and safe to publish: it goes where the project's AGENTS.md says research
-     goes. The user approves that commit as usual.
-   - About the project but private (current state, local setup, tenant details): it goes in the
-     project's handoff.
-   - The project has no notes section, or it's unclear whether something is safe to publish:
-     ask.
+   the user's functions, files, or tenants. If it fails, it doesn't belong in the knowledge base:
+   tell the user why, and add nothing.
 2. Read `{{SKILL_DIR}}/rules.md`, unless you already did this session.
 3. Sync with GitHub (above), unless it already ran this turn.
 4. Add the finding to the matching topic file, or create one by the rules. Label its evidence
@@ -100,10 +121,14 @@ there costs tokens in every session, so offer it separately, and only for the wo
    - `PROBLEM`: stop and show it. The files are safe on this PC.
 7. Show the user what changed.
 
-In Codex: edit only. Skip the sync and every git step, and tell the user that Claude will commit
-and push the change: the next /handoff or plain /knowledge in Claude lists the files, and offers
-to commit them once they have been untouched for 15 minutes. Mention that the local copy may be
-behind another PC.
+Commits in dev-home are unsigned on purpose: setup turns signing off in that repo's own git
+config. That is not bypassing signing, and the project repos keep signing as usual.
+
+In Codex: edit only, so leave "commit, and push" out of your questions: a draft ends with "Save
+this?", and a candidate with "Add it?". Skip the sync and every git step, and tell the user that
+Claude will commit and push the change: the next sync in Claude, such as a plain /knowledge,
+lists the files, and offers to commit and push them once they have been untouched for 15 minutes.
+Mention that the local copy may be behind another PC.
 
 Never store secrets, credentials, tenant or account IDs, or personal information about anyone
 other than the user, such as customer or colleague data. Never copy knowledge-base text or

@@ -21,8 +21,8 @@ Never stage, commit, stash, or discard a file yourself.
 
 The first word after `/handoff` (`$handoff` in Codex) picks the command: `update`, `next`, or
 `issue`. Any other text is a question or request about the handoff. When the user asks in plain
-words instead, such as "update the handoff", use the command that matches, and draft first (see
-below).
+words instead, "When to change, commit, and push" says whether to act as the matching command
+does or to draft first.
 
 | Command | What it does |
 | --- | --- |
@@ -36,27 +36,47 @@ below).
 | `/handoff issue` | Lists the items that could become GitHub issues. |
 | `/handoff issue <item>` | Files that item as a GitHub issue, then links to it from the handoff. |
 
-Change the handoff only when the user asks for a change, and only like this:
-
-- A command the user typed, `/handoff update`, `next`, or `issue` (`$handoff` in Codex), is the
-  go-ahead: make the change and commit it.
-- A request in plain words, such as "update the handoff" or "add these to-dos to the handoff",
-  gets a draft first. Show the exact text you'd add, change, or remove, and edit and commit only
-  after the user says yes to it. If you change the draft, show it again.
-- Anything else isn't a request, so leave the file alone: a plan the user approved that mentions
-  the handoff, a remark such as "a to-do should test X", or something you think belongs there.
-  Say what you'd add, and suggest the command that would do it.
-- When a request could be a read or a change, such as `/handoff next steps?`, treat it as a read
-  and ask.
+The commands that change the handoff are `/handoff update`, `next`, and `issue` (`$handoff` in
+Codex). `/handoff next steps?` could be a read or a change, so treat it as a read and ask.
 
 Creating or moving a handoff (see "Find this project's handoff") happens only after a yes to
-your offer.
+your offer, asked as one question, such as "Create it, commit, and push?".
 
 Whenever you tell the user about the handoff (a summary, Next up, or what an `update`, `next`,
 or `issue` changed), link to it once, with the `link` path from `locate.ps1` as the target, so
 they can open it. Link the project files you name, too, by their path in the project. Some
 editors, such as the VS Code extension, can't open a link whose path has a drive letter or a
 space, so use these relative paths, and write a path that has a space as code instead.
+
+## When to change, commit, and push
+
+These rules say when you may save a change, and when you may commit and push it. Committing and
+pushing happen together, in one run of `sync.ps1`, so they're approved together.
+
+- A command the user typed is the go-ahead for that one change: make it, commit it, and push it.
+- A request in plain words works the same way only when it's a direct instruction to do exactly
+  what one command does, such as "update the handoff" or "set next up to release 1.2". Say which
+  command you're treating it as, then act. None of these is a direct instruction: hedged wording
+  ("we should", "maybe", "I wonder"), a question, several requests at once, or anything you're
+  unsure about.
+- Any other request for a change gets a draft first: the exact text you'd add, change, or remove,
+  and where, ending with one question: "Save, commit, and push this?". A plain yes covers all
+  three, for that draft only. If you change the draft, show it again and ask again.
+- If the reply names only some of the three, such as "save it", do only those, and say what you
+  left undone. `sync.ps1` pushes every commit it makes, so for "commit, but don't push", say so
+  and leave the change uncommitted.
+- When a request could be a read or a change, treat it as a read and ask.
+- Not a request at all, so change nothing: a remark, or a plan the user approved that mentions
+  the handoff. Say what you'd add, and name the command that would do it.
+- When you offer a change yourself that would be its own commit, such as creating or moving the
+  handoff, or marking an item, say in the same question that it will be committed and pushed:
+  "Create it, commit, and push?".
+- One command or one yes covers only the change it was given for, never a later one, even in the
+  same session or for the same file. An earlier "commit everything" doesn't cover changes made
+  after it.
+- A plain sync, `sync.ps1` with no `-Message`, needs no yes, because it never commits a changed
+  file. It brings in other PCs' commits, merging them when both PCs have new ones, and pushes
+  commits already made on this PC.
 
 ## Find this project's handoff
 
@@ -75,13 +95,13 @@ space, so use these relative paths, and write a path that has a space as code in
    no telling which handoff is this project's.
 2. The handoff is `{{CONTENT_DIR}}/<handoff>`. Check that it exists only after Read step 2's
    sync, so a handoff made on another PC has arrived.
-3. If that file doesn't exist, list every `HANDOFF.md` under `{{CONTENT_DIR}}/handoffs/` and ask
-   whether one of them is this project under an old name or address. On a yes, move it to
-   `<handoff>`, then run the command below, where `<old path>` is where it was, relative to
-   dev-home:
+3. If that file doesn't exist, list every `HANDOFF.md` under `{{CONTENT_DIR}}/handoffs/`, and ask
+   which one, if any, is this project under an old name or address, saying that you'll move it,
+   commit, and push. When the user names one, move it to `<handoff>`, then run the command below,
+   where `<old path>` is where it was, relative to dev-home:
    `pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 -Message "handoff: <name>" "<old path>" "<handoff>"`.
-   If none is, offer to create one from `{{SKILL_DIR}}/template.md`. On a yes, create it and
-   commit it as in "Changing the handoff".
+   If none is, offer to create one from `{{SKILL_DIR}}/template.md`: "Create it, commit, and
+   push?". On a yes, create it and commit it as in "Changing the handoff".
 
 ## Read (the default)
 
@@ -91,7 +111,7 @@ space, so use these relative paths, and write a path that has a space as code in
    Pass on anything it prints beyond `OK`:
    - `OFFLINE`: say the handoff may be stale, and continue.
    - `LEFT`: leave the file alone. Another session may be editing it.
-   - `STALE`: nobody has touched the file for 15 minutes. Ask whether to commit it. On a yes, run
+   - `STALE`: nobody has touched the file for 15 minutes. Ask "Commit and push it?". On a yes, run
      `pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 -Message "sync: <what changed>" "<path>"`.
    - `UPDATE`: new dev-home-tools commits are available. Tell the user, and continue.
    - `PROBLEM`: show it, say the handoff may be behind, and continue.
@@ -103,19 +123,20 @@ space, so use these relative paths, and write a path that has a space as code in
 `update`, `next`, and `issue` all change the handoff, and all of them:
 
 1. Start with Read steps 1 and 2.
-2. Read the handoff again right before editing it, and keep any change another session made
+2. Have the go-ahead that "When to change, commit, and push" asks for. For a draft, show it now,
+   and wait for the yes.
+3. Read the handoff again right before editing it, and keep any change another session made
    since you last read it: a worktree of this project shares this handoff, and a sync can bring
    in another PC's version.
-3. After editing, check the handoff for anything rule 7 forbids, and take it out.
-4. Run
+4. After editing, check the handoff for anything rule 7 forbids, and take it out.
+5. Run
    `pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 -Message "handoff: <name>" "<handoff>"`.
    It commits only this handoff, then syncs.
    - `OFFLINE` or `PENDING`: the commit is safe on this PC, and a later sync pushes it.
    - `PROBLEM`: stop and show it. The handoff is safe on this PC.
 
 Commits in dev-home are unsigned on purpose: setup turns signing off in that repo's own git
-config, because agents commit there unattended. That is not bypassing signing, and the project
-repos keep signing as usual.
+config. That is not bypassing signing, and the project repos keep signing as usual.
 
 ## Update
 
@@ -138,12 +159,8 @@ Follow "Changing the handoff". While updating:
   link. If the issue is closed, remove the item like any finished item, and say which ones you
   removed. If `gh` fails, keep the links and say they weren't checked.
 
-After committing:
-
-1. Offer a knowledge candidate only if one qualifies (see the knowledge skill); most sessions
-   have none. Add none without a yes.
-2. Offer issue candidates only if any qualify (see "Issue candidates"); most updates have none.
-   File none without a yes.
+After committing, offer issue candidates only if any qualify (see "Issue candidates"); most
+updates have none. File none without a yes.
 
 ## Next up
 
@@ -214,7 +231,8 @@ test:
 
 Never suggest anything from Next up, Work in progress, Settled design decisions, Traps, Needs a
 live environment, or Local environment. Suggest at most three; most updates have none. Ask in
-one line each: "Issue candidate: <section>: <item>. File it?"
+one line each: "Issue candidate: <section>: <item>. File it? Say no, and I'll mark it 'Not for a
+GitHub issue', then commit and push that."
 
 - Yes: file it as above.
 - No: add `(Not for a GitHub issue: <reason>)` to the end of the item, with the user's reason,
@@ -228,17 +246,19 @@ above, ignoring only the first test, and asks which to file.
 
 ## In Codex
 
-Read, `update`, and `next` work, but edit only. Find the handoff with `locate.ps1` as usual,
-since it only reads files. Skip every sync, git, and `gh` step, including the issue link checks, and tell the user that Claude will commit and push the change: the next
-/handoff in Claude lists the file, and offers to commit it once it has been untouched for 15
-minutes. `issue` needs Claude, so say that and stop; skip issue candidates too. On Windows,
-Codex runs even approved commands inside its sandbox, so git and `gh` can't use the user's
-credentials there. Mention that the handoff may be behind another PC.
+Read, `update`, and `next` work, but edit only, so leave "commit, and push" out of your
+questions: a draft ends with "Save this?". Find the handoff with `locate.ps1` as usual, since it
+only reads files. Skip every sync, git, and `gh` step, including the issue link checks, and tell
+the user that Claude will commit and push the change: the next /handoff in Claude lists the
+file, and offers to commit and push it once it has been untouched for 15 minutes. `issue` needs
+Claude, so say that and stop; skip issue candidates too. On Windows, Codex runs even approved
+commands inside its sandbox, so git and `gh` can't use the user's credentials there. Mention that
+the handoff may be behind another PC.
 
 ## Rules for every handoff
 
-1. Change the handoff only when the user asks, and draft first unless they typed a command (see
-   Commands). If it looks stale, say so and ask.
+1. Change, commit, and push only as "When to change, commit, and push" says. If the handoff looks
+   stale, say so and ask.
 2. Current state only. An update brings the whole file up to date. No "done" markers,
    dated entries, or running logs; git history holds the history.
 3. Private. Never copy, quote, paraphrase, or mention handoff content or dev-home paths in

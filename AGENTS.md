@@ -59,6 +59,15 @@ about a path or a rule, check which repo it belongs to.
   forward-slash paths, so they work in Git Bash, PowerShell, and Codex.
 - Leave commands that publish outside dev-home, such as `gh issue create`, out of
   `allowed-tools`. Whether they ask first is each person's choice, in their own settings.
+- Each skill stands on its own. Mention another skill only where that's part of how this one
+  works.
+- Some skills have similar rules. When you change a rule in one skill, check whether another skill
+  has a similar rule that might need the same change. That it does is never a given: decide from
+  how each skill works.
+- After changing a skill, read the whole skill the way an agent meets it: top to bottom, each
+  sentence taken literally, including every section that points to what changed. Look for
+  anything an agent could misread or slip through: two rules that disagree, a question whose
+  answer is unclear, a step the scripts can't do, or wording that only fits Claude Code.
 
 ## Always-on rules (rules/core.md)
 

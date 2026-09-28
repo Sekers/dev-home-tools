@@ -44,5 +44,5 @@ and sync.ps1) lives in my clone of dev-home-tools, at `{{TOOLS_DIR}}`.
 - Never delete a lock file such as `.git/index.lock`. If sync.ps1 says git stayed busy, ask me.
 - Commit messages read `<area>: <what>`, for example `handoff: you/tool` or
   `knowledge: powershell/pipeline-binding`.
-- Commit signing is turned off in this repo's own config on purpose, because agents commit here
-  unattended. That is not bypassing signing; my project repos keep signing.
+- Commit signing is turned off in this repo's own config on purpose. That is not bypassing
+  signing; my project repos keep signing.

@@ -70,9 +70,9 @@ later ones. Use a normal PowerShell 7 window (`pwsh`), not an administrator one.
 
    - To keep your email address private, use your GitHub no-reply address instead, such as
      `12345678+you@users.noreply.github.com`. GitHub shows yours under Settings > Emails.
-   - If you sign your commits, leave that on. Setup turns signing off only inside dev-home,
-     because agents commit there unattended, and a signing prompt would stall them. Your project
-     repos keep signing as usual.
+   - If you sign your commits, leave that on. Setup turns signing off only inside dev-home, so
+     a commit there never stops in the middle of a sync to ask for your signing passphrase. Your
+     project repos keep signing as usual.
 
 3. Start Claude Code once, and Codex if you use it, so their folders (`~\.claude`, `~\.codex`)
    exist. Setup skips Codex when `~\.codex` is missing.
@@ -169,7 +169,8 @@ These read and update the current project's handoff, which lives in your dev-hom
 | `/handoff issue` | Lists the items that could become GitHub issues. |
 | `/handoff issue <item>` | Files an item as an issue in the project's GitHub repo, and replaces the item with a link to it. For now, only in Claude Code, for projects on GitHub, with `gh` signed in. |
 
-A command that changes the handoff commits and pushes only that file. Some examples:
+A command that changes the handoff saves, commits, and pushes only that file: typing the command
+is your go-ahead. Some examples:
 
 | You type | What happens |
 | --- | --- |
@@ -181,18 +182,21 @@ A command that changes the handoff commits and pushes only that file. Some examp
 | `/handoff next steps?` | Reads as a question, so the agent answers it and asks before changing anything. |
 | `/handoff issue Bugs 1` | Drafts an issue from that item, files it after your yes, and replaces the item with a link. |
 
-- **Only a command changes the handoff right away.** Ask in plain words, such as "add these
-  to-dos to the handoff", and the agent shows you the exact text first, and saves it only after
-  your yes. A plan you approved, or a passing remark, never changes it.
+- **A command changes the handoff right away,** and commits and pushes it. So does a request in
+  plain words that matches one command exactly, such as "update the handoff"; the agent says
+  which command it took it as. Anything else, such as "we should add a to-do for this", gets a
+  draft first, ending with "Save, commit, and push this?". A yes covers that one change only,
+  never later ones, and "save it" saves without committing. A plan you approved, or a passing
+  remark, never changes the handoff.
 - **Next up changes only when you say so.** When an update finishes it, the agent asks before
   removing it.
 - **Issues.** After an update, the agent may suggest up to three items as issues, only when
-  filing one really makes sense. Say no, and it marks the item so it never suggests it again.
-  Filing always shows you the draft and waits for your yes. Issues work in Claude Code only, for
-  projects on GitHub, with `gh` signed in.
+  filing one really makes sense. Say no, and it marks the item so it never suggests it again,
+  then commits and pushes that; the question says so. Filing always shows you the draft and waits
+  for your yes. Issues work in Claude Code only, for projects on GitHub, with `gh` signed in.
 - **In Codex, handoff commands edit but don't commit.** The next `/handoff` in Claude Code lists
-  the file, and offers to commit it once nobody has touched it for 15 minutes. The same goes for
-  anything you edit by hand in dev-home.
+  the file, and offers to commit and push it once nobody has touched it for 15 minutes. The same
+  goes for anything you edit by hand in dev-home.
 
 **Where handoffs are kept.** The handoff skill finds each project's handoff from the address the
 repo syncs with (its `origin`), so it's the same on every PC, whatever the folder is called.
@@ -220,13 +224,13 @@ These read and update the knowledge base in your dev-home.
 | --- | --- |
 | `/knowledge` | Syncs your dev-home with GitHub, then lists the subjects and asks what to look up or add. |
 | `/knowledge <question>` | Looks it up in this PC's copy, without syncing. |
-| `/knowledge add <what you learned>` | Checks that it's general, files it by the skill's rules, then commits and pushes only the files it changed. Asking in plain words works too. |
+| `/knowledge add <what you learned>` | Checks that it's general, files it by the skill's rules, then commits and pushes only the files it changed: typing the command is your go-ahead. A request in plain words works the same when it's a direct instruction, such as "add this to the knowledge base: ..."; anything else gets a draft first. |
 
 - Agents check the knowledge base before researching a general question.
 - They offer a "Knowledge candidate", with its evidence, only for a finding checked in that
-  session, or a pitfall agents keep hitting. Most sessions have none, and nothing is added
-  without your yes.
-- Anything about one project goes in that project, or in its handoff if it's private.
+  session, or a pitfall agents keep hitting. Most sessions have none. The offer ends "Add it,
+  commit, and push?", and nothing is added without your yes.
+- Anything about one project stays out of the knowledge base.
 
 ### Your own rules and skills
 
@@ -316,7 +320,7 @@ Agents pass on what `sync.ps1` reports:
 | `PENDING` | Commits not pushed yet. The next sync pushes them. |
 | `OFFLINE` | GitHub couldn't be reached, so this copy may be behind. |
 | `LEFT` | A file changed recently and isn't committed. Another session may be working on it. |
-| `STALE` | An uncommitted file nobody has touched for 15 minutes. The agent asks whether to commit it. |
+| `STALE` | An uncommitted file nobody has touched for 15 minutes. The agent asks whether to commit and push it. |
 | `UPDATE` | New dev-home-tools commits are waiting. |
 | `PROBLEM` | Needs you. The message says what to do. |
 
@@ -358,8 +362,8 @@ rights.
     the cut would fall on the project's own instructions, without a warning. Twice the default
     leaves room.
 - **In your dev-home's own git config:** commit signing off, and pulls that merge rather than
-  rebase. Agents commit there unattended, and a signing prompt would stall them. Your project
-  repos keep signing as usual.
+  rebase. With signing off, a commit never stops in the middle of a sync to ask for your signing
+  passphrase. Your project repos keep signing as usual.
 
 **To remove it all:** delete each link with `cmd /c rmdir <link>`, delete `~\.codex\AGENTS.md`,
 take the added lines out of the settings files, then delete your dev-home-tools folder. Your
