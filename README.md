@@ -33,7 +33,7 @@ see skills in the [Claude Code docs](https://code.claude.com/docs/en/skills) and
 | Skill | What it does |
 | --- | --- |
 | `handoff` | Keeps one private note per project in your dev-home: what's next, what's in progress, what's waiting on you or on others, and what's left to do. Start a session with `/handoff`, and the agent picks up where the last one stopped, on any of your PCs. |
-| `knowledge` | Keeps your own knowledge base in your dev-home: general things you've learned about languages, tools, and AI agents, so no session has to work them out twice. Agents check it before researching a question from scratch. |
+| `knowledge` | Keeps your own knowledge base in your dev-home: general things you've learned about languages, tools, and AI agents, so no session has to work them out twice. Agents check it before researching or testing a general question, even partway through other work. |
 
 Works with Claude Code, Codex, or both. Windows only, for now. To start, see
 [Set up a PC](#set-up-a-pc).
@@ -229,7 +229,8 @@ These read and update the knowledge base in your dev-home.
 | `/knowledge <question>` | Looks it up in this PC's copy, without syncing. |
 | `/knowledge add <what you learned>` | Checks that it's general, files it by the skill's rules, then commits and pushes only the files it changed: typing the command is your go-ahead. A request in plain words works the same when it's a direct instruction, such as "add this to the knowledge base: ..."; anything else gets a draft first. |
 
-- Agents check the knowledge base before researching a general question.
+- Agents check the knowledge base before researching or testing a general question, or asking
+  you to test one, even partway through other work.
 - They offer a "Knowledge candidate", with its evidence, only for a finding checked in that
   session, or a pitfall agents keep hitting. Most sessions have none. The offer ends "Add it,
   commit, and push?", and nothing is added without your yes.

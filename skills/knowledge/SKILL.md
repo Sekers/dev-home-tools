@@ -1,6 +1,6 @@
 ---
 name: knowledge
-description: Private general knowledge base for coding and AI work (languages, tools, platforms, and AI agents such as Claude Code and Codex), kept in the private dev-home repo. Use when the user runs /knowledge (run alone, it syncs the knowledge base with GitHub), before researching a general technical question from scratch, when the user asks to look something up in or add something to the knowledge base, or when a hard-won general finding comes up during work.
+description: Private general knowledge base for coding and AI work (languages, tools, platforms, and AI agents such as Claude Code and Codex), kept in the private dev-home repo. Check it before researching or testing a general question about these, or asking the user to test one, even partway through other work. Also use when the user runs /knowledge (run alone, it syncs the knowledge base with GitHub), asks to look something up in or add something to the knowledge base, or when a hard-won general finding comes up during work.
 allowed-tools: "Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 *) PowerShell(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1) PowerShell(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 *)"
 ---
 
