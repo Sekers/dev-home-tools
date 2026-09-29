@@ -198,9 +198,9 @@ is your go-ahead. Some examples:
   remark, never changes the handoff.
 - **Next up changes only when you say so.** When an update finishes it, the agent asks before
   clearing it.
-- **Every handoff has the same sections,** from `skills/handoff/template.md`; the handoff skill
-  says what goes in each. `/handoff update` brings an older handoff in line, and asks before it
-  moves anything out.
+- **Every handoff has the same sections,** from `templates/skills/handoff/template.md`; the
+  handoff skill says what goes in each. `/handoff update` brings an older handoff in line, and
+  asks before it moves anything out.
 - **Issues.** After an update, the agent may suggest up to three items as issues, only when
   filing one really makes sense. Say no, and it marks the item so it never suggests it again,
   then commits and pushes that; the question says so. Filing always shows you the draft and waits
