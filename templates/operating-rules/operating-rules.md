@@ -20,5 +20,5 @@
   re-offer a no.
 - Findings specific to one project go where that project's AGENTS.md says research goes.
   Anything about a project that shouldn't be public goes in its handoff.
-- My own rules in `{{CONTENT_DIR}}/rules/global.md` add to these, and win where the two
-  conflict.
+- My global rules in `{{CONTENT_DIR}}/global-rules/global-rules.md` add to these, and win where
+  the two conflict.

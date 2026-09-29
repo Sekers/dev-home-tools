@@ -1,8 +1,8 @@
 # dev-home: guidance for AI agents
 
 This is my private repo for project handoffs and a general knowledge base, shared by my PCs
-through GitHub. The tooling that works with it (the skills, the always-on core rules, setup.ps1,
-and sync.ps1) lives in my clone of dev-home-tools, at `{{TOOLS_DIR}}`.
+through GitHub. The tooling that works with it (the skills, the always-on operating rules,
+setup.ps1, and sync.ps1) lives in my clone of dev-home-tools, at `{{TOOLS_DIR}}`.
 
 ## Privacy
 
@@ -21,8 +21,9 @@ and sync.ps1) lives in my clone of dev-home-tools, at `{{TOOLS_DIR}}`.
   handoff skill finds, reads, and updates them.
 - `knowledge/`: my general knowledge base. `knowledge/README.md` is its index; the rules for
   files come with the knowledge skill.
-- `rules/global.md`: my own always-on rules. Every session loads them along with the core rules
-  from dev-home-tools. Keep the file short: every line costs tokens in every session.
+- `global-rules/global-rules.md`: my global rules, my own always-on preferences for every
+  project. Every session loads them along with the operating rules from dev-home-tools. Keep
+  the file short: every line costs tokens in every session.
 - `skills/`: my personal skills, if any. Setup links them into Claude Code and Codex.
 - `.drafts/`: git-ignored scratch space for text that leaves this repo, such as GitHub issue
   bodies. Nothing in it is ever committed.

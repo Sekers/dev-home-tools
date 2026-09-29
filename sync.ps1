@@ -19,12 +19,15 @@
     that conflicts is undone at once, so nothing is lost either way. With -Message and paths, it
     first commits exactly those paths.
 
-    Then it checks dev-home-tools for new commits. With autoUpdate on in local-settings.json, it
-    pulls them (fast-forward only). Otherwise it prints an UPDATE line, and update.ps1 shows the
-    commits and pulls them after a yes.
+    Then it runs update.ps1 -Quiet, which checks dev-home-tools for new commits and makes every
+    decision about them: it pulls them when autoUpdate is on in local-settings.json, and
+    otherwise says they are waiting.
 
     Last, it runs setup.ps1 -Quiet, so updated skills, and skills added on another PC, are set
     up on this one.
+
+    A sync that commits usually comes right after a plain one, which just did both of those. So
+    it skips the update check, and runs setup only when it brought in commits from GitHub.
 
     Exits 0 when done, including when GitHub can't be reached, and 1 when the user needs to act.
 
@@ -56,84 +59,36 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $ToolsRoot = $PSScriptRoot
+# Running git and printing status lines, shared with setup.ps1 and update.ps1.
+. (Join-Path $ToolsRoot 'internal/shared/git.ps1')
+. (Join-Path $ToolsRoot 'internal/shared/output.ps1')
 $SettingsPath = Join-Path $ToolsRoot 'local-settings.json'
 # dev-home's folder, from local-settings.json.
 $Root = $null
-$AutoUpdate = $false
 # An agent commits right after it writes, so a file nobody has touched for this long is probably
 # not another session's edit in progress.
 $StaleAfter = [TimeSpan]::FromMinutes(15)
 $MutexWait = [TimeSpan]::FromMinutes(2)
-# Tries for a git command that finds a lock held by another git process, 2 seconds apart.
-$LockTries = 5
 
-$script:UseColor = (-not [Console]::IsOutputRedirected) -and (-not $env:NO_COLOR)
 $script:Problems = 0
 # Set once anything about the commit or the sync is reported, so "up to date" is printed only
 # when nothing else was.
 $script:Reported = $false
 $script:Stopped = $false
 $script:GitDir = $null
+# Set once commits from GitHub are merged in, since they may bring skills that setup must link.
+$script:BroughtIn = $false
 
 function Write-Status {
+    # A status line, counted: problems set the exit code, and anything else about the commit or
+    # the sync means "up to date" isn't printed.
     param(
-        [Parameter(Mandatory)][ValidateSet('OK', 'COMMITTED', 'PULLED', 'MERGED', 'PUSHED', 'PENDING', 'OFFLINE', 'LEFT', 'STALE', 'UPDATE', 'PROBLEM')][string]$State,
+        [Parameter(Mandatory)][string]$State,
         [Parameter(Mandatory)][string]$Message
     )
     if ($State -eq 'PROBLEM') { $script:Problems++ }
     if ($State -notin @('OK', 'LEFT', 'STALE', 'UPDATE')) { $script:Reported = $true }
-    $label = '{0,-9} ' -f $State
-    if (-not $script:UseColor) {
-        Write-Output ($label + $Message)
-        return
-    }
-    $color = switch ($State) {
-        'OK' { 'Green' }
-        'PROBLEM' { 'Red' }
-        { $_ -in @('PENDING', 'OFFLINE', 'STALE', 'UPDATE') } { 'Yellow' }
-        default { 'Cyan' }
-    }
-    Write-Host $label -ForegroundColor $color -NoNewline
-    Write-Host $Message
-}
-
-function Invoke-Git {
-    # Runs git in a repo, dev-home unless -Repo says otherwise. Returns the exit code and the
-    # output and error lines. A command that finds a lock held by another git process is tried
-    # again; a lock file is never deleted.
-    param(
-        [Parameter(Mandatory)][string[]]$Arguments,
-        [string]$Repo = $Root
-    )
-    $ErrorActionPreference = 'Continue'
-    for ($try = 1; ; $try++) {
-        $out = [System.Collections.Generic.List[string]]::new()
-        $err = [System.Collections.Generic.List[string]]::new()
-        & git -C $Repo @Arguments 2>&1 | ForEach-Object {
-            if ($_ -is [System.Management.Automation.ErrorRecord]) { $err.Add($_.ToString()) }
-            else { $out.Add([string]$_) }
-        }
-        $code = $LASTEXITCODE
-        $locked = ($code -ne 0) -and (($err -join "`n") -match "Unable to create '[^']*\.lock'|cannot lock ref|index\.lock")
-        if ((-not $locked) -or ($try -ge $LockTries)) {
-            return [pscustomobject]@{ ExitCode = $code; Out = $out.ToArray(); Err = $err.ToArray(); Locked = $locked }
-        }
-        Start-Sleep -Seconds 2
-    }
-}
-
-function Get-FirstLine {
-    param([AllowNull()][string[]]$Lines)
-    foreach ($line in @($Lines)) {
-        if (-not [string]::IsNullOrWhiteSpace($line)) { return $line.Trim() }
-    }
-    return '(no message)'
-}
-
-function Format-CommitCount {
-    param([int]$Count)
-    if ($Count -eq 1) { return '1 commit' }
-    return ('{0} commits' -f $Count)
+    Write-StatusLine -State $State -Message $Message
 }
 
 function Format-Age {
@@ -146,11 +101,11 @@ function Format-Age {
 
 function Write-Busy {
     param([Parameter(Mandatory)]$Result)
-    Write-Status -State PROBLEM -Message ('Another git process kept dev-home locked through {0} tries, so this step was skipped. If no git is running, one that stopped partway left a lock file behind; ask the user before deleting it. git: {1}' -f $LockTries, (Get-FirstLine $Result.Err))
+    Write-Status -State PROBLEM -Message ('Another git process kept dev-home locked through {0} tries, so this step was skipped. If no git is running, one that stopped partway left a lock file behind; ask the user before deleting it. git: {1}' -f $Result.Tries, (Get-FirstLine $Result.Err))
 }
 
 function Get-AheadBehind {
-    param([string]$Repo = $Root)
+    param([Parameter(Mandatory)][string]$Repo)
     $counts = Invoke-Git -Repo $Repo -Arguments @('rev-list', '--left-right', '--count', 'HEAD...@{upstream}')
     if ($counts.ExitCode -ne 0) { return $null }
     $parts = @((($counts.Out -join ' ').Trim()) -split '\s+')
@@ -163,25 +118,25 @@ function Invoke-Commit {
         [Parameter(Mandatory)][string]$CommitMessage
     )
     $list = $Paths -join ', '
-    $add = Invoke-Git -Arguments (@('--literal-pathspecs', 'add', '--') + $Paths)
+    $add = Invoke-Git -Repo $Root -Arguments (@('--literal-pathspecs', 'add', '--') + $Paths)
     if ($add.ExitCode -ne 0) {
         $script:Stopped = $true
         if ($add.Locked) { Write-Busy -Result $add; return }
         Write-Status -State PROBLEM -Message ('Could not stage {0}, so nothing was committed. git: {1}' -f $list, (Get-FirstLine $add.Err))
         return
     }
-    $staged = Invoke-Git -Arguments (@('--literal-pathspecs', 'diff', '--cached', '--quiet', '--') + $Paths)
+    $staged = Invoke-Git -Repo $Root -Arguments (@('--literal-pathspecs', 'diff', '--cached', '--quiet', '--') + $Paths)
     if ($staged.ExitCode -eq 0) {
         Write-Status -State OK -Message ('Nothing to commit: {0} already match the last commit.' -f $list)
         return
     }
     # With paths, git commits only those paths, and anything another session staged stays out.
-    $commit = Invoke-Git -Arguments (@('--literal-pathspecs', 'commit', '--quiet', '-m', $CommitMessage, '--') + $Paths)
+    $commit = Invoke-Git -Repo $Root -Arguments (@('--literal-pathspecs', 'commit', '--quiet', '-m', $CommitMessage, '--') + $Paths)
     if ($commit.ExitCode -ne 0) {
         $script:Stopped = $true
         # git add staged the paths, and a merge refuses while anything is staged. This puts only
         # their index entries back to the last commit; the files keep their changes.
-        $unstage = Invoke-Git -Arguments (@('--literal-pathspecs', 'restore', '--staged', '--') + $Paths)
+        $unstage = Invoke-Git -Repo $Root -Arguments (@('--literal-pathspecs', 'restore', '--staged', '--') + $Paths)
         if ($commit.Locked) {
             Write-Busy -Result $commit
         }
@@ -199,15 +154,17 @@ function Invoke-Commit {
 function Merge-Upstream {
     param([int]$Ahead, [int]$Behind)
     if ($Ahead -eq 0) {
-        $merge = Invoke-Git -Arguments @('merge', '--ff-only', '--quiet', '@{upstream}')
+        $merge = Invoke-Git -Repo $Root -Arguments @('merge', '--ff-only', '--quiet', '@{upstream}')
         if ($merge.ExitCode -eq 0) {
+            $script:BroughtIn = $true
             Write-Status -State PULLED -Message ('{0} from GitHub.' -f (Format-CommitCount -Count $Behind))
             return
         }
     }
     else {
-        $merge = Invoke-Git -Arguments @('merge', '--no-edit', '--quiet', '-m', 'sync: merge another PC''s commits', '@{upstream}')
+        $merge = Invoke-Git -Repo $Root -Arguments @('merge', '--no-edit', '--quiet', '-m', 'sync: merge another PC''s commits', '@{upstream}')
         if ($merge.ExitCode -eq 0) {
+            $script:BroughtIn = $true
             Write-Status -State MERGED -Message ('{0} from GitHub, with a merge commit, because two PCs had new commits.' -f (Format-CommitCount -Count $Behind))
             return
         }
@@ -215,8 +172,8 @@ function Merge-Upstream {
     $script:Stopped = $true
     if ($merge.Locked) { Write-Busy -Result $merge; return }
     if (Test-Path -LiteralPath (Join-Path $script:GitDir 'MERGE_HEAD')) {
-        $conflicts = @((Invoke-Git -Arguments @('diff', '--name-only', '--diff-filter=U')).Out)
-        $abort = Invoke-Git -Arguments @('merge', '--abort')
+        $conflicts = @((Invoke-Git -Repo $Root -Arguments @('diff', '--name-only', '--diff-filter=U')).Out)
+        $abort = Invoke-Git -Repo $Root -Arguments @('merge', '--abort')
         if ($abort.ExitCode -eq 0) {
             Write-Status -State PROBLEM -Message ('Two PCs changed {0}. The merge was undone, and this PC''s commits are safe. Ask the user how to combine the two versions.' -f ($conflicts -join ', '))
         }
@@ -238,17 +195,17 @@ function Merge-Upstream {
 function Sync-Remote {
     # A push rejected because GitHub moved on gets one more round of fetch, merge, and push.
     for ($round = 1; $round -le 2; $round++) {
-        $fetch = Invoke-Git -Arguments @('fetch', '--quiet')
+        $fetch = Invoke-Git -Repo $Root -Arguments @('fetch', '--quiet')
         if ($fetch.ExitCode -ne 0) {
             if ($fetch.Locked) { Write-Busy -Result $fetch; return }
-            Write-Status -State OFFLINE -Message ('Could not reach GitHub, so this copy may be behind. git: {0}' -f (Get-FirstLine $fetch.Err))
-            $counts = Get-AheadBehind
+            Write-Status -State OFFLINE -Message ('Could not reach GitHub, so dev-home may be behind. git: {0}' -f (Get-FirstLine $fetch.Err))
+            $counts = Get-AheadBehind -Repo $Root
             if (($null -ne $counts) -and ($counts.Ahead -gt 0)) {
                 Write-Status -State PENDING -Message ('{0} not pushed yet. The next sync pushes it.' -f (Format-CommitCount -Count $counts.Ahead))
             }
             return
         }
-        $counts = Get-AheadBehind
+        $counts = Get-AheadBehind -Repo $Root
         if ($null -eq $counts) {
             Write-Status -State PROBLEM -Message 'Could not compare with GitHub, because this branch has no upstream branch.'
             return
@@ -261,10 +218,10 @@ function Sync-Remote {
                 }
                 return
             }
-            $counts = Get-AheadBehind
+            $counts = Get-AheadBehind -Repo $Root
         }
         if ($counts.Ahead -eq 0) { return }
-        $push = Invoke-Git -Arguments @('push', '--quiet')
+        $push = Invoke-Git -Repo $Root -Arguments @('push', '--quiet')
         if ($push.ExitCode -eq 0) {
             Write-Status -State PUSHED -Message ('{0} to GitHub.' -f (Format-CommitCount -Count $counts.Ahead))
             return
@@ -276,7 +233,7 @@ function Sync-Remote {
 }
 
 function Write-Uncommitted {
-    $status = Invoke-Git -Arguments @('status', '--porcelain=v1', '-z', '--untracked-files=all')
+    $status = Invoke-Git -Repo $Root -Arguments @('status', '--porcelain=v1', '-z', '--untracked-files=all')
     if ($status.ExitCode -ne 0) {
         Write-Status -State PROBLEM -Message ('Could not list uncommitted files. git: {0}' -f (Get-FirstLine $status.Err))
         return
@@ -299,19 +256,24 @@ function Write-Uncommitted {
         elseif ($x -eq 'A') { $kind = 'new file' }
         if (($x -ne ' ') -and ($x -ne '?')) { $kind += ', staged' }
 
-        # A deleted file has no time of its own, so use its folder's, which changes when an
-        # entry is removed.
+        # A deleted file has no time of its own, so use the nearest folder above it that still
+        # exists, whose time changes when an entry in it is removed. That may be dev-home itself,
+        # when the file's folders went with it.
         $age = $null
-        $full = Join-Path $Root $file
-        foreach ($candidate in @($full, (Split-Path -Parent $full))) {
+        $relative = $file
+        while ($true) {
+            $candidate = if ($relative) { Join-Path $Root $relative } else { $Root }
             $item = Get-Item -LiteralPath $candidate -Force -ErrorAction SilentlyContinue
             if ($null -ne $item) {
                 $age = (Get-Date) - $item.LastWriteTime
                 break
             }
+            if (-not $relative) { break }
+            $relative = [System.IO.Path]::GetDirectoryName($relative)
         }
+        # Without a time, nothing shows that nobody is working on it.
         if ($null -eq $age) {
-            Write-Status -State STALE -Message ('{0} ({1}, age unknown)' -f $file, $kind)
+            Write-Status -State LEFT -Message ('{0} ({1}, age unknown)' -f $file, $kind)
         }
         elseif ($age -ge $StaleAfter) {
             Write-Status -State STALE -Message ('{0} ({1}, {2})' -f $file, $kind, (Format-Age $age))
@@ -323,40 +285,25 @@ function Write-Uncommitted {
 }
 
 function Update-Tools {
-    # Checks dev-home-tools for new commits on GitHub. Pulls them, fast-forward only, when this
-    # PC's autoUpdate setting is on. Otherwise says they are waiting.
-    if (-not (Test-Path -LiteralPath (Join-Path $ToolsRoot '.git'))) { return }
-    # A clone with no upstream branch, such as a new local copy, has nothing to update from.
-    if ((Invoke-Git -Repo $ToolsRoot -Arguments @('rev-parse', '--abbrev-ref', '@{upstream}')).ExitCode -ne 0) { return }
-    $fetch = Invoke-Git -Repo $ToolsRoot -Arguments @('fetch', '--quiet')
-    if ($fetch.ExitCode -ne 0) {
-        Write-Status -State OFFLINE -Message ('Could not check dev-home-tools for updates. git: {0}' -f (Get-FirstLine $fetch.Err))
-        return
+    # update.ps1 checks GitHub for new dev-home-tools commits and decides what to do about them,
+    # so what the user is told and what gets installed come from the same code. It runs in this
+    # same process, so no second PowerShell has to start. With -Quiet it never asks, and prints
+    # its own lines. Its exit ends only that script, and an error in it can't stop the rest of
+    # this sync.
+    try {
+        & (Join-Path $ToolsRoot 'update.ps1') -Quiet
+        if ($LASTEXITCODE -ne 0) { $script:Problems++ }
     }
-    $counts = Get-AheadBehind -Repo $ToolsRoot
-    if (($null -eq $counts) -or ($counts.Behind -eq 0)) { return }
-    $commits = Format-CommitCount -Count $counts.Behind
-    $update = 'pwsh -NoProfile -File {0}/update.ps1' -f $ToolsRoot.Replace('\', '/')
-    if (-not $AutoUpdate) {
-        Write-Status -State UPDATE -Message ('{0} waiting in dev-home-tools. To see them and pull them, the user runs: {1}' -f $commits, $update)
-        return
+    catch {
+        Write-Status -State PROBLEM -Message ('update.ps1 stopped: {0}' -f $_.Exception.Message)
     }
-    if ($counts.Ahead -gt 0) {
-        Write-Status -State UPDATE -Message ('{0} waiting in dev-home-tools, not pulled, because this clone has {1} of its own. The user can merge them by hand.' -f $commits, (Format-CommitCount -Count $counts.Ahead))
-        return
-    }
-    $merge = Invoke-Git -Repo $ToolsRoot -Arguments @('merge', '--ff-only', '--quiet', '@{upstream}')
-    if ($merge.ExitCode -ne 0) {
-        Write-Status -State UPDATE -Message ('{0} waiting in dev-home-tools, not pulled. git: {1}' -f $commits, (Get-FirstLine $merge.Err))
-        return
-    }
-    Write-Status -State PULLED -Message ('{0} to dev-home-tools.' -f $commits)
 }
 
 function Invoke-Setup {
     $setup = Join-Path $ToolsRoot 'setup.ps1'
-    # In its own process, so that its settings and its exit can't reach this script. It prints
-    # its own PROBLEM lines.
+    # In a process of its own, unlike update.ps1. This script runs with pwsh -File, which keeps
+    # its top-level variables in the global scope, where a script run in the same process can
+    # see them. In its own process, setup starts clean. It prints its own PROBLEM lines.
     & ([System.Environment]::ProcessPath) -NoProfile -File $setup -Quiet
     if ($LASTEXITCODE -ne 0) { $script:Problems++ }
 }
@@ -388,8 +335,11 @@ function Invoke-Run {
         Write-Status -State OK -Message 'dev-home is up to date with GitHub.'
     }
     Write-Uncommitted
-    Update-Tools
-    Invoke-Setup
+    # A sync that commits usually comes right after a plain one, which just checked for updates
+    # and ran setup. So it skips the check, and runs setup only for commits it brought in.
+    $plain = ($Paths.Count -eq 0)
+    if ($plain) { Update-Tools }
+    if ($plain -or $script:BroughtIn) { Invoke-Setup }
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -406,7 +356,6 @@ try {
         exit 1
     }
     $Root = [System.IO.Path]::GetFullPath($settings.contentDir)
-    $AutoUpdate = ($settings.autoUpdate -eq $true)
 
     $rootFull = $Root.TrimEnd('\', '/')
     $commitPaths = [System.Collections.Generic.List[string]]::new()
@@ -438,7 +387,7 @@ try {
     }
     if ($script:Problems -gt 0) { exit 1 }
 
-    $gitDirResult = Invoke-Git -Arguments @('rev-parse', '--absolute-git-dir')
+    $gitDirResult = Invoke-Git -Repo $Root -Arguments @('rev-parse', '--absolute-git-dir')
     if ($gitDirResult.ExitCode -ne 0) {
         Write-Status -State PROBLEM -Message ('{0} is not a git repo. git: {1}' -f $rootFull, (Get-FirstLine $gitDirResult.Err))
         exit 1

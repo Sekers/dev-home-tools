@@ -10,7 +10,7 @@ setup, the day-to-day commands, and safety.
 | --- | --- |
 | `handoffs/<service>/<project path>/HANDOFF.md` | Private session state for one project, filed by where it's hosted, such as `handoffs/github/you/tool/`. Projects hosted elsewhere go in `handoffs/other/`, and projects with no remote in `handoffs/local/`, by folder name and first commit. Read and updated with `/handoff`. |
 | `knowledge/` | General knowledge for coding and AI work. `knowledge/README.md` is the index. |
-| `rules/global.md` | My own always-on rules, loaded in every session along with the core rules. |
+| `global-rules/global-rules.md` | My global rules: my own always-on preferences for every project, loaded in every session along with the operating rules from dev-home-tools. |
 | `skills/` | My personal skills, if any. Setup links them into Claude Code and Codex. |
 | `AGENTS.md` | Rules for an agent working inside this repo. |
 | `.drafts/` | Scratch space for text that leaves this repo, such as GitHub issue bodies. Git ignores it. |

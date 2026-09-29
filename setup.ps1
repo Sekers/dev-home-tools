@@ -2,8 +2,8 @@
 <#
 .SYNOPSIS
     Sets up dev-home-tools on this PC: finds or creates your dev-home, fills in the skills and
-    rules with this PC's paths, links them into Claude Code and Codex, and checks the settings
-    they need.
+    operating rules with this PC's paths, links them into Claude Code and Codex, and checks the
+    settings they need.
 
 .DESCRIPTION
     Safe to run any number of times. It rewrites only its own generated files, creates missing
@@ -13,11 +13,12 @@
     On the first run it asks where your dev-home is (the private repo that holds your handoffs
     and knowledge base), and saves the answer in local-settings.json next to this script. If
     that folder doesn't exist yet, it offers to clone your dev-home from GitHub, or to create a
-    new private one from the files in starter/.
+    new private one from the files in templates/dev-home-starter/.
 
-    The skills and core rules in this repo hold placeholders where paths go. Setup writes copies
-    with this PC's paths filled in to .generated/, and links those into the tools. Pre-approved
-    commands must match the command text exactly, so the paths can't be variables.
+    The templates in this repo hold placeholders where paths go. Setup writes copies of the
+    skills and operating rules with this PC's paths filled in to .generated/, at the same paths
+    they have under templates/, and links those into the tools. Pre-approved commands must match
+    the command text exactly, so the paths can't be variables.
 
     When a settings file is missing something, it shows the exact lines it would change and asks
     first. On yes, it saves a dated backup of the file, then writes the change. It never edits a
@@ -35,7 +36,7 @@
     Folder links are symbolic links when Windows Developer Mode is on, and directory junctions
     otherwise.
 
-    For testing, tests/Invoke-Tests.ps1 runs a throwaway copy of this repo whose
+    For testing, internal/tests/Invoke-Tests.ps1 runs a throwaway copy of this repo whose
     local-settings.json sets testHomeDir. Setup then uses that folder instead of your profile, and
     says so on every run. Setup never writes testHomeDir itself.
 
@@ -77,6 +78,9 @@ $TextExtensions = @('.md', '.txt', '.json', '.toml', '.yml', '.yaml', '.ps1', '.
 $CodexMarker = '<!-- Written by dev-home-tools setup.ps1'
 
 $ToolsRoot = $PSScriptRoot
+# Running git and printing status lines, shared with sync.ps1 and update.ps1.
+. (Join-Path $ToolsRoot 'internal/shared/git.ps1')
+. (Join-Path $ToolsRoot 'internal/shared/output.ps1')
 $SettingsPath = Join-Path $ToolsRoot 'local-settings.json'
 $GeneratedRoot = Join-Path $ToolsRoot '.generated'
 # The profile folder to set up: yours, unless local-settings.json sets testHomeDir.
@@ -86,16 +90,12 @@ $script:Problems = [System.Collections.Generic.List[string]]::new()
 $script:UnknownPlaceholders = [System.Collections.Generic.List[string]]::new()
 $script:GeneratedChanges = 0
 
-# Color only when a person is watching the console. Agents run setup with its output
-# redirected, so they get plain text. NO_COLOR turns color off too.
-$script:UseColor = (-not [Console]::IsOutputRedirected) -and (-not $env:NO_COLOR)
-
 function Write-Line {
     param(
         [AllowEmptyString()][string]$Text = '',
         [string]$Color = ''
     )
-    if (-not $script:UseColor) {
+    if (-not (Test-UseColor)) {
         Write-Output $Text
     }
     elseif ($Color) {
@@ -107,25 +107,14 @@ function Write-Line {
 }
 
 function Write-Status {
+    # A status line, counted: problems set the exit code. With -Quiet, OK lines are left out.
     param(
-        [Parameter(Mandatory)][ValidateSet('OK', 'TEST', 'LINKED', 'REMOVED', 'WROTE', 'CREATED', 'SET', 'CHANGE', 'PROBLEM')][string]$State,
+        [Parameter(Mandatory)][string]$State,
         [Parameter(Mandatory)][string]$Message
     )
     if ($State -eq 'PROBLEM') { $script:Problems.Add($Message) }
     if ($Quiet -and ($State -eq 'OK')) { return }
-    $label = '{0,-8} ' -f $State
-    if (-not $script:UseColor) {
-        Write-Output ($label + $Message)
-        return
-    }
-    $color = switch ($State) {
-        'OK' { 'Green' }
-        { $_ -in @('CHANGE', 'TEST') } { 'Yellow' }
-        'PROBLEM' { 'Red' }
-        default { 'Cyan' }
-    }
-    Write-Host $label -ForegroundColor $color -NoNewline
-    Write-Host $Message
+    Write-StatusLine -State $State -Message $Message
 }
 
 function Exit-Setup {
@@ -149,7 +138,8 @@ function Exit-Setup {
 }
 
 function Invoke-Tool {
-    # Runs a program without printing its output. Returns the exit code and the output lines.
+    # Runs gh without printing its output. Returns the exit code and the output lines. Git goes
+    # through Invoke-Git instead, in internal/shared/git.ps1.
     param(
         [Parameter(Mandatory)][string]$FilePath,
         [string[]]$Arguments = @()
@@ -159,13 +149,6 @@ function Invoke-Tool {
     return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Lines = $lines }
 }
 
-function Get-FirstLine {
-    param([AllowNull()][string[]]$Lines)
-    foreach ($line in @($Lines)) {
-        if (-not [string]::IsNullOrWhiteSpace($line)) { return $line.Trim() }
-    }
-    return '(no message)'
-}
 
 function Read-Answer {
     # Asks a question and returns the answer, or the default when the answer is blank. Returns
@@ -361,7 +344,7 @@ function Sync-GeneratedFolder {
 
 function Initialize-ContentRepo {
     # Offers to clone the person's dev-home from GitHub, or to create a new private one from
-    # starter/. The caller checks the folder afterward.
+    # templates/dev-home-starter/. The caller checks the folder afterward.
     param(
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][hashtable]$Values
@@ -398,9 +381,9 @@ function Initialize-ContentRepo {
     }
 
     $name = Read-Answer -Question 'Name for the new private repo on GitHub' -Default 'dev-home'
-    if (-not $script:Cmdlet.ShouldProcess($Path, ('Create a private repo named {0} on GitHub, from starter/' -f $name))) { return }
+    if (-not $script:Cmdlet.ShouldProcess($Path, ('Create a private repo named {0} on GitHub, from templates/dev-home-starter/' -f $name))) { return }
     New-Item -ItemType Directory -Path $Path -Force | Out-Null
-    $starterRoot = Join-Path $ToolsRoot 'starter'
+    $starterRoot = Join-Path $ToolsRoot 'templates/dev-home-starter'
     $files = [System.Collections.Generic.List[string]]::new()
     foreach ($file in @(Get-ChildItem -LiteralPath $starterRoot -File -Recurse -Force)) {
         $relative = [System.IO.Path]::GetRelativePath($starterRoot, $file.FullName)
@@ -418,9 +401,9 @@ function Initialize-ContentRepo {
         , @('commit', '--quiet', '-m', 'starter: new dev-home')
     )
     foreach ($step in $steps) {
-        $git = Invoke-Tool -FilePath 'git' -Arguments (@('-C', $Path) + $step)
+        $git = Invoke-Git -Repo $Path -Arguments $step
         if ($git.ExitCode -ne 0) {
-            Write-Status -State PROBLEM -Message ('Could not set up the repo in {0}: git {1} failed. git: {2}' -f $Path, $step[0], (Get-FirstLine $git.Lines))
+            Write-Status -State PROBLEM -Message ('Could not set up the repo in {0}: git {1} failed. git: {2}' -f $Path, $step[0], (Get-FirstLine ($git.Err + $git.Out)))
             return
         }
     }
@@ -540,17 +523,18 @@ function Sync-Link {
 }
 
 function Sync-CodexRules {
-    # Codex reads a single always-on file, so setup writes the core rules and the person's own
-    # rules into it, joined. It replaces only a file it wrote, or a link whose target is gone.
+    # Codex reads a single always-on file, so setup writes the operating rules and the person's
+    # global rules into it, joined. It replaces only a file it wrote, or a link whose target is
+    # gone.
     param(
-        [Parameter(Mandatory)][string]$CorePath,
-        [Parameter(Mandatory)][string]$PersonalPath
+        [Parameter(Mandatory)][string]$OperatingPath,
+        [Parameter(Mandatory)][string]$GlobalPath
     )
     $path = Join-Path $HomeDir '.codex' 'AGENTS.md'
     $label = 'Codex always-on rules'
     $parts = [System.Collections.Generic.List[string]]::new()
-    $parts.Add($CodexMarker + ', from its core rules and your dev-home rules/global.md. Edit those instead: setup rewrites this file after every sync. -->')
-    foreach ($source in @($CorePath, $PersonalPath)) {
+    $parts.Add($CodexMarker + ', from its operating rules and your dev-home global-rules/global-rules.md. Edit your global rules there: setup rewrites this file after every sync. -->')
+    foreach ($source in @($OperatingPath, $GlobalPath)) {
         if (Test-Path -LiteralPath $source -PathType Leaf) {
             $parts.Add([System.IO.File]::ReadAllText($source).Replace("`r`n", "`n").TrimEnd("`n"))
         }
@@ -561,7 +545,7 @@ function Sync-CodexRules {
     if ($null -ne $existing) {
         if ($existing.IsLink) {
             if (Test-Path -LiteralPath $existing.Target) {
-                Write-Status -State PROBLEM -Message ('{0}: {1} links to {2}. Left alone. Move anything you want to keep into {3}, delete the link, then run setup.ps1 again.' -f $label, $path, $existing.Target, $PersonalPath)
+                Write-Status -State PROBLEM -Message ('{0}: {1} links to {2}. Left alone. Move anything you want to keep into {3}, delete the link, then run setup.ps1 again.' -f $label, $path, $existing.Target, $GlobalPath)
                 return
             }
             if (-not $script:Cmdlet.ShouldProcess($path, 'Replace this link with the joined rules file')) { return }
@@ -570,7 +554,7 @@ function Sync-CodexRules {
         else {
             $current = [System.IO.File]::ReadAllText($path)
             if (-not $current.StartsWith($CodexMarker, [System.StringComparison]::Ordinal)) {
-                Write-Status -State PROBLEM -Message ('{0}: {1} already exists, and setup did not write it. Move anything you want to keep into {2}, delete the file, then run setup.ps1 again.' -f $label, $path, $PersonalPath)
+                Write-Status -State PROBLEM -Message ('{0}: {1} already exists, and setup did not write it. Move anything you want to keep into {2}, delete the file, then run setup.ps1 again.' -f $label, $path, $GlobalPath)
                 return
             }
             if ($current -ceq $text) {
@@ -579,7 +563,7 @@ function Sync-CodexRules {
             }
         }
     }
-    if (-not $script:Cmdlet.ShouldProcess($path, 'Write the core and personal rules, joined')) { return }
+    if (-not $script:Cmdlet.ShouldProcess($path, 'Write the operating and global rules, joined')) { return }
     $parent = Split-Path -Parent $path
     if (-not (Test-Path -LiteralPath $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
     [System.IO.File]::WriteAllText($path, $text, [System.Text.UTF8Encoding]::new($false))
@@ -787,8 +771,8 @@ function Repair-Setting {
     if ($Plan.Reason) {
         Write-Status -State PROBLEM -Message $problem
         if (-not $Quiet) {
-            Write-Line -Text ('         Setup won''t change this file itself: {0}.' -f $Plan.Reason)
-            Write-Line -Text ('         ' + $HowTo)
+            Write-Line -Text ('          Setup won''t change this file itself: {0}.' -f $Plan.Reason)
+            Write-Line -Text ('          ' + $HowTo)
             Write-Line -Color Yellow -Text $Snippet
         }
         return
@@ -799,18 +783,18 @@ function Repair-Setting {
     }
 
     Write-Status -State CHANGE -Message $problem
-    Write-Line -Text '         Setup can make this change, and keeps a backup of the file first. Lines marked + are added, - removed:'
-    if ($Plan.Note) { Write-Line -Text ('         ' + $Plan.Note) }
+    Write-Line -Text '          Setup can make this change, and keeps a backup of the file first. Lines marked + are added, - removed:'
+    if ($Plan.Note) { Write-Line -Text ('          ' + $Plan.Note) }
     $diff = Get-LineDiff -Old (ConvertTo-Lines -Text $Plan.File.Text) -New (ConvertTo-Lines -Text $Plan.NewText)
     $limit = 40
     foreach ($line in ($diff | Select-Object -First $limit)) {
         $color = if ($line.StartsWith('+ ')) { 'Green' } elseif ($line.StartsWith('- ')) { 'Red' } else { '' }
-        Write-Line -Color $color -Text ('           ' + $line)
+        Write-Line -Color $color -Text ('            ' + $line)
     }
-    if ($diff.Count -gt $limit) { Write-Line -Text ('           ...and {0} more lines.' -f ($diff.Count - $limit)) }
+    if ($diff.Count -gt $limit) { Write-Line -Text ('            ...and {0} more lines.' -f ($diff.Count - $limit)) }
 
     if (-not $script:Cmdlet.ShouldProcess($Path, 'Change the lines shown, after asking, and keep a backup')) { return }
-    if (-not (Confirm-Change -Question '         Make this change?')) {
+    if (-not (Confirm-Change -Question '          Make this change?')) {
         Write-Status -State PROBLEM -Message ('{0}: left unchanged. Make the change shown above by hand, or run setup.ps1 again and answer y.' -f $Subject)
         return
     }
@@ -1304,13 +1288,13 @@ if (-not (Test-Path -LiteralPath (Join-Path $ContentRoot '.git'))) {
 # because git doesn't know the person's name and email yet. Starting over is the simple fix. Only
 # exit code 1 means no commits: anything else is git failing to read the repo, which says nothing
 # about what's in it.
-$head = Invoke-Tool -FilePath 'git' -Arguments @('-C', $ContentRoot, 'rev-parse', '--verify', '--quiet', 'HEAD')
+$head = Invoke-Git -Repo $ContentRoot -Arguments @('rev-parse', '--verify', '--quiet', 'HEAD')
 if ($head.ExitCode -eq 1) {
     Write-Status -State PROBLEM -Message ('{0} is a git repo with no commits, probably from a setup run that stopped partway. If it holds nothing you need, delete the folder, fix what stopped setup, then run setup.ps1 again to clone or create dev-home there.' -f $ContentRoot)
     Exit-Setup
 }
 if ($head.ExitCode -ne 0) {
-    Write-Status -State PROBLEM -Message ('git could not read {0}, so setup stopped. git: {1}' -f $ContentRoot, (Get-FirstLine $head.Lines))
+    Write-Status -State PROBLEM -Message ('git could not read {0}, so setup stopped. git: {1}' -f $ContentRoot, (Get-FirstLine ($head.Err + $head.Out)))
     Exit-Setup
 }
 
@@ -1319,12 +1303,12 @@ if ($head.ExitCode -ne 0) {
 $wantedConfig = [ordered]@{ 'commit.gpgsign' = 'false'; 'pull.rebase' = 'false' }
 foreach ($key in $wantedConfig.Keys) {
     $value = $wantedConfig[$key]
-    $current = (Invoke-Tool -FilePath 'git' -Arguments @('-C', $ContentRoot, 'config', '--local', '--get', $key)).Lines
+    $current = (Invoke-Git -Repo $ContentRoot -Arguments @('config', '--local', '--get', $key)).Out
     if ((Get-FirstLine $current) -eq $value) {
         Write-Status -State OK -Message ('dev-home git config {0} = {1}' -f $key, $value)
     }
     elseif ($script:Cmdlet.ShouldProcess("git config --local $key in $ContentRoot", "Set to $value")) {
-        if ((Invoke-Tool -FilePath 'git' -Arguments @('-C', $ContentRoot, 'config', '--local', $key, $value)).ExitCode -eq 0) {
+        if ((Invoke-Git -Repo $ContentRoot -Arguments @('config', '--local', $key, $value)).ExitCode -eq 0) {
             Write-Status -State SET -Message ('dev-home git config {0} = {1}' -f $key, $value)
         }
         else {
@@ -1333,9 +1317,10 @@ foreach ($key in $wantedConfig.Keys) {
     }
 }
 
-# 3. Generated files: the skills and core rules with this PC's paths filled in.
+# 3. Generated files: the skills and operating rules with this PC's paths filled in, at the
+# same paths they have under templates/.
 
-$skillSources = @(Get-ChildItem -LiteralPath (Join-Path $ToolsRoot 'skills') -Directory |
+$skillSources = @(Get-ChildItem -LiteralPath (Join-Path $ToolsRoot 'templates/skills') -Directory |
         Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'SKILL.md') })
 $generatedSkills = Join-Path $GeneratedRoot 'skills'
 foreach ($skill in $skillSources) {
@@ -1351,18 +1336,18 @@ if (Test-Path -LiteralPath $generatedSkills) {
         }
     }
 }
-Sync-GeneratedFolder -Source (Join-Path $ToolsRoot 'rules') -Destination (Join-Path $GeneratedRoot 'rules') -Values $Values
+Sync-GeneratedFolder -Source (Join-Path $ToolsRoot 'templates/operating-rules') -Destination (Join-Path $GeneratedRoot 'operating-rules') -Values $Values
 
 # A folder here with no templates, such as one left from an older layout, is removed.
 if (Test-Path -LiteralPath $GeneratedRoot) {
     foreach ($folder in @(Get-ChildItem -LiteralPath $GeneratedRoot -Directory -Force)) {
-        if (@('skills', 'rules') -notcontains $folder.Name) {
+        if (@('skills', 'operating-rules') -notcontains $folder.Name) {
             Sync-GeneratedFolder -Destination $folder.FullName -Values $Values
         }
     }
 }
 
-$note = "Setup writes everything in this folder from the templates in skills/ and rules/, with`nthis PC's paths filled in. Don't edit it: the next setup run rewrites it.`n"
+$note = "Setup writes everything in this folder from templates/skills/ and templates/operating-rules/,`nwith this PC's paths filled in. Don't edit it: the next setup run rewrites it.`n"
 $notePath = Join-Path $GeneratedRoot 'README.txt'
 if (((-not (Test-Path -LiteralPath $notePath)) -or ([System.IO.File]::ReadAllText($notePath) -cne $note)) -and
     (Test-Path -LiteralPath $GeneratedRoot) -and $script:Cmdlet.ShouldProcess($notePath, 'Write a note about this folder')) {
@@ -1373,10 +1358,10 @@ foreach ($unknown in ($script:UnknownPlaceholders | Select-Object -Unique)) {
     Write-Status -State PROBLEM -Message ('A placeholder setup does not know, left as it is: {0}' -f $unknown)
 }
 if ($script:GeneratedChanges -gt 0) {
-    Write-Status -State WROTE -Message ('Skills and core rules with this PC''s paths: {0} file(s) changed in {1}' -f $script:GeneratedChanges, $GeneratedRoot)
+    Write-Status -State WROTE -Message ('Skills and operating rules with this PC''s paths: {0} file(s) changed in {1}' -f $script:GeneratedChanges, $GeneratedRoot)
 }
 else {
-    Write-Status -State OK -Message 'Skills and core rules with this PC''s paths'
+    Write-Status -State OK -Message 'Skills and operating rules with this PC''s paths'
 }
 
 # 4. Skills, linked into each tool's personal skills folder: the dev-home-tools skills, then
@@ -1442,21 +1427,22 @@ foreach ($folder in $toolSkillFolders) {
     }
 }
 
-# 5. Always-on rules: the core rules from here, and the person's own from dev-home. Claude Code
-# loads every file in the rules folder of each Claude folder; Codex reads one file, so setup
-# writes the two joined.
+# 5. Always-on rules: the operating rules from here, and the person's global rules from
+# dev-home. Claude Code loads every file in the rules folder of each Claude folder, where each
+# link is named dev-home- plus the folder it points to, since nothing there says which repo a
+# name belongs to. Codex reads one file, so setup writes the two joined.
 
-$coreRules = Join-Path $GeneratedRoot 'rules'
-$personalRules = Join-Path $ContentRoot 'rules'
+$operatingRules = Join-Path $GeneratedRoot 'operating-rules'
+$globalRules = Join-Path $ContentRoot 'global-rules'
 foreach ($claudeDir in $claudeDirs) {
     $claudeName = Split-Path -Leaf $claudeDir
-    Sync-Link -LinkPath (Join-Path $claudeDir 'rules' 'dev-home-tools') -TargetPath $coreRules -Label ('Claude Code core rules in {0}' -f $claudeName)
-    if (Test-Path -LiteralPath $personalRules) {
-        Sync-Link -LinkPath (Join-Path $claudeDir 'rules' 'dev-home') -TargetPath $personalRules -Label ('Claude Code personal rules in {0}' -f $claudeName)
+    Sync-Link -LinkPath (Join-Path $claudeDir 'rules' 'dev-home-operating-rules') -TargetPath $operatingRules -Label ('Claude Code operating rules in {0}' -f $claudeName)
+    if (Test-Path -LiteralPath $globalRules) {
+        Sync-Link -LinkPath (Join-Path $claudeDir 'rules' 'dev-home-global-rules') -TargetPath $globalRules -Label ('Claude Code global rules in {0}' -f $claudeName)
     }
 }
 if ($codexInstalled) {
-    Sync-CodexRules -CorePath (Join-Path $coreRules 'core.md') -PersonalPath (Join-Path $personalRules 'global.md')
+    Sync-CodexRules -OperatingPath (Join-Path $operatingRules 'operating-rules.md') -GlobalPath (Join-Path $globalRules 'global-rules.md')
 }
 
 # 6. Settings. A missing setting is offered as a change: shown first, made only after a yes, and
@@ -1500,11 +1486,11 @@ foreach ($claudeDir in $claudeDirs) {
             -Need ('{0} in permissions.additionalDirectories' -f ($missing -join ' and ')) `
             -HowTo 'Merge this into the file. If it already has "permissions", put additionalDirectories inside that block:' `
             -Snippet @"
-         {
-           "permissions": {
-             "additionalDirectories": [$entries]
-           }
-         }
+          {
+            "permissions": {
+              "additionalDirectories": [$entries]
+            }
+          }
 "@
     }
 }
@@ -1526,10 +1512,10 @@ if ($codexInstalled) {
             -Need ('dev-home in writable_roots, and project_doc_max_bytes of at least {0} (Codex stops reading AGENTS.md files at 32 KiB by default)' -f $CodexDocBytes) `
             -HowTo 'Merge this into the file. project_doc_max_bytes goes above the first [section]. If the file already has [sandbox_workspace_write], add only the writable_roots line under it:' `
             -Snippet @"
-         project_doc_max_bytes = $CodexDocBytes
+          project_doc_max_bytes = $CodexDocBytes
 
-         [sandbox_workspace_write]
-         writable_roots = ['$ContentRoot']
+          [sandbox_workspace_write]
+          writable_roots = ['$ContentRoot']
 "@
     }
 }

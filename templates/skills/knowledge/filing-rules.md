@@ -1,4 +1,4 @@
-# Knowledge base rules
+# Knowledge base filing rules
 
 The rules for every file in the knowledge base. The index is `README.md` in the knowledge folder;
 these rules live with the skill, so they update with dev-home-tools.

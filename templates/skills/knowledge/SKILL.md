@@ -7,9 +7,9 @@ allowed-tools: "Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1) Bash(pwsh -No
 # Knowledge base
 
 The knowledge base is `{{CONTENT_DIR}}/knowledge`, in the user's private repo, dev-home. Its
-`README.md` is the index. The rules for files are in `{{SKILL_DIR}}/rules.md`; read them before
-adding or changing anything. Run the commands below exactly as written; in Claude Code they are
-pre-approved.
+`README.md` is the index. The rules for filing notes are in `{{SKILL_DIR}}/filing-rules.md`;
+read them before adding or changing anything. Run the commands below exactly as written; in
+Claude Code they are pre-approved.
 
 Sessions in other projects, and Codex, use dev-home at the same time, so a file there that you
 didn't change may be someone's work in progress. Run git in dev-home only through
@@ -23,7 +23,9 @@ lookup reads the local copy and never syncs.
 
 1. Run `pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1`. It syncs with GitHub, then runs setup.
    Pass on anything it prints beyond `OK`:
-   - `OFFLINE`: say the knowledge base may be stale, and continue.
+   - `OFFLINE`: GitHub couldn't be reached. When the line is about dev-home, say the knowledge
+     base may be stale; when it's about dev-home-tools, say its updates weren't checked. Then
+     continue.
    - `LEFT`: leave the file alone. Another session may be editing it.
    - `STALE`: nobody has touched the file for 15 minutes. Ask "Commit and push it?". On a yes, run
      `pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 -Message "sync: <what changed>" "<path>"`.
@@ -105,7 +107,7 @@ commit, and push" says, or after a yes to a candidate you offered.
 1. Apply the general test: it would still be true in a brand-new project, and it names none of
    the user's functions, files, or tenants. If it fails, it doesn't belong in the knowledge base:
    tell the user why, and add nothing.
-2. Read `{{SKILL_DIR}}/rules.md`, unless you already did this session.
+2. Read `{{SKILL_DIR}}/filing-rules.md`, unless you already did this session.
 3. Sync with GitHub (above), unless it already ran this turn.
 4. Add the finding to the matching topic file, or create one by the rules. Label its evidence
    and date it, with versions. Keep it short, because every line costs tokens each time the file

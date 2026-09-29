@@ -152,15 +152,17 @@ about this project doesn't belong here either.
 ## Read (the default)
 
 1. If your instructions don't include the heading "Private repo: dev-home (rules loaded)", tell
-   the user that the always-on dev-home rules aren't loaded, then continue.
+   the user that the always-on operating rules aren't loaded, then continue.
 2. Run `pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1`. It syncs with GitHub, then runs setup.
    Pass on anything it prints beyond `OK`:
-   - `OFFLINE`: say the handoff may be stale, and continue.
+   - `OFFLINE`: GitHub couldn't be reached. When the line is about dev-home, say the handoff may
+     be stale; when it's about dev-home-tools, say its updates weren't checked. Then continue.
    - `LEFT`: leave the file alone. Another session may be editing it.
    - `STALE`: nobody has touched the file for 15 minutes. Ask "Commit and push it?". On a yes, run
      `pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 -Message "sync: <what changed>" "<path>"`.
    - `UPDATE`: new dev-home-tools commits are available. Tell the user, and continue.
-   - `PROBLEM`: show it, say the handoff may be behind, and continue.
+   - `PROBLEM`: show it. When it's about syncing dev-home, say the handoff may be behind. Then
+     continue.
 3. Find this project's handoff (see above), read it, and summarize where things stand. Start
    with Next up, as written, if it isn't empty. If the user asked a question, answer it.
 

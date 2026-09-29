@@ -3,7 +3,7 @@
 .generated/
 local-settings.json
 
-# Throwaway copies that tests/Invoke-Tests.ps1 builds and runs.
+# Throwaway copies that internal/tests/Invoke-Tests.ps1 builds and runs.
 .test-sandbox/
 
 # Windows thumbnail cache files
