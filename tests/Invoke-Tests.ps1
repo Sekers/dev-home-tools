@@ -534,6 +534,13 @@ function Test-Sync {
     $run = Invoke-Script -Path $sync
     Test-Check 'a plain sync says dev-home is up to date' (($run.ExitCode -eq 0) -and (Test-HasLine $run.Lines 'up to date') -and (-not (Test-HasLine $run.Lines '^(UPDATE|PROBLEM)\s'))) $run.Lines
 
+    # A skill of the user's own, created on this PC after setup ran.
+    $later = Join-Path $box.Content 'skills/later'
+    Write-TextFile -Path (Join-Path $later 'SKILL.md') -Text "---`nname: later`ndescription: A personal skill added after setup.`n---`n"
+    Invoke-Script -Path $sync | Out-Null
+    Test-Link 'a plain sync links a personal skill added since setup ran' (Join-Path $box.Profile '.claude/skills/later') $later
+    [System.IO.Directory]::Delete($later, $true)
+
     Add-Content -LiteralPath (Join-Path $box.Content 'handoffs/demo/HANDOFF.md') -Value 'A new line.'
     Write-TextFile -Path (Join-Path $box.Content 'notes.md') -Text "someone else's file`n"
     $run = Invoke-Script -Path $sync -Arguments @('-Message', 'handoff: demo', 'handoffs/demo/HANDOFF.md')
