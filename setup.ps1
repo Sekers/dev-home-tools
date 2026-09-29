@@ -1027,16 +1027,21 @@ function Get-TomlValueText {
 }
 
 function Test-CodexConfigText {
-    # True when config.toml text has dev-home in [sandbox_workspace_write] writable_roots and a
-    # large enough top-level project_doc_max_bytes. Comments and other tables don't count. For a
-    # file the TOML reader can't follow, it falls back to a plain text search.
-    param([AllowEmptyString()][string]$Text)
+    # True when config.toml text has WritableRoot in [sandbox_workspace_write] writable_roots and a
+    # top-level project_doc_max_bytes of at least MinDocBytes. Comments and other tables don't
+    # count. For a file the TOML reader can't follow, it falls back to a plain text search.
+    param(
+        [AllowEmptyString()][string]$Text,
+        [Parameter(Mandatory)][string]$WritableRoot,
+        [Parameter(Mandatory)][int64]$MinDocBytes
+    )
+    $rootPattern = Get-TomlPathPattern -Path $WritableRoot
     $lines = ConvertTo-Lines -Text $Text
     $layout = if ($Text -match "'''|""""""") { $null } else { Read-TomlLayout -Lines $lines }
     if (($null -eq $layout) -or $layout.Reason) {
-        $hasWritableRoot = $Text -match ('writable_roots\s*=\s*\[[^\]]*' + $script:CodexRootPattern)
+        $hasWritableRoot = $Text -match ('writable_roots\s*=\s*\[[^\]]*' + $rootPattern)
         $maxBytes = [regex]::Match($Text, '(?m)^\s*project_doc_max_bytes\s*=\s*(\d+)')
-        return ($hasWritableRoot -and $maxBytes.Success -and ([int64]$maxBytes.Groups[1].Value -ge $CodexDocBytes))
+        return ($hasWritableRoot -and $maxBytes.Success -and ([int64]$maxBytes.Groups[1].Value -ge $MinDocBytes))
     }
     $hasWritableRoot = $false
     $hasMaxBytes = $false
@@ -1044,12 +1049,12 @@ function Test-CodexConfigText {
         if (($key.Table -eq '') -and ($key.Name -ceq 'project_doc_max_bytes')) {
             $number = [regex]::Match((Get-TomlValueText -Lines $lines -Key $key), '=\s*([0-9][0-9_]*)\s*$')
             [int64]$value = 0
-            if ($number.Success -and [int64]::TryParse(($number.Groups[1].Value -replace '_', ''), [ref]$value) -and ($value -ge $CodexDocBytes)) {
+            if ($number.Success -and [int64]::TryParse(($number.Groups[1].Value -replace '_', ''), [ref]$value) -and ($value -ge $MinDocBytes)) {
                 $hasMaxBytes = $true
             }
         }
         elseif (($key.Table -ceq 'sandbox_workspace_write') -and ($key.Name -ceq 'writable_roots') -and
-            ((Get-TomlValueText -Lines $lines -Key $key) -match $script:CodexRootPattern)) {
+            ((Get-TomlValueText -Lines $lines -Key $key) -match $rootPattern)) {
             $hasWritableRoot = $true
         }
     }
@@ -1057,10 +1062,16 @@ function Test-CodexConfigText {
 }
 
 function Get-CodexConfigPlan {
-    # Plans the config.toml change as whole-line insertions and edits, leaving every other line as
-    # it was. The new text is read again to confirm it's still TOML this reader follows, with each
-    # setting defined once and set as needed.
-    param([Parameter(Mandatory)][string]$Path)
+    # Plans the config.toml change that adds WritableRoot to writable_roots and raises
+    # project_doc_max_bytes to at least MinDocBytes, as whole-line insertions and edits, leaving
+    # every other line as it was. The new text is read again to confirm it's still TOML this reader
+    # follows, with each setting defined once and set as needed.
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$WritableRoot,
+        [Parameter(Mandatory)][int64]$MinDocBytes
+    )
+    $rootPattern = Get-TomlPathPattern -Path $WritableRoot
     $file = Read-SettingsFile -Path $Path
     $plan = [pscustomobject]@{ File = $file; NewText = $null; Reason = $file.Reason; Note = '' }
     if ($plan.Reason) { return $plan }
@@ -1072,7 +1083,7 @@ function Get-CodexConfigPlan {
     $layout = Read-TomlLayout -Lines $lines
     if ($layout.Reason) { $plan.Reason = $layout.Reason; return $plan }
 
-    $entry = "'{0}'" -f $script:CodexRoot
+    $entry = "'{0}'" -f $WritableRoot
     $inserts = [System.Collections.Generic.List[object]]::new()   # lines to add before line At
     $changes = @{}                                                 # line index -> new text
 
@@ -1088,13 +1099,13 @@ function Get-CodexConfigPlan {
             $plan.Reason = 'its project_doc_max_bytes line is in a form setup does not edit'
             return $plan
         }
-        if ($value -lt $CodexDocBytes) {
+        if ($value -lt $MinDocBytes) {
             $digits = $number.Groups[1]
-            $changes[$key.Start] = $lines[$key.Start].Substring(0, $digits.Index) + $CodexDocBytes + $lines[$key.Start].Substring($digits.Index + $digits.Length)
+            $changes[$key.Start] = $lines[$key.Start].Substring(0, $digits.Index) + $MinDocBytes + $lines[$key.Start].Substring($digits.Index + $digits.Length)
         }
     }
     else {
-        $newLine = 'project_doc_max_bytes = {0}' -f $CodexDocBytes
+        $newLine = 'project_doc_max_bytes = {0}' -f $MinDocBytes
         $topKeys = @($layout.Keys | Where-Object { $_.Table -eq '' })
         if ($topKeys.Count -gt 0) {
             $inserts.Add([pscustomobject]@{ At = $topKeys[-1].End + 1; Lines = @($newLine) })
@@ -1128,7 +1139,7 @@ function Get-CodexConfigPlan {
         if ($roots.Count -eq 0) {
             $inserts.Add([pscustomobject]@{ At = $tables[0].Line + 1; Lines = @(('writable_roots = [{0}]' -f $entry)) })
         }
-        elseif (-not ((Get-TomlValueText -Lines $lines -Key $roots[0]) -match $script:CodexRootPattern)) {
+        elseif (-not ((Get-TomlValueText -Lines $lines -Key $roots[0]) -match $rootPattern)) {
             $key = $roots[0]
             if ($key.Start -eq $key.End) {
                 # One line: add the entry before the closing bracket.
@@ -1193,7 +1204,7 @@ function Get-CodexConfigPlan {
     # and setting once.
     $after = Read-TomlLayout -Lines (ConvertTo-Lines -Text $newText)
     $tableNames = @($after.Headers | Where-Object { -not $_.IsArray } | ForEach-Object { $_.Name })
-    $ok = (-not $after.Reason) -and (Test-CodexConfigText -Text $newText) -and
+    $ok = (-not $after.Reason) -and (Test-CodexConfigText -Text $newText -WritableRoot $WritableRoot -MinDocBytes $MinDocBytes) -and
         ([System.Collections.Generic.HashSet[string]]::new([string[]]$tableNames).Count -eq $tableNames.Count) -and
         (@($after.Keys | Where-Object { ($_.Table -eq '') -and ($_.Name -ceq 'project_doc_max_bytes') }).Count -eq 1) -and
         (@($after.Keys | Where-Object { ($_.Table -ceq 'sandbox_workspace_write') -and ($_.Name -ceq 'writable_roots') }).Count -eq 1)
@@ -1276,8 +1287,6 @@ $Values = @{
     TOOLS_DIR   = ConvertTo-ForwardPath -Path $ToolsRoot
     CONTENT_DIR = ConvertTo-ForwardPath -Path $ContentRoot
 }
-$script:CodexRoot = $ContentRoot
-$script:CodexRootPattern = Get-TomlPathPattern -Path $ContentRoot
 
 # 2. dev-home itself: clone or create it when it's missing, then set its repo-local git config.
 
@@ -1508,11 +1517,11 @@ if ($codexInstalled) {
         if ($null -eq $toml) { $toml = '' }
     }
 
-    if (Test-CodexConfigText -Text $toml) {
+    if (Test-CodexConfigText -Text $toml -WritableRoot $ContentRoot -MinDocBytes $CodexDocBytes) {
         Write-Status -State OK -Message 'Codex config: writable_roots and project_doc_max_bytes'
     }
     else {
-        $plan = $(try { Get-CodexConfigPlan -Path $codexConfigPath } catch { [pscustomobject]@{ Reason = 'planning the change failed ({0})' -f $_.Exception.Message } })
+        $plan = $(try { Get-CodexConfigPlan -Path $codexConfigPath -WritableRoot $ContentRoot -MinDocBytes $CodexDocBytes } catch { [pscustomobject]@{ Reason = 'planning the change failed ({0})' -f $_.Exception.Message } })
         Repair-Setting -Subject 'Codex config' -Path $codexConfigPath -Plan $plan `
             -Need ('dev-home in writable_roots, and project_doc_max_bytes of at least {0} (Codex stops reading AGENTS.md files at 32 KiB by default)' -f $CodexDocBytes) `
             -HowTo 'Merge this into the file. project_doc_max_bytes goes above the first [section]. If the file already has [sandbox_workspace_write], add only the writable_roots line under it:' `

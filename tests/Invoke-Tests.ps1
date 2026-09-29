@@ -497,21 +497,20 @@ function Test-SettingsPlans {
     $plan = Get-ClaudeSettingsPlan -Path $path -Entries $entries
     Test-Check 'Claude settings: refuses a file with comments' ([bool]$plan.Reason) @($plan.NewText)
 
-    $CodexDocBytes = 65536
-    $script:CodexRoot = 'C:\Users\you\dev-home'
-    $script:CodexRootPattern = Get-TomlPathPattern -Path $script:CodexRoot
+    $codex = @{ WritableRoot = 'C:\Users\you\dev-home'; MinDocBytes = 65536 }
     $path = Join-Path $work 'empty.toml'
     [System.IO.File]::WriteAllText($path, '')
-    $plan = Get-CodexConfigPlan -Path $path
+    $plan = Get-CodexConfigPlan -Path $path @codex
     Test-Check 'Codex config: plans both settings for an empty file' ((-not $plan.Reason) -and $plan.NewText.Contains("writable_roots = ['C:\Users\you\dev-home']") -and $plan.NewText.Contains('project_doc_max_bytes = 65536')) @($plan.Reason, $plan.NewText)
 
     $path = Join-Path $work 'other.toml'
     [System.IO.File]::WriteAllText($path, "model = `"x`"`n`n[sandbox_workspace_write]`nwritable_roots = ['D:\Other']`n")
-    $plan = Get-CodexConfigPlan -Path $path
+    $plan = Get-CodexConfigPlan -Path $path @codex
     Test-Check 'Codex config: adds to an existing writable_roots list' ((-not $plan.Reason) -and $plan.NewText.Contains("writable_roots = ['D:\Other', 'C:\Users\you\dev-home']")) @($plan.Reason, $plan.NewText)
 
-    Test-Check 'Codex config: a forward-slash path counts as present' (Test-CodexConfigText -Text "project_doc_max_bytes = 70000`n`n[sandbox_workspace_write]`nwritable_roots = [`"C:/Users/you/dev-home`"]`n")
-    Test-Check 'Codex config: a longer path that starts the same does not count' (-not (Test-CodexConfigText -Text "project_doc_max_bytes = 70000`n`n[sandbox_workspace_write]`nwritable_roots = ['C:\Users\you\dev-home-tools']`n"))
+    Test-Check 'Codex config: a forward-slash path counts as present' (Test-CodexConfigText -Text "project_doc_max_bytes = 70000`n`n[sandbox_workspace_write]`nwritable_roots = [`"C:/Users/you/dev-home`"]`n" @codex)
+    Test-Check 'Codex config: a longer path that starts the same does not count' (-not (Test-CodexConfigText -Text "project_doc_max_bytes = 70000`n`n[sandbox_workspace_write]`nwritable_roots = ['C:\Users\you\dev-home-tools']`n" @codex))
+    Test-Check 'Codex config: a project_doc_max_bytes below the minimum does not count' (-not (Test-CodexConfigText -Text "project_doc_max_bytes = 32768`n`n[sandbox_workspace_write]`nwritable_roots = ['C:\Users\you\dev-home']`n" @codex))
 }
 
 # ---------------------------------------------------------------------------------------------
