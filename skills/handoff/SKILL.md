@@ -209,9 +209,14 @@ Follow "Changing the handoff". While updating:
   afterwards say where each part went. If a part is unclear, or conflicts with what you found
   this session, ask before committing.
 - For each item that links to a GitHub issue, run
-  `gh issue view <number> --repo <owner>/<repo> --json state`, with the number and repo from the
-  link. If the issue is closed, remove the item like any finished item, and say which ones you
-  removed. If `gh` fails, keep the links and say they weren't checked.
+  `gh issue view <number> --repo <owner>/<repo> --json state,stateReason`, with the number and
+  repo from the link. If `gh` fails, keep the items and say they weren't checked. When an issue
+  is closed:
+  - An item filed as that issue (it starts `GitHub issue [#<number>]`): remove it like any
+    finished item, and say which ones you removed.
+  - Any other item, such as one waiting on another project's issue: keep it. Tell the user that
+    the issue closed, why (its `stateReason`), and what the item says to do next. A close isn't
+    always a fix: a bot may close an inactive issue as not planned.
 
 After committing, offer issue candidates only if any qualify (see "Issue candidates"); most
 updates have none. File none without a yes.
