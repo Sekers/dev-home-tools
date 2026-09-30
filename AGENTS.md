@@ -44,9 +44,8 @@ Never leave it to the reader to guess which: name the repo whenever both could f
   - `{{CONTENT_DIR}}`: that person's dev-home folder.
   - `{{SKILL_DIR}}`: the skill's own folder under `.generated/skills/` (skills only).
 - `templates/operating-rules/` and `templates/skills/` are filled in on every setup run and
-  written to `.generated/`, at the same paths, which is what gets linked into the tools.
-  `templates/dev-home-starter/` is filled in only once, when setup creates someone's dev-home,
-  and after that the files are theirs; that's why it has no copy in `.generated/`.
+  written to `.generated/`, at the same paths, which is what gets linked into the tools. The
+  starter has no copy there, because setup fills it in only once (see "The two repos").
 - A file and its folder keep the same name at every stage: template, generated copy, and link,
   such as `operating-rules/operating-rules.md`. The links in each Claude Code folder's `rules/`
   are the exception: nothing there says which repo a name belongs to, so each is named

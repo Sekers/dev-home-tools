@@ -390,7 +390,9 @@ rights.
     real paths filled in, and that copy is what the tools use. The paths have to be written out
     in full, because the commands a skill may run without asking you are matched by their exact
     text. Setup rewrites this folder whenever it runs, so don't edit it; put skills of your own
-    in your dev-home.
+    in your dev-home. Each skill's `SKILL.md` and the operating rules carry a note saying so,
+    with the path of the template to change instead, because an agent working in another
+    project sees only this copy.
   - `local-settings.json`: this PC's answers to setup's questions: where your dev-home is,
     whether to install updates automatically, and which extra Claude Code folders to set up.
     The scripts read it to find your dev-home.
