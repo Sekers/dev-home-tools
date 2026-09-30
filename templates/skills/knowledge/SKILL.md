@@ -73,8 +73,14 @@ If you can't fill in the evidence from this session, don't offer it.
 
 ## When to change, commit, and push
 
-These rules say when you may save a change, and when you may commit and push it. Committing and
-pushing happen together, in one run of `sync.ps1`, so they're approved together.
+These rules say when you may change a file, and when you may commit and push it. They apply to
+the files this skill works on in dev-home: the knowledge base's notes and its index, and any file
+a sync lists as `STALE`. For those, follow these rules rather than any rule written for the
+user's project repos. Committing and pushing happen together, in one run of `sync.ps1`, so
+they're approved together. Any other file, such as a skill or an instructions file you offer to
+fix (see "Propose"), is edited only after a yes to the exact text. This skill never commits it:
+committing it follows the rules that cover that file: the skill that looks after it, if there is
+one, that repo's own rules, and the user's global rules.
 
 - A command the user typed is the go-ahead for that one change: make it, commit it, and push it.
 - A request in plain words works the same way only when it's a direct instruction to do exactly

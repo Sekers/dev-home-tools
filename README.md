@@ -196,6 +196,9 @@ is your go-ahead. Some examples:
   draft first, ending with "Save, commit, and push this?". A yes covers that one change only,
   never later ones, and "save it" saves without committing. A plan you approved, or a passing
   remark, never changes the handoff.
+- **Commits cover only the handoff.** If an update moves an item into your project's own files,
+  such as a decision into its AGENTS.md, the agent shows you the text first and never commits
+  those files: your project's own rules, and your global rules, decide that.
 - **Next up changes only when you say so.** When an update finishes it, the agent asks before
   clearing it.
 - **Every handoff has the same sections,** from `templates/skills/handoff/template.md`; the
@@ -247,6 +250,10 @@ These read and update the knowledge base in your dev-home.
   session, or a pitfall agents keep hitting. Most sessions have none. The offer ends "Add it,
   commit, and push?", and nothing is added without your yes.
 - Anything about one project stays out of the knowledge base.
+- Commits cover only the knowledge base. If the agent offers to fix a skill or an instructions
+  file instead, it shows you the text first and never commits that file: the rules that cover
+  that file decide that, meaning the skill that looks after it, if there is one, that repo's own
+  rules, and your global rules.
 - In Codex, knowledge commands edit but don't commit, for the same reason as
   [handoff commands](#handoffs). The next sync in Claude Code, such as a plain `/knowledge`,
   lists the files, and offers to commit and push them once nobody has touched them for 15

@@ -55,8 +55,19 @@ yet; link it anyway, since the link itself is right.
 
 ## When to change, commit, and push
 
-These rules say when you may save a change, and when you may commit and push it. Committing and
-pushing happen together, in one run of `sync.ps1`, so they're approved together.
+These rules say when you may change a file, and when you may commit and push it. They apply to
+the files this skill works on in dev-home: the handoff, including moving it from an old path,
+and any file a sync lists as `STALE`. For those, follow these rules rather than any rule written
+for the user's project repos. Committing and pushing happen together, in one run of `sync.ps1`,
+so they're approved together. Other changes follow their own rules:
+
+- The project's own files, such as an item an update moves into them (see "Update"): edit them
+  only after a yes to the exact text. This skill never commits them; committing them follows the
+  project's own rules and the user's global rules.
+- A GitHub issue: filed only after a yes to its exact text (see "GitHub issues"). Its draft body
+  is ignored by git and never committed.
+
+For the handoff:
 
 - A command the user typed is the go-ahead for that one change: make it, commit it, and push it.
 - A request in plain words works the same way only when it's a direct instruction to do exactly
