@@ -63,7 +63,9 @@ offer:
 
 - anything already in a skill, an instructions file, or this knowledge base (offer to fix the
   existing file instead, if it's wrong or incomplete),
-- well-known basics,
+- well-known basics: facts an agent starting a fresh session would already apply correctly, such
+  as that `git add` stages files. It doesn't matter whether the user knows it, or whether you know
+  it now: if an agent got it wrong this session, it isn't a basic,
 - your own reasoning or design choices.
 
 Offer it in one line at a natural stopping point, and wait for a yes:
