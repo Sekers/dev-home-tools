@@ -65,7 +65,7 @@ offer:
   existing file instead, if it's wrong or incomplete),
 - well-known basics: facts an agent starting a fresh session would already apply correctly, such
   as that `git add` stages files. It doesn't matter whether the user knows it, or whether you know
-  it now: if an agent got it wrong this session, it isn't a basic,
+  it now: if an agent got it wrong this session, it isn't a basic (it still has to qualify above),
 - your own reasoning or design choices.
 
 Offer it in one line at a natural stopping point, and wait for a yes:
