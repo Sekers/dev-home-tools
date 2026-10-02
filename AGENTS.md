@@ -4,8 +4,8 @@
 keeps for AI-agent handoffs and a general knowledge base, shared across their PCs through GitHub,
 for Claude Code and Codex. This repo holds the `handoff` and `knowledge` skills, the always-on
 operating rules, `setup.ps1`, `sync.ps1`, `update.ps1`, and the starter files for a new private
-repo. It never holds anyone's handoffs, knowledge, or global rules. README.md describes how
-people use it.
+repo. It never holds anyone's handoffs, knowledge, or global rules. README.md and `docs/`
+describe how people use it.
 
 ## The two repos
 
@@ -17,7 +17,7 @@ Never leave it to the reader to guess which: name the repo whenever both could f
 | Always-on rules | `templates/operating-rules/operating-rules.md`: the operating rules, the same for everyone | `global-rules/global-rules.md`: that person's global rules |
 | Skills | `templates/skills/`: the `handoff` and `knowledge` skills | `skills/`: that person's own skills |
 | `AGENTS.md`, `CLAUDE.md`, `README.md` | About dev-home-tools, and working on it | About that dev-home, and working in it |
-| Only here | `setup.ps1`, `sync.ps1`, `update.ps1`, `templates/dev-home-starter/`, `internal/` | `handoffs/`, `knowledge/` |
+| Only here | `setup.ps1`, `sync.ps1`, `update.ps1`, `templates/dev-home-starter/`, `internal/`, `docs/` | `handoffs/`, `knowledge/` |
 
 - `templates/dev-home-starter/` holds a new dev-home's first files. Setup copies them in once,
   and after that they're the person's own: a change to the starter never reaches an existing
@@ -137,6 +137,23 @@ Never leave it to the reader to guess which: name the repo whenever both could f
 - setup.ps1 runs in a process of its own, so it starts clean. It shares many variable names with
   sync.ps1, so running it inside sync's process would need the same checks first.
 
+## Docs (README.md and docs/)
+
+- The README is the front door: what dev-home is, what it needs, setup, a typical day, safety,
+  and a table of every page under `docs/`. Everything else goes in `docs/`:
+  - `docs/skills/`: one page per skill in `templates/skills/`, with the same name.
+  - `docs/reference/`: facts to look up, such as what the scripts report and what setup changes.
+  - `docs/guide/` (not made yet): how-to pages read start to finish, when one leaves the README.
+  - `docs/development/`: for people and agents changing dev-home-tools. `decisions.md` records
+    each design decision and each option set aside, with the reason and what would reopen it.
+    Read it before reopening one. Findings from research on this project go there too, with the
+    decision they led to.
+- Each fact lives in one place, and other pages link to it.
+- Keep `docs/` ready to publish as a website: lowercase file names with hyphens, one `#` title
+  per page, relative links between pages, and as few links out of `docs/` as possible, because
+  those would break on a site.
+- When you add, rename, or remove a page, update the README's table. A test checks it.
+
 ## Testing
 
 - Run `pwsh -NoProfile -File internal/tests/Invoke-Tests.ps1` before proposing a commit. It
@@ -150,10 +167,8 @@ Never leave it to the reader to guess which: name the repo whenever both could f
 - Add a check to it for every behavior you add or change. It can't cover what needs a person:
   setup's first-run questions, cloning or creating dev-home with gh, and a yes to a settings
   change. Say which of those a change affects, so they get checked by hand.
-- The tests stay a plain script, not Pester: each group's checks are ordered steps in one sandbox,
-  the sandbox's safety code would stay custom anyway, and Pester 5 or later would be a new install
-  (Windows ships 3.4). Revisit if CI is added, if setup's functions need unit tests, or if the
-  suite gets slow (try a `-Group` parameter first).
+- The tests stay a plain script, not Pester: `docs/development/decisions.md` says why, and when
+  to look again.
 
 ## Style
 

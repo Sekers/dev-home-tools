@@ -22,7 +22,7 @@ function Test-UseColor {
 
 function Write-StatusLine {
     # One status line: the word, padded so every message starts in the same column, then the
-    # message. These are the words the README and the skills explain to agents.
+    # message. These are the words docs/reference/scripts.md and the skills explain.
     param(
         [Parameter(Mandatory)]
         [ValidateSet('OK', 'COMMITTED', 'PULLED', 'MERGED', 'PUSHED', 'PENDING', 'OFFLINE', 'LEFT', 'STALE', 'UPDATE',

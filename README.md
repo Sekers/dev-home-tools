@@ -104,7 +104,7 @@ The first run asks:
 | Question | What to answer |
 | --- | --- |
 | Your dev-home folder | Where your dev-home is, or should go. Press Enter for the suggestion: a `dev-home` folder next to this one, such as `C:\Programming\dev-home`. The same rules for the path apply. |
-| Pull updates automatically? | `y` to install new versions of this repo as soon as a sync finds them, or Enter for no: you're told about them and install them yourself. See [Updates](#updates). |
+| Pull updates automatically? | `y` to install new versions of this repo as soon as a sync finds them, or Enter for no: you're told about them and install them yourself. See [Updates](docs/reference/scripts.md#updates). |
 | Also set up `~\.claude-<name>`? | Asked for each extra Claude Code folder it finds, one per Claude account you run with `CLAUDE_CONFIG_DIR`. `y` sets that account up too. |
 | Clone your existing dev-home (c), create a new private one (n), or stop (s)? | Only when the dev-home folder doesn't exist yet. On your first PC, `n` creates a private repo on GitHub from the files in `templates/dev-home-starter/`. On every later PC, `c` clones it. Either way, it then asks for the repo's name; Enter accepts `dev-home`. |
 
@@ -118,7 +118,7 @@ or not hosted at all, and the skills work with them the same way. The one except
 handoff item as an issue, which needs the project on GitHub.
 
 Then it links everything and checks Claude Code's and Codex's settings (see
-[What setup changes](#what-setup-changes-on-your-pc) for what and why). When a setting is
+[What setup changes](docs/reference/setup-changes.md) for what and why). When a setting is
 missing, it shows the exact lines it would change and asks first. On a `y`, it saves a dated
 backup of the file, such as `settings.json.bak-20260926-101500`, before writing. It never edits a
 file it can't fully read, such as a `settings.json` with comments; it prints what to add by hand
@@ -158,106 +158,14 @@ A typical day with the included skills:
 
 ## Skills
 
-These skills come with dev-home-tools. To add your own, see
+These skills come with dev-home-tools. Each has a page of its own, with every command, examples,
+and when it commits. To add your own, see
 [Your own rules and skills](#your-own-rules-and-skills).
 
-### Handoffs
-
-These read and update the current project's handoff, which lives in your dev-home.
-
-| Command | What it does |
-| --- | --- |
-| `/handoff` | Syncs your dev-home with GitHub, then summarizes this project's handoff, starting with Next up, with a link to the file. |
-| `/handoff <question>` | The same, then answers the question. |
-| `/handoff update` | Brings the whole handoff up to date. If Next up looks done, asks before clearing it. |
-| `/handoff update <text>` | The same, with your text worked in, in any words. The text can also set, add to, or clear Next up. |
-| `/handoff next` | Shows Next up. |
-| `/handoff next <text>` | Replaces Next up. Nothing else changes. |
-| `/handoff next clear` | Empties Next up. |
-| `/handoff issue` | Lists the items that could become GitHub issues. |
-| `/handoff issue <item>` | Files an item as an issue in the project's GitHub repo, and replaces the item with a link to it. For now, only in Claude Code, for projects on GitHub, with `gh` signed in. |
-
-A command that changes the handoff saves, commits, and pushes only that file: typing the command
-is your go-ahead. Some examples:
-
-| You type | What happens |
-| --- | --- |
-| `/handoff what's left before the release?` | Summarizes the handoff, then answers. |
-| `/handoff update the vendor says the fix ships Friday` | Updates the handoff, with that under Waiting on others. |
-| `/handoff update next: release 1.2.0` | Updates the handoff, and Next up becomes "Release 1.2.0". |
-| `/handoff next also push the wiki after the release` | Adds that to Next up. |
-| `/handoff next clear the old wiki pages` | Next up becomes "Clear the old wiki pages". Only `clear` on its own empties Next up. |
-| `/handoff next steps?` | Reads as a question, so the agent answers it and asks before changing anything. |
-| `/handoff issue Bugs 1` | Drafts an issue from that item, files it after your yes, and replaces the item with a link. |
-
-- **A command changes the handoff right away,** and commits and pushes it. So does a request in
-  plain words that matches one command exactly, such as "update the handoff"; the agent says
-  which command it took it as. Anything else, such as "we should add a to-do for this", gets a
-  draft first, ending with "Save, commit, and push this?". A yes covers that one change only,
-  never later ones, and "save it" saves without committing. A plan you approved, or a passing
-  remark, never changes the handoff.
-- **Commits cover only the handoff.** If an update moves an item into your project's own files,
-  such as a decision into its AGENTS.md, the agent shows you the text first and never commits
-  those files: your project's own rules, and your global rules, decide that.
-- **Next up changes only when you say so.** When an update finishes it, the agent asks before
-  clearing it.
-- **Every handoff has the same sections,** from `templates/skills/handoff/template.md`; the
-  handoff skill says what goes in each. `/handoff update` brings an older handoff in line, and
-  asks before it moves anything out.
-- **Issues.** After an update, the agent may suggest up to three items as issues, only when
-  filing one really makes sense. Say no, and it marks the item so it never suggests it again,
-  then commits and pushes that; the question says so. Filing always shows you the draft and waits
-  for your yes. Issues work in Claude Code only, for projects on GitHub, with `gh` signed in.
-- **In Codex, handoff commands edit but don't commit.** On Windows, Codex runs even the commands
-  you approve inside its sandbox, where git and `gh` can't use your GitHub credentials. So the
-  next `/handoff` in Claude Code lists the file, and offers to commit and push it once nobody has
-  touched it for 15 minutes. The same goes for anything you edit by hand in dev-home.
-
-**Where handoffs are kept.** The handoff skill finds each project's handoff from the address the
-repo syncs with (its `origin`), so it's the same on every PC, whatever the folder is called.
-
-| Project | Its handoff in dev-home |
-| --- | --- |
-| On GitHub | `handoffs/github/<owner>/<repo>/` |
-| On GitLab | `handoffs/gitlab/<group>/<project>/` (subgroups add levels) |
-| On Bitbucket | `handoffs/bitbucket/<workspace>/<repo>/` |
-| On Azure DevOps | `handoffs/azure-devops/<org>/<project>/<repo>/` |
-| Hosted anywhere else | `handoffs/other/<folder>-<first commit>/` |
-| No remote | `handoffs/local/<folder>-<first commit>/` |
-
-`<first commit>` is the first 7 characters of the repo's first commit. It's the same in every
-clone, so two projects with the same folder name get separate handoffs. A repo with no commits
-yet, a shallow clone, or a folder outside git uses just the folder name.
-
-When the agent finds no handoff at a project's path, it lists the existing ones and asks whether
-one of them is this project's under an old address, as happens when a project is renamed,
-transferred, or published for the first time. It offers to move that one, or, if none is, to
-create a new handoff. Either way, it asks first, then commits and pushes.
-
-### Knowledge base
-
-These read and update the knowledge base in your dev-home.
-
-| Command | What it does |
-| --- | --- |
-| `/knowledge` | Syncs your dev-home with GitHub, then lists the subjects and asks what to look up or add. |
-| `/knowledge <question>` | Looks it up in this PC's copy, without syncing. |
-| `/knowledge add <what you learned>` | Checks that it's general, files it by the skill's rules, then commits and pushes only the files it changed: typing the command is your go-ahead. A request in plain words works the same when it's a direct instruction, such as "add this to the knowledge base: ..."; anything else gets a draft first. |
-
-- Agents check the knowledge base before researching or testing a general question, or asking
-  you to test one, even partway through other work.
-- They offer a "Knowledge candidate", with its evidence, only for a finding checked in that
-  session, or a pitfall agents keep hitting. Most sessions have none. The offer ends "Add it,
-  commit, and push?", and nothing is added without your yes.
-- Anything about one project stays out of the knowledge base.
-- Commits cover only the knowledge base. If the agent offers to fix a skill or an instructions
-  file instead, it shows you the text first and never commits that file: the rules that cover
-  that file decide that, meaning the skill that looks after it, if there is one, that repo's own
-  rules, and your global rules.
-- In Codex, knowledge commands edit but don't commit, for the same reason as
-  [handoff commands](#handoffs). The next sync in Claude Code, such as a plain `/knowledge`,
-  lists the files, and offers to commit and push them once nobody has touched them for 15
-  minutes.
+| Skill | Everyday commands | Its page |
+| --- | --- | --- |
+| Handoffs | `/handoff`, `/handoff update`, `/handoff next <text>` | [Handoffs](docs/skills/handoff.md) |
+| Knowledge base | `/knowledge <question>`, `/knowledge add <what you learned>` | [Knowledge base](docs/skills/knowledge.md) |
 
 ## Your own rules and skills
 
@@ -296,7 +204,7 @@ These read and update the knowledge base in your dev-home.
 
 | Path | What it is |
 | --- | --- |
-| `handoffs/` | One handoff per project, filed by where the project is hosted (see [Handoffs](#handoffs)). |
+| `handoffs/` | One handoff per project, filed by where the project is hosted (see [Handoffs](docs/skills/handoff.md#where-handoffs-are-kept)). |
 | `knowledge/` | Your knowledge base. `knowledge/README.md` is its index. |
 | `global-rules/global-rules.md` | Your global rules: your own preferences for every project, loaded in every session. |
 | `skills/` | Skills of your own, if you add any. |
@@ -306,122 +214,17 @@ These read and update the knowledge base in your dev-home.
 Setup creates it from the files in this repo's `templates/dev-home-starter/` folder. After that,
 its files are yours: updates to dev-home-tools never change them.
 
-## Updates
+## Documentation
 
-Your copy of dev-home-tools never changes by itself. Instead, each sync that isn't committing a
-change, such as the one every `/handoff` starts with, checks GitHub for new commits to
-dev-home-tools. What happens when some are waiting depends on the `autoUpdate` setting you chose
-the first time you ran setup:
+Everything beyond getting started is in the `docs/` folder:
 
-| `autoUpdate` | When new commits are waiting | What you do |
+| Section | Page | What's in it |
 | --- | --- | --- |
-| Off (the default) | Nothing is installed, and the agent tells you an update is waiting. | When you're ready, run `update.ps1` (below). It lists the commits and the files they change, and installs them only if you answer `y`. |
-| On | The sync installs them, and the agent tells you it did. | Nothing. |
-
-```powershell
-pwsh -NoProfile -File C:\Programming\dev-home-tools\update.ps1
-```
-
-Either way, `update.ps1` does the work: the sync runs it quietly, and you run it yourself to look
-first. So an update is always installed the same way:
-
-- **It only moves your copy forward to GitHub's version.** It never merges, so if you've made
-  commits of your own in your dev-home-tools folder, nothing is installed, and the agent says
-  so: pull and merge the update yourself with git. A change you haven't committed is never
-  overwritten either: an update that touches the same file waits until it's gone.
-- **Setup runs afterwards,** so the new skills and rules take effect.
-- **It changes only your dev-home-tools folder.** Your dev-home and everything in it stay as
-  they are.
-
-To switch `autoUpdate`, set it to `true` or `false` in `local-settings.json`, in your
-dev-home-tools folder.
-
-## The scripts
-
-| Script | What it's for |
-| --- | --- |
-| `setup.ps1` | Sets up this PC. Safe to run any number of times. `-WhatIf` previews; `-Quiet` prints only changes and problems, and never asks (agents run it this way); `-ContentDir <folder>` points it at a different dev-home. |
-| `sync.ps1` | Syncs your dev-home with GitHub, and commits only the files it's given. Agents run all their git in dev-home through it. Then it runs `update.ps1` and setup quietly (see [When they run](#when-they-run)). You can run it too. |
-| `update.ps1` | Shows the dev-home-tools commits waiting on GitHub, and installs them after a yes. With `-Quiet`, as a sync runs it, it never asks: it reports what's waiting, and installs it only when `autoUpdate` is on. |
-
-### When they run
-
-Nothing runs on a schedule. Each script runs only when you or an agent starts it.
-
-| Script | When it runs |
-| --- | --- |
-| `sync.ps1` | In Claude Code, agents run it at the start of every `/handoff` command, for a plain `/knowledge`, and before adding to the knowledge base; that sync also runs `update.ps1` and setup. Then they run it again to commit and push each change they make. That second sync skips the update check, and runs setup only if it brought in commits from GitHub, because the sync just before it did both. A lookup, `/knowledge <question>`, never syncs, and Codex never runs it. You can run it any time. |
-| `update.ps1` | Each sync that isn't committing runs it quietly, to check for updates. You run it yourself to look at an update and install it, when `autoUpdate` is off (see [Updates](#updates)). |
-| `setup.ps1` | You run it once per PC, and again to change a setting or to say yes to a settings change. After that, syncs run it quietly, as above, and so does `update.ps1` after you install an update. That quiet run never asks anything, and never changes Claude Code's or Codex's settings. |
-
-### What they report
-
-Agents pass on what `sync.ps1` reports:
-
-| Word | Meaning |
-| --- | --- |
-| `OK` | Up to date, or nothing to do. |
-| `COMMITTED` | Committed the files it was given. |
-| `PULLED`, `MERGED` | Brought in commits from GitHub. `MERGED` means two PCs both had new commits. |
-| `PUSHED` | Sent this PC's commits to GitHub. |
-| `PENDING` | Commits not pushed yet. The next sync pushes them. |
-| `OFFLINE` | GitHub couldn't be reached. The line says for which repo: your dev-home may be behind, or dev-home-tools wasn't checked for updates. |
-| `LEFT` | A file changed recently and isn't committed. Another session may be working on it. |
-| `STALE` | An uncommitted file nobody has touched for 15 minutes. The agent asks whether to commit and push it. |
-| `UPDATE` | New dev-home-tools commits are waiting. |
-| `PROBLEM` | Needs you. The message says what to do. |
-
-Setup's lines, such as `LINKED` or `WROTE`, say what it changed on this PC.
-
-## What setup changes on your PC
-
-Setup doesn't copy the skills and rules into Claude Code's and Codex's folders. It adds links
-there instead: a link is a folder entry that points to a folder somewhere else, and the tools
-read through it as if the files were right there. So when a sync or an update changes a skill
-or a rule, the tools see the change at once, with nothing to copy. Setup makes folder links as
-directory junctions, or as symbolic links when Windows Developer Mode is on; neither needs admin
-rights.
-
-- **In your dev-home-tools folder,** two things that belong to this PC only. Git ignores both, so
-  they never go to GitHub, and an update never overwrites them.
-  - `.generated/`: this PC's copy of the skills and operating rules, at the same paths they have
-    under `templates/`. In this repo, they hold a placeholder wherever a folder path goes,
-    because everyone keeps their folders in different places. Setup writes a copy with this PC's
-    real paths filled in, and that copy is what the tools use. The paths have to be written out
-    in full, because the commands a skill may run without asking you are matched by their exact
-    text. Setup rewrites this folder whenever it runs, so don't edit it; put skills of your own
-    in your dev-home. Each skill's `SKILL.md` and the operating rules carry a note saying so,
-    with the path of the template to change instead, because an agent working in another
-    project sees only this copy.
-  - `local-settings.json`: this PC's answers to setup's questions: where your dev-home is,
-    whether to install updates automatically, and which extra Claude Code folders to set up.
-    The scripts read it to find your dev-home.
-- **In each Claude Code folder** (`~\.claude`, plus any extra ones):
-  - Links in `skills\` to each skill (this repo's, and your own from dev-home). In `rules\`,
-    `dev-home-operating-rules` links to the operating rules, and `dev-home-global-rules` to your
-    dev-home's `global-rules\`. Nothing in that folder says which repo a name belongs to, so
-    each link starts with `dev-home-`.
-  - After your yes, `settings.json` gets your dev-home and dev-home-tools folders in
-    `permissions.additionalDirectories`, so Claude Code can use them from any project.
-  - Your own `CLAUDE.md` there is never touched.
-- **For Codex,** when `~\.codex` exists:
-  - Links in `~\.agents\skills\`.
-  - `~\.codex\AGENTS.md`, the operating rules and your global rules joined into one file,
-    because Codex reads only one always-on file. Setup rewrites it whenever it runs, but never
-    replaces an `AGENTS.md` it didn't write.
-  - After your yes, `config.toml` gets dev-home in `[sandbox_workspace_write]` `writable_roots`,
-    so Codex can edit handoffs and knowledge from any project. It also gets
-    `project_doc_max_bytes = 65536`. Codex joins its global `AGENTS.md` with a project's own
-    `AGENTS.md` files and stops reading at 32 KiB by default. The global file comes first, so
-    the cut would fall on the project's own instructions, without a warning. Twice the default
-    leaves room.
-- **In your dev-home's own git config:** commit signing off, and pulls that merge rather than
-  rebase. With signing off, a commit never stops in the middle of a sync to ask for your signing
-  passphrase. Your project repos keep signing as usual.
-
-**To remove it all:** delete each link with `cmd /c rmdir <link>`, delete `~\.codex\AGENTS.md`,
-take the added lines out of the settings files, then delete your dev-home-tools folder. Your
-dev-home stays as it is.
+| Skills | [Handoffs](docs/skills/handoff.md) | Every `/handoff` command, with examples: when a change is committed and pushed, how issues are filed, and where handoffs are kept. |
+| Skills | [Knowledge base](docs/skills/knowledge.md) | Every `/knowledge` command, and when agents check the knowledge base or offer to add to it. |
+| Reference | [The scripts](docs/reference/scripts.md) | `setup.ps1`, `sync.ps1`, and `update.ps1`: when each one runs, what their status words mean, and how updates are installed. |
+| Reference | [What setup changes on your PC](docs/reference/setup-changes.md) | Every link, file, and setting that setup adds, why, and how to remove it all. |
+| Development | [Design decisions](docs/development/decisions.md) | For people changing dev-home-tools: decisions made and options set aside, with the reasons. |
 
 ## Safety and privacy
 
@@ -463,7 +266,7 @@ dev-home stays as it is.
 
 | Path | What it is |
 | --- | --- |
-| `setup.ps1`, `sync.ps1`, `update.ps1` | The scripts (see [The scripts](#the-scripts)). |
+| `setup.ps1`, `sync.ps1`, `update.ps1` | The scripts (see [The scripts](docs/reference/scripts.md)). |
 | `templates/` | Everything setup fills in with each PC's paths. |
 | `templates/operating-rules/` | The operating rules every session loads, along with your global rules. Filled in on every setup run, into `.generated/`. |
 | `templates/skills/` | The skills, one folder each. Filled in on every setup run, into `.generated/`. |
@@ -471,8 +274,10 @@ dev-home stays as it is.
 | `internal/` | dev-home-tools' own machinery, which nobody runs directly. |
 | `internal/shared/` | What the three scripts share, one file per job: `git.ps1` runs git, and `output.ps1` prints status lines. |
 | `internal/tests/` | The test runner. |
+| `docs/` | Everything this README leaves out (see [Documentation](#documentation)). |
 
-[AGENTS.md](AGENTS.md) has the rules for changing this repo, for people and agents alike. Before
+[AGENTS.md](AGENTS.md) has the rules for changing this repo, for people and agents alike, and
+[Design decisions](docs/development/decisions.md) says why it works the way it does. Before
 committing, run:
 
 ```powershell

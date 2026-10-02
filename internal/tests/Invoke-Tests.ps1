@@ -2,7 +2,8 @@
 <#
 .SYNOPSIS
     Tests setup.ps1, sync.ps1, update.ps1, and the handoff skill's locate.ps1 end to end, in
-    throwaway copies of this repo, and checks internal/shared/, which the first three load.
+    throwaway copies of this repo, and checks internal/shared/, which the first three load, and
+    the links in README.md and docs/.
 
 .DESCRIPTION
     Never runs the scripts in this folder. Each group of tests builds a sandbox under
@@ -1043,12 +1044,85 @@ function Test-Shared {
 }
 
 # ---------------------------------------------------------------------------------------------
+# README.md and docs/
+
+function Get-MarkdownLink {
+    # The target of each link in Markdown text, which is what's between the parentheses of
+    # [text](target). Leaves out code, where a link is only an example, and links to the web.
+    param([string[]]$Lines)
+    $inCode = $false
+    foreach ($line in $Lines) {
+        if ($line -match '^\s*```') { $inCode = -not $inCode; continue }
+        if ($inCode) { continue }
+        foreach ($match in [regex]::Matches(($line -replace '`[^`]*`', ''), '\]\(([^)\s]+)\)')) {
+            $target = $match.Groups[1].Value
+            if ($target -notmatch '^[a-z][a-z0-9+.-]*:') { $target }
+        }
+    }
+}
+
+function Get-MarkdownAnchor {
+    # The anchor GitHub gives each heading: lower case, punctuation dropped, and a hyphen for
+    # each space.
+    param([string[]]$Lines)
+    $inCode = $false
+    foreach ($line in $Lines) {
+        if ($line -match '^\s*```') { $inCode = -not $inCode; continue }
+        if ($inCode) { continue }
+        if ($line -match '^#{1,6}\s+(.+?)\s*$') {
+            ($Matches[1].ToLowerInvariant() -replace '[^a-z0-9 _-]', '') -replace ' ', '-'
+        }
+    }
+}
+
+function Test-Docs {
+    Write-Host
+    Write-Host 'README.md and docs/' -ForegroundColor Cyan
+    $script:GroupFailed = $false
+
+    # First, that the search finds each kind of link, and nothing in code or on the web.
+    $sample = @('See [a page](docs/a.md), [a heading](#part-two), and [both](../b.md#top).',
+        'Not `[code](docs/no.md)`, and not [the web](https://example.com/no.md).',
+        '```', '[fenced](docs/no.md)', '```',
+        'A link with [`code` as its text](c.md).')
+    $found = @(Get-MarkdownLink -Lines $sample)
+    Test-Check 'the link search finds each kind of link, and nothing in code or on the web' (($found -join ' ') -eq 'docs/a.md #part-two ../b.md#top c.md') $found
+
+    $docsRoot = Join-Path $RepoRoot 'docs'
+    $pages = @('README.md') + @(Get-ChildItem -LiteralPath $docsRoot -Recurse -Filter '*.md' -File | ForEach-Object { [System.IO.Path]::GetRelativePath($RepoRoot, $_.FullName).Replace('\', '/') })
+    $missingFiles = [System.Collections.Generic.List[string]]::new()
+    $missingHeadings = [System.Collections.Generic.List[string]]::new()
+    $fromReadme = [System.Collections.Generic.List[string]]::new()
+    foreach ($page in $pages) {
+        $pagePath = Join-Path $RepoRoot $page
+        foreach ($target in @(Get-MarkdownLink -Lines (Get-Content -LiteralPath $pagePath))) {
+            $path, $anchor = $target -split '#', 2
+            $file = if ($path) { [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $pagePath) $path)) } else { $pagePath }
+            if (-not (Test-Path -LiteralPath $file)) { $missingFiles.Add(('{0}: {1}' -f $page, $target)); continue }
+            if ($page -eq 'README.md') { $fromReadme.Add([System.IO.Path]::GetRelativePath($RepoRoot, $file).Replace('\', '/')) }
+            if ($anchor -and (@(Get-MarkdownAnchor -Lines (Get-Content -LiteralPath $file)) -notcontains $anchor)) { $missingHeadings.Add(('{0}: {1}' -f $page, $target)) }
+        }
+    }
+    Test-Check 'every link in the README and docs/ points to a file that exists' (($pages.Count -gt 1) -and ($missingFiles.Count -eq 0)) $missingFiles
+    Test-Check 'every link to a heading points to one that exists' ($missingHeadings.Count -eq 0) $missingHeadings
+
+    # The README's table is the only list of the pages, so a page it leaves out can't be found.
+    $unlisted = @($pages | Where-Object { ($_ -ne 'README.md') -and ($fromReadme -notcontains $_) })
+    Test-Check 'the README links to every page under docs/' ($unlisted.Count -eq 0) $unlisted
+
+    $skills = @(Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'templates/skills') -Directory | ForEach-Object { $_.Name } | Sort-Object)
+    $skillPages = @(Get-ChildItem -LiteralPath (Join-Path $docsRoot 'skills') -Filter '*.md' -File | ForEach-Object { $_.BaseName } | Sort-Object)
+    Test-Check 'every skill in templates/skills/ has a page in docs/skills/, and every page a skill' (($skills.Count -gt 0) -and (($skills -join ' ') -eq ($skillPages -join ' '))) @(('skills: ' + ($skills -join ', ')), ('pages: ' + ($skillPages -join ', ')))
+}
+
+# ---------------------------------------------------------------------------------------------
 
 Write-Host ('Testing the working tree of {0}' -f $RepoRoot)
 Test-Setup
 Test-Sync
 Test-Locate
 Test-Shared
+Test-Docs
 Write-Host
 if ($script:Failures -gt 0) {
     Write-Host ('{0} of {1} checks failed.' -f $script:Failures, $script:Checks) -ForegroundColor Red

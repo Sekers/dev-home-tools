@@ -4,7 +4,7 @@ My private repo for AI-agent handoffs and a general knowledge base, shared by my
 project repos never reference it.
 
 The tooling that works with it lives in dev-home-tools, at `{{TOOLS_DIR}}`. Its README covers
-setup, the day-to-day commands, and safety.
+setup, a typical day, and safety, and lists the rest of its docs.
 
 | Path | What it is |
 | --- | --- |
