@@ -1,7 +1,7 @@
 ---
 name: knowledge
 description: Private general knowledge base for coding and AI work (languages, tools, platforms, and AI agents such as Claude Code and Codex), kept in the private dev-home repo. Check it before researching or testing a general question about these, or asking the user to test one, even partway through other work. Also use when the user runs /knowledge (run alone, it syncs the knowledge base with GitHub), asks to look something up in or add something to the knowledge base, or when a hard-won general finding comes up during work.
-allowed-tools: "Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 *) PowerShell(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1) PowerShell(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 *)"
+allowed-tools: "Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 *)"
 ---
 
 # Knowledge base
@@ -9,7 +9,9 @@ allowed-tools: "Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1) Bash(pwsh -No
 The knowledge base is `{{CONTENT_DIR}}/knowledge`, in the user's private repo, dev-home. Its
 `README.md` is the index. The rules for filing notes are in `{{SKILL_DIR}}/filing-rules.md`;
 read them before adding or changing anything. Run the commands below exactly as written; in
-Claude Code they are pre-approved.
+Claude Code they are pre-approved. In Claude Code, run each `pwsh` command with the Bash tool:
+the PowerShell tool asks before running any command that starts another PowerShell, even a
+pre-approved one.
 
 Sessions in other projects, and Codex, use dev-home at the same time, so a file there that you
 didn't change may be someone's work in progress. Run git in dev-home only through

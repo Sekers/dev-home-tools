@@ -325,6 +325,9 @@ function Test-Setup {
     Test-Check 'fills in every placeholder' ((Test-Path -LiteralPath "$generated/skills/handoff/SKILL.md") -and ($leftover.Count -eq 0)) @($leftover | ForEach-Object { '{0}:{1}' -f $_.Path, $_.LineNumber })
     $skill = Get-Content -LiteralPath "$generated/skills/handoff/SKILL.md" -Raw
     Test-Check 'writes the copy''s path into the pre-approvals' ($skill.Contains("Bash(pwsh -NoProfile -File $toolsForward/sync.ps1)"))
+    # Claude Code's PowerShell tool never pre-approves a command that starts another PowerShell.
+    $nested = @(Get-ChildItem -LiteralPath (Join-Path $generated 'skills') -Recurse -Filter 'SKILL.md' | Select-String -Pattern 'PowerShell\(\s*pwsh')
+    Test-Check 'pre-approves pwsh commands only for the Bash tool' ($nested.Count -eq 0) @($nested | ForEach-Object { '{0}:{1}' -f $_.Path, $_.LineNumber })
     Test-Check 'points the handoff skill at its generated template' ($skill.Contains("$toolsForward/.generated/skills/handoff/template.md"))
 
     # Each file a tool loads gets the note, whatever skills there are, and no other file does.

@@ -1,7 +1,7 @@
 ---
 name: handoff
 description: Read or update this project's private session handoff (where the work stands, what's next up, what's waiting on the user or on others, to-dos, and bugs), kept in the private dev-home repo, and file handoff items as GitHub issues when asked. Use when the user runs /handoff or $handoff, asks where things stand or where we left off, asks to update the handoff or change what's next up, or asks to file a handoff item as a GitHub issue.
-allowed-tools: "Bash(pwsh -NoProfile -File {{SKILL_DIR}}/locate.ps1) Bash(gh label list *) Bash(gh issue list *) Bash(gh issue view *) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 *) PowerShell(pwsh -NoProfile -File {{SKILL_DIR}}/locate.ps1) PowerShell(gh label list *) PowerShell(gh issue list *) PowerShell(gh issue view *) PowerShell(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1) PowerShell(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 *)"
+allowed-tools: "Bash(pwsh -NoProfile -File {{SKILL_DIR}}/locate.ps1) Bash(gh label list *) Bash(gh issue list *) Bash(gh issue view *) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 *) PowerShell(gh label list *) PowerShell(gh issue list *) PowerShell(gh issue view *)"
 ---
 
 # Handoff
@@ -11,7 +11,9 @@ progress, what's waiting on the user or on others, to-dos, and bugs, plus privat
 project's own files can't hold. Handoffs live in the user's private repo, dev-home, at
 `{{CONTENT_DIR}}`, never in the project itself. Run the commands below exactly as
 written. In Claude Code they are pre-approved, except `gh issue create`: whether that one asks
-first depends on the user's own permission settings.
+first depends on the user's own permission settings. In Claude Code, run each `pwsh` command
+with the Bash tool: the PowerShell tool asks before running any command that starts another
+PowerShell, even a pre-approved one.
 
 Sessions in other projects, and Codex, use dev-home at the same time, so a file there that you
 didn't change may be someone's work in progress. Run git in dev-home only through

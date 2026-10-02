@@ -65,6 +65,10 @@ Never leave it to the reader to guess which: name the repo whenever both could f
   forward-slash paths, so they work in Git Bash, PowerShell, and Codex.
 - Leave commands that publish outside dev-home, such as `gh issue create`, out of
   `allowed-tools`. Whether they ask first is each person's choice, in their own settings.
+- Pre-approve a `pwsh` command only as `Bash(...)`, and have the skill tell Claude Code to run
+  it with the Bash tool. Claude Code's PowerShell tool asks before running any command that
+  starts another PowerShell, even one a `PowerShell(...)` rule matches exactly. Other commands,
+  such as `gh issue view`, get both a `Bash(...)` and a `PowerShell(...)` pre-approval.
 - Each skill stands on its own. Mention another skill only where that's part of how this one
   works.
 - A skill's rules for when it may change, commit, and push live in that skill, not in the
