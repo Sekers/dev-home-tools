@@ -141,9 +141,9 @@ with `-ContentDir <folder>`.
 
 ## Day to day
 
-Run the skills in any project, in as many sessions at once as you like. Type one of the commands
-under [Skills](#skills), or ask in plain words and the agent uses the matching skill. In Codex,
-type `$` instead of `/`, such as `$handoff`.
+Run the skills in any project, in as many sessions at once as you like. Type one of a skill's
+commands, which its page lists (see [Documentation](#documentation)), or ask in plain words and
+the agent uses the matching skill. In Codex, type `$` instead of `/`, such as `$handoff`.
 
 A typical day with the included skills:
 
@@ -155,17 +155,6 @@ A typical day with the included skills:
 3. Before you stop, run `/handoff update`. The agent writes down where things stand, and saves
    it to GitHub so your other PCs get it.
 4. Next time, on this PC or another one, `/handoff` picks up from there.
-
-## Skills
-
-These skills come with dev-home-tools. Each has a page of its own, with every command, examples,
-and when it commits. To add your own, see
-[Your own rules and skills](#your-own-rules-and-skills).
-
-| Skill | Everyday commands | Its page |
-| --- | --- | --- |
-| Handoffs | `/handoff`, `/handoff update`, `/handoff next <text>` | [Handoffs](docs/skills/handoff.md) |
-| Knowledge base | `/knowledge <question>`, `/knowledge add <what you learned>` | [Knowledge base](docs/skills/knowledge.md) |
 
 ## Your own rules and skills
 
