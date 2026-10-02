@@ -206,7 +206,8 @@ Follow "Changing the handoff". While updating:
 - Go through every section (see "Sections"): keep what's still true word for word, change what
   changed, and remove what's finished. Rewording unchanged text makes it drift, and makes merges
   between PCs more likely to conflict. Set the "State as of" line to what you actually checked
-  this session; if you checked nothing, leave it.
+  this session; if you checked nothing, leave it. Don't run the project's tests or a build only
+  to bring that line up to date: it records what the session already checked.
 - If the handoff doesn't match the template (`{{SKILL_DIR}}/template.md`), bring it in line as
   part of this update: add missing headings, put them in the template's order, and move each
   item from an old section to the one that fits now, such as Backlog or Wiki items into To do, a
