@@ -1,5 +1,5 @@
-# Written by setup.ps1 on each PC: the skills and rules with this PC's paths filled in, and this
-# PC's settings. Never commit either.
+# Written by setup.ps1 on each PC: the skills, the scripts they share, and the rules, with this
+# PC's paths filled in, and this PC's settings. Never commit either.
 .generated/
 local-settings.json
 

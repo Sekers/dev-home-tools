@@ -76,9 +76,10 @@ one of those.
 
 **Why not `internal/`, or a folder of its own, run in place:** a half-finished edit to a script
 that runs in place is live at once in every session on the PC. A generated script changes only
-when setup runs, in the same run that rewrites the skill text that calls it, so the two can't
-be out of step. `templates/` is also where everything the tools get from this repo already
-lives.
+when setup runs, in the same run that rewrites the skill text that calls it, so the two files
+are never out of step. A session that loaded the skill before that run still has the old text,
+and stays that way until a new session starts. `templates/` is also where everything the tools
+get from this repo already lives.
 
 **Why one script with topics, not one that does everything:** `facts.ps1` is safe to pre-approve
 because it only reports, and only from this PC. A script that also changed things would lose

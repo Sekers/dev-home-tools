@@ -1138,7 +1138,9 @@ function Test-SkillScripts {
     $script:GroupFailed = $false
     $scriptsRoot = Join-Path $RepoRoot 'templates/skill-scripts'
     $shared = @(Get-ChildItem -LiteralPath $scriptsRoot -Filter '*.ps1' -File)
-    $skills = @(Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'templates/skills') -Directory)
+    # A skill is a folder with a SKILL.md, as setup sees it.
+    $skills = @(Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'templates/skills') -Directory |
+            Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'SKILL.md') })
 
     # Each script's description names the skills that run it, so whoever changes the script knows
     # what depends on it. A skill runs it when any of the skill's files holds its path.
