@@ -2,10 +2,10 @@
 
 **What this repository is:** the public tooling for dev-home, a private repo that each person
 keeps for AI-agent handoffs and a general knowledge base, shared across their PCs through GitHub,
-for Claude Code and Codex. This repo holds the `handoff` and `knowledge` skills, the always-on
-operating rules, `setup.ps1`, `sync.ps1`, `update.ps1`, and the starter files for a new private
-repo. It never holds anyone's handoffs, knowledge, or global rules. README.md and `docs/`
-describe how people use it.
+for Claude Code and Codex. This repo holds the `handoff` and `knowledge` skills and the scripts
+they share, the always-on operating rules, `setup.ps1`, `sync.ps1`, `update.ps1`, and the starter
+files for a new private repo. It never holds anyone's handoffs, knowledge, or global rules.
+README.md and `docs/` describe how people use it.
 
 ## The two repos
 
@@ -15,7 +15,7 @@ Never leave it to the reader to guess which: name the repo whenever both could f
 | What | dev-home-tools (this repo, public) | dev-home (each person's, private) |
 | --- | --- | --- |
 | Always-on rules | `templates/operating-rules/operating-rules.md`: the operating rules, the same for everyone | `global-rules/global-rules.md`: that person's global rules |
-| Skills | `templates/skills/`: the `handoff` and `knowledge` skills | `skills/`: that person's own skills |
+| Skills | `templates/skills/`: the `handoff` and `knowledge` skills. `templates/skill-scripts/`: the scripts they share | `skills/`: that person's own skills |
 | `AGENTS.md`, `CLAUDE.md`, `README.md` | About dev-home-tools, and working on it | About that dev-home, and working in it |
 | Only here | `setup.ps1`, `sync.ps1`, `update.ps1`, `templates/dev-home-starter/`, `internal/`, `docs/` | `handoffs/`, `knowledge/` |
 
@@ -24,6 +24,9 @@ Never leave it to the reader to guess which: name the repo whenever both could f
   dev-home.
 - `internal/` is dev-home-tools' own machinery, which nobody runs directly: `internal/shared/`,
   which the three scripts load, and `internal/tests/`.
+- Where a script goes depends on who runs it. The root holds only what a person may run by hand;
+  agents run those too. A script that only agents run goes under `templates/`: in its skill's
+  folder when one skill uses it, and in `templates/skill-scripts/` when skills share it.
 
 ## Privacy
 
@@ -43,8 +46,10 @@ Never leave it to the reader to guess which: name the repo whenever both could f
   - `{{TOOLS_DIR}}`: this repo's folder on that PC.
   - `{{CONTENT_DIR}}`: that person's dev-home folder.
   - `{{SKILL_DIR}}`: the skill's own folder under `.generated/skills/` (skills only).
-- `templates/operating-rules/` and `templates/skills/` are filled in on every setup run and
-  written to `.generated/`, at the same paths, which is what gets linked into the tools. The
+  - `{{SKILL_SCRIPTS_DIR}}`: the shared scripts' folder, `.generated/skill-scripts/`.
+- `templates/operating-rules/`, `templates/skills/`, and `templates/skill-scripts/` are filled in
+  on every setup run and written to `.generated/`, at the same paths. The skills and rules there
+  are what gets linked into the tools, and the skills run the shared scripts from there. The
   starter has no copy there, because setup fills it in only once (see "The two repos").
 - A file and its folder keep the same name at every stage: template, generated copy, and link,
   such as `operating-rules/operating-rules.md`. The links in each Claude Code folder's `rules/`
@@ -59,8 +64,8 @@ Never leave it to the reader to guess which: name the repo whenever both could f
 
 - Frontmatter uses only standard fields: `name`, `description`, and `allowed-tools`. The name
   matches the folder name.
-- Refer to a skill's own files through `{{SKILL_DIR}}`, and to anything else through
-  `{{TOOLS_DIR}}` or `{{CONTENT_DIR}}`.
+- Refer to a skill's own files through `{{SKILL_DIR}}`, to a shared script through
+  `{{SKILL_SCRIPTS_DIR}}`, and to anything else through `{{TOOLS_DIR}}` or `{{CONTENT_DIR}}`.
 - Write steps in plain language, and write commands exactly as they will be run, with
   forward-slash paths, so they work in Git Bash, PowerShell, and Codex.
 - Leave commands that publish outside dev-home, such as `gh issue create`, out of
@@ -82,6 +87,24 @@ Never leave it to the reader to guess which: name the repo whenever both could f
   answer is unclear, a step the scripts can't do, or wording that only fits Claude Code.
 - The handoff template has no line pointing agents to the handoff skill; the operating rules do
   that, in every session.
+
+## Scripts the skills share (templates/skill-scripts/)
+
+- These are scripts that only agents run, and that more than one skill may run. Skills point to
+  the one generated copy; never copy a script into each skill's folder.
+  `docs/development/decisions.md` says why, and why they aren't at the root or in `internal/`.
+- One job per script, named for the job. `facts.ps1` reports facts about where a session is
+  running, one topic at a time.
+- `facts.ps1` only reports, and only from this PC: it changes nothing and never uses the network.
+  That's what makes it safe to pre-approve, and a test searches it for both. Anything a skill
+  needs done, rather than told, goes in a script of its own.
+- A topic's lines are what skills build on. Add a topic freely. Change or remove a line only
+  after reading every skill that asks for its topic.
+- Each script's description has a "Called by:" line naming the skills that run it. Read those
+  skills before changing what the script takes or prints, and update the line when a skill starts
+  or stops running it. A test compares the line with the skills.
+- A skill writes each command in full, with fixed arguments, and pre-approves that exact text,
+  never a wildcard. A test checks that the two match.
 
 ## Operating rules (templates/operating-rules/operating-rules.md)
 

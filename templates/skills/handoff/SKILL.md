@@ -1,7 +1,7 @@
 ---
 name: handoff
 description: Read or update this project's private session handoff (where the work stands, what's next up, what's waiting on the user or on others, to-dos, and bugs), kept in the private dev-home repo, and file handoff items as GitHub issues when asked. Use when the user runs /handoff or $handoff, asks where things stand or where we left off, asks to update the handoff or change what's next up, or asks to file a handoff item as a GitHub issue.
-allowed-tools: "Bash(pwsh -NoProfile -File {{SKILL_DIR}}/locate.ps1) Bash(gh label list *) Bash(gh issue list *) Bash(gh issue view *) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 *) PowerShell(gh label list *) PowerShell(gh issue list *) PowerShell(gh issue view *)"
+allowed-tools: "Bash(pwsh -NoProfile -File {{SKILL_SCRIPTS_DIR}}/facts.ps1 handoff environment) Bash(gh label list *) Bash(gh issue list *) Bash(gh issue view *) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 *) PowerShell(gh label list *) PowerShell(gh issue list *) PowerShell(gh issue view *)"
 ---
 
 # Handoff
@@ -46,10 +46,10 @@ Creating or moving a handoff (see "Find this project's handoff") happens only af
 your offer, asked as one question, such as "Create it, commit, and push?".
 
 Whenever you tell the user about the handoff (a summary, Next up, or what an `update`, `next`,
-or `issue` changed), link to it once, with `link` from `locate.ps1` as the target, exactly as
+or `issue` changed), link to it once, with `link` from `facts.ps1` as the target, exactly as
 printed, so they can open it. Link the project files you name, too: the target is `project`
-from `locate.ps1`, a slash, and the file's path in the project, with each space written as
-`%20`, such as `./docs/setup%20guide.md`. `locate.ps1` gives both in the form that opens where
+from `facts.ps1`, a slash, and the file's path in the project, with each space written as
+`%20`, such as `./docs/setup%20guide.md`. `facts.ps1` gives both in the form that opens where
 you're running, so never rewrite them: a relative path in most tools, because some editors
 can't open a link whose path has a drive letter, and a `file:///` URL in Claude Code's CLI,
 whose terminal can't open a relative path. Some tools also can't open a link with `%20` in it
@@ -135,9 +135,10 @@ about this project doesn't belong here either.
 
 ## Find this project's handoff
 
-1. In the project, run `pwsh -NoProfile -File {{SKILL_DIR}}/locate.ps1`. It reads the
-   project's address from its git config, without the network, and prints six lines. The steps
-   below use them by name:
+1. In the project, run
+   `pwsh -NoProfile -File {{SKILL_SCRIPTS_DIR}}/facts.ps1 handoff environment`. It reads the
+   project's address from its git config, without the network, and prints seven lines. The
+   steps below use them by name:
    - `service`: where the project is hosted: `github`, `gitlab`, `bitbucket`, `azure-devops`,
      `other` for anywhere else, or `local` for a project with no remote.
    - `name`: the project's name, such as `you/tool`. For `other` and `local`, it's the folder
@@ -146,6 +147,8 @@ about this project doesn't belong here either.
    - `draft`: where a GitHub issue draft goes.
    - `link`: the handoff, as the target for links to it in your replies.
    - `project`: the project's folder, as the start of the target for links to its files.
+   - `environment`: the name of the computer you're on, which says which subsection of
+     Environments is yours (see rule 6).
 
    `link` and `project` are already encoded as link targets, such as `%20` for a space, and
    already in the form that opens where you're running (see "Commands").
@@ -321,7 +324,7 @@ above, ignoring only the first test, and asks which to file.
 ## In Codex
 
 Read, `update`, and `next` work, but edit only, so leave "commit, and push" out of your
-questions: a draft ends with "Save this?". Find the handoff with `locate.ps1` as usual, since it
+questions: a draft ends with "Save this?". Find the handoff with `facts.ps1` as usual, since it
 only reads files. Skip every sync, git, and `gh` step, including the issue link checks, and tell
 the user that Claude will commit and push the change: the next /handoff in Claude lists the
 file, and offers to commit and push it once it has been untouched for 15 minutes. `issue` needs
@@ -347,9 +350,9 @@ the handoff may be behind another PC.
 6. Facts true in only one environment go under "## Environments", in a subsection for that
    environment. An environment is anywhere the project is worked on: a computer, a virtual
    machine, a container, WSL, a remote server, or a cloud service such as Claude Code on the web
-   or GitHub Codespaces. Name the subsection so it stays the same from session to session: a
-   computer's name (`COMPUTERNAME` on Windows, the host name elsewhere), or the service's name for
-   a cloud environment whose computer name changes each time. Only edit the subsection for the
+   or GitHub Codespaces. Name the subsection so it stays the same from session to session:
+   `environment` from `facts.ps1`, which is the computer's name, or the service's name for a
+   cloud environment whose computer name changes each time. Only edit the subsection for the
    environment you're in.
 7. No secrets, credentials, tenant or account IDs, or personal information about anyone other
    than the user, such as customer or colleague data. Say where a secret is kept, never its

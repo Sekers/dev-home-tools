@@ -16,9 +16,10 @@
     new private one from the files in templates/dev-home-starter/.
 
     The templates in this repo hold placeholders where paths go. Setup writes copies of the
-    skills and operating rules with this PC's paths filled in to .generated/, at the same paths
-    they have under templates/, and links those into the tools. Pre-approved commands must match
-    the command text exactly, so the paths can't be variables.
+    skills, the scripts they share, and the operating rules, with this PC's paths filled in, to
+    .generated/, at the same paths they have under templates/, and links the skills and rules
+    into the tools. Pre-approved commands must match the command text exactly, so the paths can't
+    be variables.
 
     When a settings file is missing something, it shows the exact lines it would change and asks
     first. On yes, it saves a dated backup of the file, then writes the change. It never edits a
@@ -1307,8 +1308,9 @@ if ($saveSettings -and $script:Cmdlet.ShouldProcess($SettingsPath, 'Save this PC
 
 $ContentRoot = ConvertTo-ComparablePath -Path $settings.contentDir
 $Values = @{
-    TOOLS_DIR   = ConvertTo-ForwardPath -Path $ToolsRoot
-    CONTENT_DIR = ConvertTo-ForwardPath -Path $ContentRoot
+    TOOLS_DIR         = ConvertTo-ForwardPath -Path $ToolsRoot
+    CONTENT_DIR       = ConvertTo-ForwardPath -Path $ContentRoot
+    SKILL_SCRIPTS_DIR = ConvertTo-ForwardPath -Path (Join-Path $GeneratedRoot 'skill-scripts')
 }
 # The operating rules template and the person's global rules, each named once: setup reads them
 # from here, and the notes in generated files point to them.
@@ -1360,11 +1362,11 @@ foreach ($key in $wantedConfig.Keys) {
     }
 }
 
-# 3. Generated files: the skills and operating rules with this PC's paths filled in, at the
-# same paths they have under templates/. The file each tool loads, a skill's SKILL.md or the
-# operating rules, gets a note naming its template, because an agent in another project only
-# ever sees this copy, and an edit here is lost at the next setup run. No other file gets one:
-# the handoff template, for one, is copied into every new handoff.
+# 3. Generated files: the skills, the scripts they share, and the operating rules, with this
+# PC's paths filled in, at the same paths they have under templates/. The file each tool loads,
+# a skill's SKILL.md or the operating rules, gets a note naming its template, because an agent
+# in another project only ever sees this copy, and an edit here is lost at the next setup run.
+# No other file gets one: the handoff template, for one, is copied into every new handoff.
 
 $skillSources = @(Get-ChildItem -LiteralPath (Join-Path $ToolsRoot 'templates/skills') -Directory |
         Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'SKILL.md') })
@@ -1385,17 +1387,19 @@ if (Test-Path -LiteralPath $generatedSkills) {
 }
 $rulesNote = Get-GeneratedNote -From (ConvertTo-ForwardPath -Path $operatingTemplate) -Instead ('Put rules of your own in {0}; changing the template changes dev-home-tools itself.' -f (ConvertTo-ForwardPath -Path $globalRulesFile))
 Sync-GeneratedFolder -Source (Split-Path -Parent $operatingTemplate) -Destination (Join-Path $GeneratedRoot 'operating-rules') -Values $Values -NoteFile (Split-Path -Leaf $operatingTemplate) -Note $rulesNote
+# The scripts the skills share. The skills run them from here, at the path SKILL_SCRIPTS_DIR gives.
+Sync-GeneratedFolder -Source (Join-Path $ToolsRoot 'templates/skill-scripts') -Destination (Join-Path $GeneratedRoot 'skill-scripts') -Values $Values
 
 # A folder here with no templates, such as one left from an older layout, is removed.
 if (Test-Path -LiteralPath $GeneratedRoot) {
     foreach ($folder in @(Get-ChildItem -LiteralPath $GeneratedRoot -Directory -Force)) {
-        if (@('skills', 'operating-rules') -notcontains $folder.Name) {
+        if (@('skills', 'skill-scripts', 'operating-rules') -notcontains $folder.Name) {
             Sync-GeneratedFolder -Destination $folder.FullName -Values $Values
         }
     }
 }
 
-$note = "Setup writes everything in this folder from templates/skills/ and templates/operating-rules/,`nwith this PC's paths filled in. Don't edit it: the next setup run rewrites it.`n"
+$note = "Setup writes everything in this folder from templates/skills/, templates/skill-scripts/, and`ntemplates/operating-rules/, with this PC's paths filled in. Don't edit it: the next setup run`nrewrites it.`n"
 $notePath = Join-Path $GeneratedRoot 'README.txt'
 if (((-not (Test-Path -LiteralPath $notePath)) -or ([System.IO.File]::ReadAllText($notePath) -cne $note)) -and
     (Test-Path -LiteralPath $GeneratedRoot) -and $script:Cmdlet.ShouldProcess($notePath, 'Write a note about this folder')) {
@@ -1409,10 +1413,10 @@ foreach ($unplaced in ($script:UnplacedNotes | Select-Object -Unique)) {
     Write-Status -State PROBLEM -Message ('{0} starts with frontmatter that has no closing --- line, so its generated copy has no note saying not to edit it. Close the frontmatter with a line of three dashes.' -f $unplaced)
 }
 if ($script:GeneratedChanges -gt 0) {
-    Write-Status -State WROTE -Message ('Skills and operating rules with this PC''s paths: {0} file(s) changed in {1}' -f $script:GeneratedChanges, $GeneratedRoot)
+    Write-Status -State WROTE -Message ('Skills, their shared scripts, and operating rules with this PC''s paths: {0} file(s) changed in {1}' -f $script:GeneratedChanges, $GeneratedRoot)
 }
 else {
-    Write-Status -State OK -Message 'Skills and operating rules with this PC''s paths'
+    Write-Status -State OK -Message 'Skills, their shared scripts, and operating rules with this PC''s paths'
 }
 
 # 4. Skills, linked into each tool's personal skills folder: the dev-home-tools skills, then

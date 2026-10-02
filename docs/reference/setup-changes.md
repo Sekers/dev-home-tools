@@ -9,9 +9,10 @@ rights.
 
 - **In your dev-home-tools folder,** two things that belong to this PC only. Git ignores both, so
   they never go to GitHub, and an update never overwrites them.
-  - `.generated/`: this PC's copy of the skills and operating rules, at the same paths they have
-    under `templates/`. In this repo, they hold a placeholder wherever a folder path goes,
-    because everyone keeps their folders in different places. Setup writes a copy with this PC's
+  - `.generated/`: this PC's copy of the skills, the scripts they share, and the operating
+    rules, at the same paths they have under `templates/`. In this repo, they hold a
+    placeholder wherever a folder path goes, because everyone keeps their folders in different
+    places. Setup writes a copy with this PC's
     real paths filled in, and that copy is what the tools use. The paths have to be written out
     in full, because the commands a skill may run without asking you are matched by their exact
     text. Setup rewrites this folder whenever it runs, so don't edit it; put skills of your own

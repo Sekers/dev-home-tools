@@ -259,6 +259,7 @@ Everything beyond getting started is in the `docs/` folder:
 | `templates/` | Everything setup fills in with each PC's paths. |
 | `templates/operating-rules/` | The operating rules every session loads, along with your global rules. Filled in on every setup run, into `.generated/`. |
 | `templates/skills/` | The skills, one folder each. Filled in on every setup run, into `.generated/`. |
+| `templates/skill-scripts/` | Scripts that the skills share and only agents run. Filled in on every setup run, into `.generated/`. |
 | `templates/dev-home-starter/` | The files a brand-new dev-home starts with. Filled in once, when setup creates it. |
 | `internal/` | dev-home-tools' own machinery, which nobody runs directly. |
 | `internal/shared/` | What the three scripts share, one file per job: `git.ps1` runs git, and `output.ps1` prints status lines. |

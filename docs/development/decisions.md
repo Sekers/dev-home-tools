@@ -48,7 +48,7 @@ become worth having.
 checking for edits, so an edit made there is lost at the next sync, with no message. Each
 skill's `SKILL.md` and the operating rules open with a note naming the template to change
 instead, which agents see when the skill or rules load, and people see when they open the file.
-That leaves the generated files with no note (`locate.ps1`, `filing-rules.md`, and the handoff
+That leaves the generated files with no note (`facts.ps1`, `filing-rules.md`, and the handoff
 `template.md`, which can't have one because it's copied into every new handoff), and anyone who
 ignores the note.
 
@@ -58,6 +58,49 @@ generated files read-only.
 
 **Look again if:** an edit is ever actually lost, or plugins are looked at again (see above),
 where a hook could block agents' edits under `.generated/`.
+
+## Scripts the skills share are generated once, and skills point to them
+
+**Decision:** a script that more than one skill may run, and that only agents run, lives in
+`templates/skill-scripts/`. Setup generates one copy into `.generated/skill-scripts/`, and every
+skill runs that copy. The first is `facts.ps1`, which reports facts about where a session is
+running, one topic at a time.
+
+**Why not a copy in each skill's folder:** most published skills are built that way, so that a
+skill can be installed alone. These skills come with the toolkit, so that buys little here. One
+path gives each command one text to pre-approve, where copies would give the same command a
+different path in every skill, and a turned-off skill leaves nothing behind.
+
+**Why not the root:** the root holds what a person may run by hand. A script there looks like
+one of those.
+
+**Why not `internal/`, or a folder of its own, run in place:** a half-finished edit to a script
+that runs in place is live at once in every session on the PC. A generated script changes only
+when setup runs, in the same run that rewrites the skill text that calls it, so the two can't
+be out of step. `templates/` is also where everything the tools get from this repo already
+lives.
+
+**Why one script with topics, not one that does everything:** `facts.ps1` is safe to pre-approve
+because it only reports, and only from this PC. A script that also changed things would lose
+that, so anything a skill needs done goes in a script of its own.
+
+**Look again if:** the skills are shipped without the toolkit, as a plugin for example (see
+above), where each would need the scripts bundled with it.
+
+## The skills don't say to run each command in its own call
+
+**Decision:** no such rule.
+
+**The problem:** agents join the commands a skill gives them, such as `sync.ps1; facts.ps1`,
+although the skill says to run them exactly as written. A joined call asks the user first when
+any part of it isn't pre-approved.
+
+**Why not:** a joined call whose parts are all pre-approved runs without asking (seen in Claude
+Code 2.1.286), so joining isn't what causes a prompt: an unapproved part is. The fix for that is
+a pre-approved way to get what the agent wanted, which is how `facts.ps1` came to report the
+computer's name. Running two commands in one call also saves a round trip.
+
+**Look again if:** a tool starts asking about joined commands whose parts are all pre-approved.
 
 ## The tests are a plain script, not Pester
 

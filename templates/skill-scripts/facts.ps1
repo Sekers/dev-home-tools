@@ -1,9 +1,29 @@
 #Requires -Version 7.2
 <#
 .SYNOPSIS
-    Prints where the current project's handoff lives in dev-home.
+    Prints facts about where a session is running, for the skills, one topic at a time.
 
 .DESCRIPTION
+    Called by: handoff
+
+    Name the topics you want. It prints each topic's lines, as key: value, in the order asked:
+
+        handoff       where the current project's handoff lives in dev-home (six lines)
+        environment   the name of the computer the session is on (one line)
+
+    It only reports, and only from this PC: it changes nothing and never uses the network, which
+    is what lets a skill run it without asking first. Anything a skill needs done, rather than
+    told, goes in a script of its own.
+
+    The skills named above rely on each topic's lines as they are. Add a topic freely, but change
+    or remove a line only after reading every skill that asks for its topic. When you add a skill
+    that runs this script, add it to the list above (a test compares the two).
+
+    With no topic, an unknown one, or a topic that fails, it prints the reason and no facts at
+    all, and exits 1.
+
+    THE HANDOFF TOPIC
+
     Run it in the project's folder. It reads the project's origin address from the project's own
     git config, so it needs no network and no sign-in, and prints six lines:
 
@@ -45,13 +65,32 @@
     A worktree uses its main checkout's origin and folder name, so it shares that checkout's
     handoff.
 
+    THE ENVIRONMENT TOPIC
+
+    Prints one line, the computer's name as the operating system reports it:
+
+        environment: PC-NAME
+
+    A handoff keeps the facts that are true on only one computer under that name, so it has to
+    come out the same in every session there.
+
+.PARAMETER Topic
+    The topics to print, separated by spaces.
+
 .EXAMPLE
-    pwsh -NoProfile -File C:/Users/you/dev-home-tools/.generated/skills/handoff/locate.ps1
+    pwsh -NoProfile -File C:/Users/you/dev-home-tools/.generated/skill-scripts/facts.ps1 handoff environment
 #>
 [CmdletBinding()]
-param()
+param(
+    [Parameter(ValueFromRemainingArguments)]
+    [string[]]$Topic
+)
 
 $ErrorActionPreference = 'Stop'
+
+# Every topic. To add one, add it here, to the description above, and to the switch at the end
+# of this file, with a test for its lines.
+$Topics = @('handoff', 'environment')
 
 # Hosting services by the host name in a repo's address. To add one, add its hosts here and its
 # path shape to Get-ServicePath, with a test for each address form it documents.
@@ -71,8 +110,9 @@ $ContentDir = @'
 # Git's messages in English, so "not a git repository" can be told apart from other failures.
 $env:LC_ALL = 'C'
 
-function Stop-Locate {
-    # Stops without printing a path: a guess would file the handoff in the wrong place.
+function Stop-Facts {
+    # Stops without printing any fact: a guess would file the handoff in the wrong place, and a
+    # skill given only some of what it asked for could go on as if it had the rest.
     param([Parameter(Mandatory)][string]$Message)
     [Console]::Error.WriteLine($Message)
     exit 1
@@ -163,15 +203,15 @@ function Get-FirstCommitId {
     # one answer even when unrelated histories were merged in. Returns $null with no commits yet,
     # and in a shallow clone, whose oldest commit is only where the download stopped.
     $shallow = Invoke-Git -Arguments @('rev-parse', '--is-shallow-repository')
-    if ($shallow.ExitCode -ne 0) { Stop-Locate ('git could not read this repo. git: {0}' -f $shallow.Error) }
+    if ($shallow.ExitCode -ne 0) { Stop-Facts ('git could not read this repo. git: {0}' -f $shallow.Error) }
     if ($shallow.Line -eq 'true') { return $null }
     # Exit code 1, with --quiet, means there are no commits yet.
     $head = Invoke-Git -Arguments @('rev-parse', '--verify', '--quiet', 'HEAD')
     if ($head.ExitCode -eq 1) { return $null }
-    if ($head.ExitCode -ne 0) { Stop-Locate ('git could not read this repo''s commits. git: {0}' -f $head.Error) }
+    if ($head.ExitCode -ne 0) { Stop-Facts ('git could not read this repo''s commits. git: {0}' -f $head.Error) }
     $first = Invoke-Git -Arguments @('rev-list', '--first-parent', '--max-parents=0', 'HEAD')
     if (($first.ExitCode -ne 0) -or ($first.Line -notmatch '^[0-9a-f]{40,64}$')) {
-        Stop-Locate ('git could not find this repo''s first commit. git: {0}' -f $first.Error)
+        Stop-Facts ('git could not find this repo''s first commit. git: {0}' -f $first.Error)
     }
     return $first.Line.Substring(0, 7)
 }
@@ -197,85 +237,112 @@ function ConvertTo-FileUrl {
     return 'file:///' + (ConvertTo-LinkTarget -Path $full)
 }
 
-if (-not (Get-Command git -CommandType Application -ErrorAction SilentlyContinue)) {
-    Stop-Locate 'git was not found, so the handoff can''t be found. Install Git, or add it to PATH.'
-}
-
-# The project's folder: the one holding the main .git, so a worktree gets its main checkout's
-# name. Outside a git repo, the current folder. Any other failure stops the script, because
-# treating a repo git can't read as a plain folder would give the wrong handoff.
-$folder = Split-Path -Leaf $PWD.ProviderPath
-$common = Invoke-Git -Arguments @('rev-parse', '--path-format=absolute', '--git-common-dir')
-$inRepo = ($common.ExitCode -eq 0) -and $common.Line
-if ($inRepo) {
-    $folder = Split-Path -Leaf (Split-Path -Parent $common.Line)
-}
-elseif ($common.Error -notmatch 'not a git repository') {
-    Stop-Locate ('git could not read this folder, so the handoff can''t be found. git: {0}' -f $common.Error)
-}
-
-$folderName = $folder.ToLowerInvariant()
-if (-not (Test-FolderName -Name $folderName)) {
-    Stop-Locate ('No handoff can be named after the folder "{0}". Run this in a project folder.' -f $folder)
-}
-
-# Where the project is hosted, from its origin address.
-$service = 'local'
-$parts = $null
-if ($inRepo) {
-    # Exit code 2 means there's no origin.
-    $origin = Invoke-Git -Arguments @('remote', 'get-url', 'origin')
-    if (($origin.ExitCode -ne 0) -and ($origin.ExitCode -ne 2)) {
-        Stop-Locate ('git could not read this project''s origin. git: {0}' -f $origin.Error)
+function Get-HandoffFact {
+    # The handoff topic's six lines.
+    if (-not (Get-Command git -CommandType Application -ErrorAction SilentlyContinue)) {
+        Stop-Facts 'git was not found, so the handoff can''t be found. Install Git, or add it to PATH.'
     }
-    if (($origin.ExitCode -eq 0) -and $origin.Line) {
-        $address = Split-Address -Address $origin.Line
-        if ($null -ne $address) {
-            $service = 'other'
-            if ($Services.ContainsKey($address.Host)) {
-                $servicePath = Get-ServicePath -Service $Services[$address.Host] -Path $address.Path
-                if ($null -ne $servicePath) {
-                    $service = $Services[$address.Host]
-                    $parts = $servicePath
+
+    # The project's folder: the one holding the main .git, so a worktree gets its main checkout's
+    # name. Outside a git repo, the current folder. Any other failure stops the script, because
+    # treating a repo git can't read as a plain folder would give the wrong handoff.
+    $folder = Split-Path -Leaf $PWD.ProviderPath
+    $common = Invoke-Git -Arguments @('rev-parse', '--path-format=absolute', '--git-common-dir')
+    $inRepo = ($common.ExitCode -eq 0) -and $common.Line
+    if ($inRepo) {
+        $folder = Split-Path -Leaf (Split-Path -Parent $common.Line)
+    }
+    elseif ($common.Error -notmatch 'not a git repository') {
+        Stop-Facts ('git could not read this folder, so the handoff can''t be found. git: {0}' -f $common.Error)
+    }
+
+    $folderName = $folder.ToLowerInvariant()
+    if (-not (Test-FolderName -Name $folderName)) {
+        Stop-Facts ('No handoff can be named after the folder "{0}". Run this in a project folder.' -f $folder)
+    }
+
+    # Where the project is hosted, from its origin address.
+    $service = 'local'
+    $parts = $null
+    if ($inRepo) {
+        # Exit code 2 means there's no origin.
+        $origin = Invoke-Git -Arguments @('remote', 'get-url', 'origin')
+        if (($origin.ExitCode -ne 0) -and ($origin.ExitCode -ne 2)) {
+            Stop-Facts ('git could not read this project''s origin. git: {0}' -f $origin.Error)
+        }
+        if (($origin.ExitCode -eq 0) -and $origin.Line) {
+            $address = Split-Address -Address $origin.Line
+            if ($null -ne $address) {
+                $service = 'other'
+                if ($Services.ContainsKey($address.Host)) {
+                    $servicePath = Get-ServicePath -Service $Services[$address.Host] -Path $address.Path
+                    if ($null -ne $servicePath) {
+                        $service = $Services[$address.Host]
+                        $parts = $servicePath
+                    }
                 }
             }
         }
     }
-}
 
-# Not on a service in the list: the folder name, and the first commit when there is one.
-if ($null -eq $parts) {
-    $name = $folderName
-    if ($inRepo) {
-        $id = Get-FirstCommitId
-        if ($id) { $name = '{0}-{1}' -f $folderName, $id }
+    # Not on a service in the list: the folder name, and the first commit when there is one.
+    if ($null -eq $parts) {
+        $name = $folderName
+        if ($inRepo) {
+            $id = Get-FirstCommitId
+            if ($id) { $name = '{0}-{1}' -f $folderName, $id }
+        }
+        $parts = @($name)
     }
-    $parts = @($name)
+
+    $relative = (@($service) + $parts) -join '/'
+    $handoff = 'handoffs/{0}/HANDOFF.md' -f $relative
+
+    # The project's folder: the top of this checkout, or the current folder outside one, such as
+    # in a bare repo.
+    $projectRoot = $PWD.ProviderPath
+    if ($inRepo) {
+        $top = Invoke-Git -Arguments @('rev-parse', '--show-toplevel')
+        if (($top.ExitCode -eq 0) -and $top.Line) { $projectRoot = $top.Line }
+    }
+
+    $handoffPath = '{0}/{1}' -f $ContentDir, $handoff
+    if ($env:CLAUDE_CODE_ENTRYPOINT -ceq 'cli') {
+        $link = ConvertTo-FileUrl -Path $handoffPath
+        $project = ConvertTo-FileUrl -Path $projectRoot
+    }
+    else {
+        $link = ConvertTo-LinkTarget -Path ([System.IO.Path]::GetRelativePath($PWD.ProviderPath, $handoffPath).Replace('\', '/'))
+        $project = ConvertTo-LinkTarget -Path ([System.IO.Path]::GetRelativePath($PWD.ProviderPath, $projectRoot).Replace('\', '/'))
+    }
+    'service: {0}' -f $service
+    'name: {0}' -f ($parts -join '/')
+    'handoff: {0}' -f $handoff
+    'draft: .drafts/{0}/issue.md' -f $relative
+    'link: {0}' -f $link
+    'project: {0}' -f $project
 }
 
-$relative = (@($service) + $parts) -join '/'
-$handoff = 'handoffs/{0}/HANDOFF.md' -f $relative
-
-# The project's folder: the top of this checkout, or the current folder outside one, such as in
-# a bare repo.
-$projectRoot = $PWD.ProviderPath
-if ($inRepo) {
-    $top = Invoke-Git -Arguments @('rev-parse', '--show-toplevel')
-    if (($top.ExitCode -eq 0) -and $top.Line) { $projectRoot = $top.Line }
+function Get-EnvironmentFact {
+    # The environment topic's one line. The operating system's own name for the computer, which
+    # on Windows is the same as COMPUTERNAME.
+    'environment: {0}' -f [System.Environment]::MachineName
 }
 
-$handoffPath = '{0}/{1}' -f $ContentDir, $handoff
-if ($env:CLAUDE_CODE_ENTRYPOINT -ceq 'cli') {
-    $link = ConvertTo-FileUrl -Path $handoffPath
-    $project = ConvertTo-FileUrl -Path $projectRoot
+# Check the topics first, then work every one out before printing any, so a skill never gets
+# only part of what it asked for.
+$asked = @($Topic | Where-Object { $_ } | ForEach-Object { $_.ToLowerInvariant() } | Select-Object -Unique)
+if ($asked.Count -eq 0) {
+    Stop-Facts ('Name at least one topic: {0}.' -f ($Topics -join ', '))
 }
-else {
-    $link = ConvertTo-LinkTarget -Path ([System.IO.Path]::GetRelativePath($PWD.ProviderPath, $handoffPath).Replace('\', '/'))
-    $project = ConvertTo-LinkTarget -Path ([System.IO.Path]::GetRelativePath($PWD.ProviderPath, $projectRoot).Replace('\', '/'))
+$unknown = @($asked | Where-Object { $Topics -notcontains $_ })
+if ($unknown.Count -gt 0) {
+    Stop-Facts ('No such topic: {0}. The topics are: {1}.' -f ($unknown -join ', '), ($Topics -join ', '))
 }
-Write-Output ('service: {0}' -f $service)
-Write-Output ('name: {0}' -f ($parts -join '/'))
-Write-Output ('handoff: {0}' -f $handoff)
-Write-Output ('draft: .drafts/{0}/issue.md' -f $relative)
-Write-Output ('link: {0}' -f $link)
-Write-Output ('project: {0}' -f $project)
+$lines = @(foreach ($name in $asked) {
+        switch ($name) {
+            'handoff' { Get-HandoffFact }
+            'environment' { Get-EnvironmentFact }
+        }
+    })
+Write-Output $lines
