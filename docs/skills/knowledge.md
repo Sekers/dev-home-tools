@@ -1,6 +1,7 @@
 # Knowledge base
 
-These read and update the knowledge base in your dev-home.
+These read and update the knowledge base in your dev-home. The exact steps agents follow are in
+the skill itself: [`SKILL.md`](../../templates/skills/knowledge/SKILL.md).
 
 | Command | What it does |
 | --- | --- |

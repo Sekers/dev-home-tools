@@ -32,8 +32,8 @@ see skills in the [Claude Code docs](https://code.claude.com/docs/en/skills) and
 
 | Skill | What it does |
 | --- | --- |
-| [`handoff`](templates/skills/handoff/SKILL.md) | Keeps one private note per project in your dev-home: what's next, what's in progress, what's waiting on you or on others, and what's left to do. Start a session with `/handoff`, and the agent picks up where the last one stopped, on any of your PCs. |
-| [`knowledge`](templates/skills/knowledge/SKILL.md) | Keeps your own knowledge base in your dev-home: general things you've learned about languages, tools, and AI agents, so no session has to work them out twice. Agents check it before researching or testing a general question, even partway through other work. |
+| [`handoff`](docs/skills/handoff.md) | Keeps one private note per project in your dev-home: what's next, what's in progress, what's waiting on you or on others, and what's left to do. Start a session with `/handoff`, and the agent picks up where the last one stopped, on any of your PCs. |
+| [`knowledge`](docs/skills/knowledge.md) | Keeps your own knowledge base in your dev-home: general things you've learned about languages, tools, and AI agents, so no session has to work them out twice. Agents check it before researching or testing a general question, even partway through other work. |
 
 Works with Claude Code, Codex, or both. Windows only, for now. To start, see
 [Set up a PC](#set-up-a-pc).

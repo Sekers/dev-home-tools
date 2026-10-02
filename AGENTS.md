@@ -149,9 +149,12 @@ Never leave it to the reader to guess which: name the repo whenever both could f
     Read it before reopening one. Findings from research on this project go there too, with the
     decision they led to.
 - Each fact lives in one place, and other pages link to it.
+- The README links to a skill's page in `docs/skills/`, never to its `SKILL.md`: the page is
+  written for people, and the `SKILL.md` for agents. Each skill's page links to its `SKILL.md`,
+  in its opening paragraph. Tests check both.
 - Keep `docs/` ready to publish as a website: lowercase file names with hyphens, one `#` title
   per page, relative links between pages, and as few links out of `docs/` as possible, because
-  those would break on a site.
+  those would break on a site, where each would have to become a full GitHub address.
 - When you add, rename, or remove a page, update the README's table. A test checks it.
 
 ## Testing

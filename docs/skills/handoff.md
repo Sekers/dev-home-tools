@@ -1,6 +1,8 @@
 # Handoffs
 
-These read and update the current project's handoff, which lives in your dev-home.
+These read and update the current project's handoff, which lives in your dev-home. The exact
+steps agents follow are in the skill itself:
+[`SKILL.md`](../../templates/skills/handoff/SKILL.md).
 
 | Command | What it does |
 | --- | --- |

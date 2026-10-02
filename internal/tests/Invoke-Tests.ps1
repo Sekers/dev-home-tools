@@ -1113,6 +1113,19 @@ function Test-Docs {
     $skills = @(Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'templates/skills') -Directory | ForEach-Object { $_.Name } | Sort-Object)
     $skillPages = @(Get-ChildItem -LiteralPath (Join-Path $docsRoot 'skills') -Filter '*.md' -File | ForEach-Object { $_.BaseName } | Sort-Object)
     Test-Check 'every skill in templates/skills/ has a page in docs/skills/, and every page a skill' (($skills.Count -gt 0) -and (($skills -join ' ') -eq ($skillPages -join ' '))) @(('skills: ' + ($skills -join ', ')), ('pages: ' + ($skillPages -join ', ')))
+
+    # A skill's page is written for people and its SKILL.md for agents, so the README links to
+    # the page, and the page links to the SKILL.md.
+    $toSkillFile = @($fromReadme | Where-Object { $_ -like '*/SKILL.md' })
+    Test-Check 'the README links to each skill''s page, never its SKILL.md' ($toSkillFile.Count -eq 0) $toSkillFile
+    $noSkillLink = @(foreach ($skill in $skills) {
+            $skillPage = Join-Path $docsRoot ('skills/{0}.md' -f $skill)
+            if (-not (Test-Path -LiteralPath $skillPage)) { continue }
+            $skillFile = [System.IO.Path]::GetFullPath((Join-Path $RepoRoot ('templates/skills/{0}/SKILL.md' -f $skill)))
+            $linked = @(Get-MarkdownLink -Lines (Get-Content -LiteralPath $skillPage) | ForEach-Object { ($_ -split '#', 2)[0] } | Where-Object { $_ } | ForEach-Object { [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $skillPage) $_)) })
+            if ($linked -notcontains $skillFile) { $skill }
+        })
+    Test-Check 'every skill''s page links to its SKILL.md' ($noSkillLink.Count -eq 0) $noSkillLink
 }
 
 # ---------------------------------------------------------------------------------------------
