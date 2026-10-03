@@ -12,7 +12,7 @@ Nothing runs on a schedule. Each script runs only when you or an agent starts it
 
 | Script | When it runs |
 | --- | --- |
-| `sync.ps1` | In Claude Code, agents run it at the start of every `/handoff` command, for a plain `/knowledge`, and before adding to the knowledge base; that sync also runs `update.ps1` and setup. Then they run it again to commit and push each change they make. That second sync skips the update check, and runs setup only if it brought in commits from GitHub, because the sync just before it did both. A lookup, `/knowledge <question>`, never syncs, and Codex never runs it. You can run it any time. |
+| `sync.ps1` | In Claude Code, agents run it at the start of every `/handoff` command, for a plain `/knowledge`, and before adding to the knowledge base, through the skills' own `prepare.ps1`; that sync also runs `update.ps1` and setup. Then they run it again to commit and push each change they make. That second sync skips the update check, and runs setup only if it brought in commits from GitHub, because the sync just before it did both. A lookup, `/knowledge <question>`, never syncs, and Codex never runs it. You can run it any time. |
 | `update.ps1` | Each sync that isn't committing runs it quietly, to check for updates. You run it yourself to look at an update and install it, when `autoUpdate` is off (see [Updates](#updates)). |
 | `setup.ps1` | You run it once per PC, and again to change a setting or to say yes to a settings change. After that, syncs run it quietly, as above, and so does `update.ps1` after you install an update. That quiet run never asks anything, and never changes Claude Code's or Codex's settings. |
 

@@ -2,7 +2,7 @@
 
 ---
 
-**State as of YYYY-MM-DD.** <What was checked, such as a commit or tag, and the result.>
+**State as of YYYY-MM-DD.** <What was checked, such as a commit by its hash, and the result.>
 
 ## Next up
 

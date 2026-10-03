@@ -1,7 +1,7 @@
 ---
 name: handoff
 description: Read or update this project's private session handoff (where the work stands, what's next up, what's waiting on the user or on others, to-dos, and bugs), kept in the private dev-home repo, and file handoff items as GitHub issues when asked. Use when the user runs /handoff or $handoff, asks where things stand or where we left off, asks to update the handoff or change what's next up, or asks to file a handoff item as a GitHub issue.
-allowed-tools: "Bash(pwsh -NoProfile -File {{SKILL_SCRIPTS_DIR}}/facts.ps1 handoff environment) Bash(gh label list *) Bash(gh issue list *) Bash(gh issue view *) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 *) PowerShell(gh label list *) PowerShell(gh issue list *) PowerShell(gh issue view *)"
+allowed-tools: "Bash(pwsh -NoProfile -File {{SKILL_SCRIPTS_DIR}}/prepare.ps1 handoff environment newer-commits) Bash(pwsh -NoProfile -File {{SKILL_SCRIPTS_DIR}}/facts.ps1 handoff environment newer-commits) Bash(gh label list *) Bash(gh issue list *) Bash(gh issue view *) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 *) PowerShell(gh label list *) PowerShell(gh issue list *) PowerShell(gh issue view *)"
 ---
 
 # Handoff
@@ -104,8 +104,9 @@ fits none of them, ask the user. In any section, start an item with "For the use
 user can do it, and only when that's known. If work shows an item needs the user, or doesn't,
 change the label.
 
-- **State line:** the date, what was checked (such as a commit or tag), and the result, such as
-  tests passing.
+- **State line:** the date, what was checked, and the result, such as tests passing. Name the
+  commit you checked by its hash, such as `3f9c2ab`, so a later read can list the commits that
+  came after it (see `newer` in "Find this project's handoff").
 - **Next up:** what the user wants the next session to start with. Only the user changes it (see
   "Next up").
 - **Work in progress:** work started but not finished: what's done, what's left, and how to pick
@@ -135,10 +136,9 @@ about this project doesn't belong here either.
 
 ## Find this project's handoff
 
-1. In the project, run
-   `pwsh -NoProfile -File {{SKILL_SCRIPTS_DIR}}/facts.ps1 handoff environment`. It reads the
-   project's address from its git config, without the network, and prints seven lines. The
-   steps below use them by name:
+1. Read step 2's command ends by printing the lines of three `facts.ps1` topics, worked out from
+   the project's git repo and dev-home's copy of its handoff, without the network. The steps
+   below use them by name:
    - `service`: where the project is hosted: `github`, `gitlab`, `bitbucket`, `azure-devops`,
      `other` for anywhere else, or `local` for a project with no remote.
    - `name`: the project's name, such as `you/tool`. For `other` and `local`, it's the folder
@@ -149,11 +149,17 @@ about this project doesn't belong here either.
    - `project`: the project's folder, as the start of the target for links to its files.
    - `environment`: the name of the computer you're on, which says which subsection of
      Environments is yours (see rule 6).
+   - `checked`: the commit the handoff's State line names, as a short hash; `none` when it names
+     none; or `missing` and a hash, when this checkout doesn't have that commit.
+   - `newer`: how many commits this checkout has that `checked` doesn't, or `unknown`.
+   - `behind`: how many commits `checked` has that this checkout doesn't, or `unknown`.
+   - `newer-commit`: one line for each newer commit, newest first and at most ten, with its short
+     hash and subject.
 
    `link` and `project` are already encoded as link targets, such as `%20` for a space, and
    already in the form that opens where you're running (see "Commands").
 
-   If it prints an error instead, show the error and stop: without the script's answer, there's
+   If a `PROBLEM` line says `facts.ps1` stopped, show it and stop: without those lines, there's
    no telling which handoff is this project's.
 2. The handoff is `{{CONTENT_DIR}}/<handoff>`. Check that it exists only after Read step 2's
    sync, so a handoff made on another PC has arrived.
@@ -169,8 +175,10 @@ about this project doesn't belong here either.
 
 1. If your instructions don't include the heading "Private repo: dev-home (rules loaded)", tell
    the user that the always-on operating rules aren't loaded, then continue.
-2. Run `pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1`. It syncs with GitHub, then runs setup.
-   Pass on anything it prints beyond `OK`:
+2. In the project, run
+   `pwsh -NoProfile -File {{SKILL_SCRIPTS_DIR}}/prepare.ps1 handoff environment newer-commits`.
+   It syncs dev-home with GitHub and runs setup, then prints the facts that "Find this project's
+   handoff" uses. Pass on anything the sync prints beyond `OK`:
    - `OFFLINE`: GitHub couldn't be reached. When the line is about dev-home, say the handoff may
      be stale; when it's about dev-home-tools, say its updates weren't checked. Then continue.
    - `LEFT`: leave the file alone. Another session may be editing it.
@@ -178,9 +186,18 @@ about this project doesn't belong here either.
      `pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 -Message "sync: <what changed>" "<path>"`.
    - `UPDATE`: new dev-home-tools commits are available. Tell the user, and continue.
    - `PROBLEM`: show it. When it's about syncing dev-home, say the handoff may be behind. Then
-     continue.
+     continue, unless it says `facts.ps1` stopped (see "Find this project's handoff").
 3. Find this project's handoff (see above), read it, and summarize where things stand. Start
-   with Next up, as written, if it isn't empty. If the user asked a question, answer it.
+   with Next up, as written, if it isn't empty. Then, from the facts:
+   - `newer` above 0: say in one line how many commits the project has had since the State
+     line's check, and what they cover, from the `newer-commit` lines. The handoff may not
+     reflect them yet.
+   - `behind` above 0, or `checked` starts with `missing`: say that this checkout lacks commits
+     the handoff's last check had, so the user should pull the project before relying on the
+     handoff or the code.
+   - `newer` is `unknown`: never say the handoff matches the code, since nothing compared them.
+
+   If the user asked a question, answer it.
 
 ## Changing the handoff
 
@@ -324,13 +341,15 @@ above, ignoring only the first test, and asks which to file.
 ## In Codex
 
 Read, `update`, and `next` work, but edit only, so leave "commit, and push" out of your
-questions: a draft ends with "Save this?". Find the handoff with `facts.ps1` as usual, since it
-only reads files. Skip every sync, git, and `gh` step, including the issue link checks, and tell
-the user that Claude will commit and push the change: the next /handoff in Claude lists the
-file, and offers to commit and push it once it has been untouched for 15 minutes. `issue` needs
-Claude, so say that and stop; skip issue candidates too. On Windows, Codex runs even approved
-commands inside its sandbox, so git and `gh` can't use the user's credentials there. Mention that
-the handoff may be behind another PC.
+questions: a draft ends with "Save this?". Skip every sync, git, and `gh` step, including the
+issue link checks. In place of Read step 2's command, run
+`pwsh -NoProfile -File {{SKILL_SCRIPTS_DIR}}/facts.ps1 handoff environment newer-commits`,
+which prints the same facts and only reads files. If it prints an error instead, show it and
+stop, as for a `PROBLEM` line about `facts.ps1`. Tell the user that Claude will commit and push
+the change: the next /handoff in Claude lists the file, and offers to commit and push it once it
+has been untouched for 15 minutes. `issue` needs Claude, so say that and stop; skip issue
+candidates too. On Windows, Codex runs even approved commands inside its sandbox, so git and
+`gh` can't use the user's credentials there. Mention that the handoff may be behind another PC.
 
 ## Rules for every handoff
 

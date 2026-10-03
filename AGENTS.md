@@ -102,7 +102,14 @@ Never leave it to the reader to guess which: name the repo whenever both could f
   the one generated copy; never copy a script into each skill's folder.
   `docs/development/decisions.md` says why, and why they aren't at the root or in `internal/`.
 - One job per script, named for the job. `facts.ps1` reports facts about where a session is
-  running, one topic at a time.
+  running, one topic at a time. `prepare.ps1` prepares dev-home for a skill command: it runs
+  `sync.ps1`, then `facts.ps1` with the topics it's given.
+- Every skill command that syncs starts with `prepare.ps1`, so the agent gets everything it needs
+  before its own work in one call. Anything a skill needs at that point that takes no judgment
+  goes in the scripts, not in steps for the agent. `prepare.ps1` always exits 0 and says
+  everything in its lines, and it never commits: skills commit through `sync.ps1 -Message`.
+- Both scripts write their lines as UTF-8 bytes, and read git's output as UTF-8, so an accented
+  letter reaches the agent as it is. `docs/development/decisions.md` says why it takes both.
 - `facts.ps1` only reports, and only from this PC: it changes nothing and never uses the network.
   That's what makes it safe to pre-approve, and a test searches it for both. Anything a skill
   needs done, rather than told, goes in a script of its own.

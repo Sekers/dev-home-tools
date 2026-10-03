@@ -6,7 +6,7 @@ steps agents follow are in the skill itself:
 
 | Command | What it does |
 | --- | --- |
-| `/handoff` | Syncs your dev-home with GitHub, then summarizes this project's handoff, starting with Next up, with a link to the file. |
+| `/handoff` | Syncs your dev-home with GitHub, then summarizes this project's handoff, starting with Next up, with a link to the file. If the project has commits since the one the handoff last checked, it says how many and what they cover. If this copy of the project lacks commits that check had, it says to pull first. |
 | `/handoff <question>` | The same, then answers the question. |
 | `/handoff update` | Brings the whole handoff up to date. If Next up looks done, asks before clearing it. |
 | `/handoff update <text>` | The same, with your text worked in, in any words. The text can also set, add to, or clear Next up. |
