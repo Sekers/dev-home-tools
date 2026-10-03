@@ -39,6 +39,14 @@ Never leave it to the reader to guess which: name the repo whenever both could f
   `C:\Programming\dev-home`, and `example.com` for any domain.
 - Before proposing a commit, read the whole diff for those.
 
+## Speed
+
+- Agents run these scripts at the start of nearly every skill command, so any added time is paid
+  over and over. Never build anything that adds time, such as another process, git call, or
+  network call, in a script, a skill's steps, or anything that runs automatically, without
+  asking the person you work for first. Say how much it adds, measured if you can, and offer a
+  way that avoids it. A bigger saving elsewhere doesn't make it free: they still decide.
+
 ## Templates, generated files, and names
 
 - Every file under `templates/` is a template: setup replaces these placeholders with
