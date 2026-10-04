@@ -323,22 +323,27 @@ the handoff, add the link where it fits.
 After an update, suggest filing an item only when it really makes sense. It must pass every
 test:
 
-- This session added or changed it.
+- This session added or changed it, or it's marked "Issue: decide later".
 - It's a concrete bug, feature, or task that someone outside the project would understand.
 - It can be written without anything private.
 - It's likely to stay open beyond the next session or two.
 - It doesn't link to an issue yet, and it isn't marked "Not for a GitHub issue".
 
 Suggest only items from To do or Bugs, and at most three; most updates have none. Ask in one line
-each: "Issue candidate: <section>: <item>. File it? Say no, and I'll mark it 'Not for a
-GitHub issue', then commit and push that."
+each: "Issue candidate: <section>: <item>. File it, decide later, or no? For later or no, I'll
+mark the item, then commit and push that."
 
-- Yes: file it as above.
+- Yes: file it as above. The link replaces any mark.
+- Later: add `(Issue: decide later)` to the end of the item, unless it's there already. The next
+  update suggests it again, even if that session didn't change it, and the answer then replaces
+  the mark.
 - No: add `(Not for a GitHub issue: <reason>)` to the end of the item, with the user's reason,
-  or `(Not for a GitHub issue)` if they gave none. Mark every declined item, then commit once,
-  as in "Changing the handoff". The mark records the user's decision: never suggest a marked
-  item again. `/handoff issue` can still file it, and the link replaces the mark.
+  or `(Not for a GitHub issue)` if they gave none, in place of any "decide later" mark. The mark
+  records the user's decision: never suggest a marked item again. `/handoff issue` can still
+  file it, and the link replaces the mark.
 - No answer: change nothing.
+
+Mark every item answered later or no, then commit once, as in "Changing the handoff".
 
 `/handoff issue` with nothing after it lists every item that qualifies by the tests and sections
 above, ignoring only the first test, and asks which to file.

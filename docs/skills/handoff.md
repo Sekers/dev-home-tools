@@ -44,8 +44,9 @@ is your go-ahead. Some examples:
   handoff skill says what goes in each. `/handoff update` brings an older handoff in line, and
   asks before it moves anything out.
 - **Issues.** After an update, the agent may suggest up to three items as issues, only when
-  filing one really makes sense. Say no, and it marks the item so it never suggests it again,
-  then commits and pushes that; the question says so. Filing always shows you the draft and waits
+  filing one really makes sense, and asks whether to file each, decide later, or not. Later marks
+  the item so the next update asks again; no marks it so it's never suggested again. Either mark
+  is committed and pushed, and the question says so. Filing always shows you the draft and waits
   for your yes. Issues work in Claude Code only, for projects on GitHub, with `gh` signed in.
 - **In Codex, handoff commands edit but don't commit.** On Windows, Codex runs even the commands
   you approve inside its sandbox, where git and `gh` can't use your GitHub credentials. So the
