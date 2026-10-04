@@ -37,6 +37,10 @@
     Folder links are symbolic links when Windows Developer Mode is on, and directory junctions
     otherwise.
 
+    The skills run their scripts with Python 3.12 or later, as .python/python.exe in this
+    folder: a junction setup makes to the folder of a Python it finds, so the skills' commands
+    name the same short path on every PC (see Sync-PythonLink).
+
     For testing, internal/tests/Invoke-Tests.ps1 runs a throwaway copy of this repo whose
     local-settings.json sets testHomeDir. Setup then uses that folder instead of your profile, and
     says so on every run. Setup never writes testHomeDir itself.
@@ -314,6 +318,43 @@ function Get-RenderedBytes {
     return , [System.Text.UTF8Encoding]::new($false).GetBytes($text)
 }
 
+function Get-SkillStamp {
+    # A skill's stamp: the start of a SHA-256 of its SKILL.md with this PC's paths filled in, so
+    # it changes whenever the text an agent loads does. The skill's commands carry it, and the
+    # skill scripts compare it with the stamp in the SKILL.md on disk (see facts.py). The stamp
+    # is hashed as its placeholder, so it can't change its own value.
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][hashtable]$Values
+    )
+    $text = [System.IO.File]::ReadAllText($Path).Replace("`r`n", "`n")
+    foreach ($key in $Values.Keys) { $text = $text.Replace('{{' + $key + '}}', $Values[$key]) }
+    $hash = [System.Security.Cryptography.SHA256]::HashData([System.Text.UTF8Encoding]::new($false).GetBytes($text))
+    return [System.Convert]::ToHexString($hash).Substring(0, 12).ToLowerInvariant()
+}
+
+function Get-GeneratedItem {
+    # Every file under Path that setup may write or remove, or with -Directory every folder. It
+    # never looks inside a link, which may point anywhere, such as at a Python install. Without
+    # -WithCache it also leaves out Python's bytecode cache folders (__pycache__), which Python
+    # writes beside the scripts when they run, so they aren't removed and rebuilt on every run.
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [switch]$Directory,
+        [switch]$WithCache
+    )
+    foreach ($item in @(Get-ChildItem -LiteralPath $Path -Force)) {
+        if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { continue }
+        if (-not $item.PSIsContainer) {
+            if (-not $Directory) { $item }
+            continue
+        }
+        if (($item.Name -eq '__pycache__') -and (-not $WithCache)) { continue }
+        if ($Directory) { $item }
+        Get-GeneratedItem -Path $item.FullName -Directory:$Directory -WithCache:$WithCache
+    }
+}
+
 function Test-SameBytes {
     param(
         [Parameter(Mandatory)][string]$Path,
@@ -334,24 +375,32 @@ function Sync-GeneratedFolder {
         [string]$NoteFile,
         [string]$Note
     )
+    # Something else made a link here, and it may point anywhere, so setup neither writes through
+    # it nor empties it.
+    $existing = Get-LinkInfo -Path $Destination
+    if (($null -ne $existing) -and $existing.IsLink) {
+        Write-Status -State PROBLEM -Message ('{0} is a link, so setup left it alone. Setup writes that folder itself: remove the link with cmd /c rmdir, then run setup.ps1 again.' -f $Destination)
+        return
+    }
+
     $sourceFiles = @()
     $wanted = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     if ($Source) {
-        $sourceFiles = @(Get-ChildItem -LiteralPath $Source -File -Recurse -Force)
+        $sourceFiles = @(Get-GeneratedItem -Path $Source)
         foreach ($file in $sourceFiles) { [void]$wanted.Add([System.IO.Path]::GetRelativePath($Source, $file.FullName)) }
     }
 
     # Old files and empty folders go first, so that a path that was a folder can become a file,
-    # and the other way around.
+    # and the other way around. Python's bytecode cache stays while the folder has templates.
     if (Test-Path -LiteralPath $Destination) {
-        foreach ($file in @(Get-ChildItem -LiteralPath $Destination -File -Recurse -Force)) {
+        foreach ($file in @(Get-GeneratedItem -Path $Destination -WithCache:(-not $Source))) {
             if ($wanted.Contains([System.IO.Path]::GetRelativePath($Destination, $file.FullName))) { continue }
             if (-not $script:Cmdlet.ShouldProcess($file.FullName, 'Remove a generated file whose template is gone')) { continue }
             Remove-Item -LiteralPath $file.FullName -Force
             $script:GeneratedChanges++
         }
-        # Empty folders, deepest first. Setup made every folder in here; none is a link.
-        $folders = @(Get-ChildItem -LiteralPath $Destination -Directory -Recurse -Force | Sort-Object { $_.FullName.Length } -Descending)
+        # Empty folders, deepest first.
+        $folders = @(Get-GeneratedItem -Path $Destination -Directory -WithCache:(-not $Source) | Sort-Object { $_.FullName.Length } -Descending)
         if (-not $Source) { $folders += Get-Item -LiteralPath $Destination }
         foreach ($folder in $folders) {
             if (@(Get-ChildItem -LiteralPath $folder.FullName -Force).Count -gt 0) { continue }
@@ -608,6 +657,100 @@ function Sync-CodexRules {
     if (-not (Test-Path -LiteralPath $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
     [System.IO.File]::WriteAllText($path, $text, [System.Text.UTF8Encoding]::new($false))
     Write-Status -State WROTE -Message ('{0}: {1}' -f $label, $path)
+}
+
+# ---------------------------------------------------------------------------------------------
+# Python, for the skills' scripts
+
+function Get-PythonCandidate {
+    # Folders that may hold a Python 3.12 or later as python.exe, best first. First the Python
+    # install manager's shortcut folder, whose python.exe runs the default runtime and follows it
+    # to newer ones. Then the runtimes in the registry (PEP 514), newest first, which covers the
+    # traditional installer. With -SkipRegistry, as for a test profile, only the first, since
+    # tests can't add registry entries.
+    param(
+        [Parameter(Mandatory)][string]$LocalAppData,
+        [switch]$SkipRegistry
+    )
+    Join-Path $LocalAppData 'Python' 'bin'
+    if ($SkipRegistry) { return }
+    $found = foreach ($root in @('HKCU:\Software\Python', 'HKLM:\Software\Python', 'HKLM:\Software\WOW6432Node\Python')) {
+        if (-not (Test-Path -LiteralPath $root)) { continue }
+        foreach ($company in @(Get-ChildItem -LiteralPath $root -ErrorAction SilentlyContinue)) {
+            # PyLauncher registers the py launcher, not a Python.
+            if ($company.PSChildName -eq 'PyLauncher') { continue }
+            foreach ($tag in @(Get-ChildItem -LiteralPath $company.PSPath -ErrorAction SilentlyContinue)) {
+                $version = $null
+                if (-not [version]::TryParse([string]$tag.GetValue('SysVersion'), [ref]$version)) { continue }
+                if ($version -lt [version]'3.12') { continue }
+                $install = $tag.OpenSubKey('InstallPath')
+                if ($null -eq $install) { continue }
+                try {
+                    $exe = [string]$install.GetValue('ExecutablePath')
+                    if (-not $exe) { $exe = Join-Path ([string]$install.GetValue('')) 'python.exe' }
+                }
+                finally { $install.Dispose() }
+                # A Microsoft Store Python runs only through its own alias, never from its folder.
+                if (($exe -notmatch '[\\/]python\.exe$') -or ($exe -match '[\\/]WindowsApps[\\/]')) { continue }
+                [pscustomobject]@{ Version = $version; Folder = Split-Path -Parent $exe }
+            }
+        }
+    }
+    @($found | Sort-Object -Property Version -Descending | ForEach-Object { $_.Folder }) | Select-Object -Unique
+}
+
+function Test-PythonVersion {
+    # True when the python.exe in a folder runs and is 3.12 or later. This starts Python, so
+    # setup asks only when it makes or re-points the link.
+    param([Parameter(Mandatory)][string]$Folder)
+    $exe = Join-Path $Folder 'python.exe'
+    if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { return $false }
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = @(& $exe -I -c 'import sys; print(sys.version_info >= (3, 12))' 2>$null)
+        return ($LASTEXITCODE -eq 0) -and ($out.Count -gt 0) -and ($out[-1] -eq 'True')
+    }
+    catch {
+        return $false
+    }
+}
+
+function Sync-PythonLink {
+    # Makes .python in this folder a junction to the folder of a Python 3.12 or later, so the
+    # skills' commands name the same short path on every PC, with no spaces to quote. Each run
+    # only checks that the link's python.exe is there, which starts no process. It looks for a
+    # Python, which does, only to make the link, or to re-point it once that python.exe is gone.
+    # Always a junction, which needs no Developer Mode.
+    param(
+        [Parameter(Mandatory)][string]$LinkPath,
+        [Parameter(Mandatory)][string]$LocalAppData,
+        [switch]$SkipRegistry
+    )
+    $label = 'Python for the skills'
+    $existing = Get-LinkInfo -Path $LinkPath
+    if (($null -ne $existing) -and (-not $existing.IsLink)) {
+        Write-Status -State PROBLEM -Message ('{0}: {1} already exists and is not a link. Setup makes a junction there to a Python install. Move it aside, then run setup.ps1 again.' -f $label, $LinkPath)
+        return
+    }
+    if (($null -ne $existing) -and (Test-Path -LiteralPath (Join-Path $LinkPath 'python.exe') -PathType Leaf)) {
+        Write-Status -State OK -Message ('{0}: {1}' -f $label, $existing.Target)
+        return
+    }
+    $folder = Get-PythonCandidate -LocalAppData $LocalAppData -SkipRegistry:$SkipRegistry |
+        Where-Object { Test-PythonVersion -Folder $_ } | Select-Object -First 1
+    if (-not $folder) {
+        Write-Status -State PROBLEM -Message ('{0}: no Python 3.12 or later was found, and the skills run their scripts with it. Install it with the Python install manager (see the README''s Requirements), then run setup.ps1 again.' -f $label)
+        return
+    }
+    if (-not $script:Cmdlet.ShouldProcess($LinkPath, "Link to the Python in $folder")) { return }
+    try {
+        if ($null -ne $existing) { Remove-FolderLink -LinkPath $LinkPath }
+        New-Item -ItemType Junction -Path $LinkPath -Target $folder | Out-Null
+        Write-Status -State LINKED -Message ('{0} (junction): {1} -> {2}' -f $label, $LinkPath, $folder)
+    }
+    catch {
+        Write-Status -State PROBLEM -Message ('{0}: could not link {1} to {2}. {3}' -f $label, $LinkPath, $folder, $_.Exception.Message)
+    }
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -1307,10 +1450,12 @@ if ($saveSettings -and $script:Cmdlet.ShouldProcess($SettingsPath, 'Save this PC
 }
 
 $ContentRoot = ConvertTo-ComparablePath -Path $settings.contentDir
+$PythonLink = Join-Path $ToolsRoot '.python'
 $Values = @{
-    TOOLS_DIR         = ConvertTo-ForwardPath -Path $ToolsRoot
-    CONTENT_DIR       = ConvertTo-ForwardPath -Path $ContentRoot
-    SKILL_SCRIPTS_DIR = ConvertTo-ForwardPath -Path (Join-Path $GeneratedRoot 'skill-scripts')
+    TOOLS_DIR                = ConvertTo-ForwardPath -Path $ToolsRoot
+    CONTENT_DIR              = ConvertTo-ForwardPath -Path $ContentRoot
+    SHARED_SKILL_SCRIPTS_DIR = ConvertTo-ForwardPath -Path (Join-Path $GeneratedRoot 'shared-skill-scripts')
+    PYTHON                   = ConvertTo-ForwardPath -Path (Join-Path $PythonLink 'python.exe')
 }
 # The operating rules template and the person's global rules, each named once: setup reads them
 # from here, and the notes in generated files point to them.
@@ -1362,7 +1507,12 @@ foreach ($key in $wantedConfig.Keys) {
     }
 }
 
-# 3. Generated files: the skills, the scripts they share, and the operating rules, with this
+# 3. Python, for the skills' scripts. A test profile has its own AppData folder.
+
+$localAppData = if ($settings.testHomeDir) { Join-Path $HomeDir 'AppData' 'Local' } else { [System.Environment]::GetFolderPath('LocalApplicationData') }
+Sync-PythonLink -LinkPath $PythonLink -LocalAppData $localAppData -SkipRegistry:([bool]$settings.testHomeDir)
+
+# 4. Generated files: the skills, the scripts they share, and the operating rules, with this
 # PC's paths filled in, at the same paths they have under templates/. The file each tool loads,
 # a skill's SKILL.md or the operating rules, gets a note naming its template, because an agent
 # in another project only ever sees this copy, and an edit here is lost at the next setup run.
@@ -1375,11 +1525,12 @@ foreach ($skill in $skillSources) {
     $destination = Join-Path $generatedSkills $skill.Name
     $skillValues = $Values.Clone()
     $skillValues['SKILL_DIR'] = ConvertTo-ForwardPath -Path $destination
+    $skillValues['SKILL_STAMP'] = Get-SkillStamp -Path (Join-Path $skill.FullName 'SKILL.md') -Values $skillValues
     $skillNote = Get-GeneratedNote -From ('{0}/' -f (ConvertTo-ForwardPath -Path $skill.FullName)) -Instead ('Changing the skill there changes dev-home-tools itself; skills of your own go in {0}/skills/.' -f $Values['CONTENT_DIR'])
     Sync-GeneratedFolder -Source $skill.FullName -Destination $destination -Values $skillValues -NoteFile 'SKILL.md' -Note $skillNote
 }
 if (Test-Path -LiteralPath $generatedSkills) {
-    foreach ($folder in @(Get-ChildItem -LiteralPath $generatedSkills -Directory)) {
+    foreach ($folder in @(Get-ChildItem -LiteralPath $generatedSkills -Directory -Force | Where-Object { -not ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) })) {
         if ($skillSources.Name -notcontains $folder.Name) {
             Sync-GeneratedFolder -Destination $folder.FullName -Values $Values
         }
@@ -1387,19 +1538,22 @@ if (Test-Path -LiteralPath $generatedSkills) {
 }
 $rulesNote = Get-GeneratedNote -From (ConvertTo-ForwardPath -Path $operatingTemplate) -Instead ('Put rules of your own in {0}; changing the template changes dev-home-tools itself.' -f (ConvertTo-ForwardPath -Path $globalRulesFile))
 Sync-GeneratedFolder -Source (Split-Path -Parent $operatingTemplate) -Destination (Join-Path $GeneratedRoot 'operating-rules') -Values $Values -NoteFile (Split-Path -Leaf $operatingTemplate) -Note $rulesNote
-# The scripts the skills share. The skills run them from here, at the path SKILL_SCRIPTS_DIR gives.
+# The scripts the skills share. The skills run them from here, at the path
+# SHARED_SKILL_SCRIPTS_DIR gives. skill-scripts holds only the stand-in for an old path.
+Sync-GeneratedFolder -Source (Join-Path $ToolsRoot 'templates/shared-skill-scripts') -Destination (Join-Path $GeneratedRoot 'shared-skill-scripts') -Values $Values
 Sync-GeneratedFolder -Source (Join-Path $ToolsRoot 'templates/skill-scripts') -Destination (Join-Path $GeneratedRoot 'skill-scripts') -Values $Values
 
-# A folder here with no templates, such as one left from an older layout, is removed.
+# A folder here with no templates, such as one left from an older layout, is removed. A link
+# here isn't setup's, so it stays.
 if (Test-Path -LiteralPath $GeneratedRoot) {
-    foreach ($folder in @(Get-ChildItem -LiteralPath $GeneratedRoot -Directory -Force)) {
-        if (@('skills', 'skill-scripts', 'operating-rules') -notcontains $folder.Name) {
+    foreach ($folder in @(Get-ChildItem -LiteralPath $GeneratedRoot -Directory -Force | Where-Object { -not ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) })) {
+        if (@('skills', 'skill-scripts', 'shared-skill-scripts', 'operating-rules') -notcontains $folder.Name) {
             Sync-GeneratedFolder -Destination $folder.FullName -Values $Values
         }
     }
 }
 
-$note = "Setup writes everything in this folder from templates/skills/, templates/skill-scripts/, and`ntemplates/operating-rules/, with this PC's paths filled in. Don't edit it: the next setup run`nrewrites it.`n"
+$note = "Setup writes everything in this folder from templates/skills/, templates/shared-skill-scripts/,`ntemplates/skill-scripts/, and templates/operating-rules/, with this PC's paths filled in. Don't`nedit it: the next setup run rewrites it. Python writes the __pycache__ folders when the scripts`nrun, to start them faster, and setup leaves those alone.`n"
 $notePath = Join-Path $GeneratedRoot 'README.txt'
 if (((-not (Test-Path -LiteralPath $notePath)) -or ([System.IO.File]::ReadAllText($notePath) -cne $note)) -and
     (Test-Path -LiteralPath $GeneratedRoot) -and $script:Cmdlet.ShouldProcess($notePath, 'Write a note about this folder')) {
@@ -1419,7 +1573,7 @@ else {
     Write-Status -State OK -Message 'Skills, their shared scripts, and operating rules with this PC''s paths'
 }
 
-# 4. Skills, linked into each tool's personal skills folder: the dev-home-tools skills, then
+# 5. Skills, linked into each tool's personal skills folder: the dev-home-tools skills, then
 # the personal skills in dev-home.
 
 $codexInstalled = Test-Path -LiteralPath (Join-Path $HomeDir '.codex')
@@ -1482,7 +1636,7 @@ foreach ($folder in $toolSkillFolders) {
     }
 }
 
-# 5. Always-on rules: the operating rules from here, and the person's global rules from
+# 6. Always-on rules: the operating rules from here, and the person's global rules from
 # dev-home. Claude Code loads every file in the rules folder of each Claude folder, where each
 # link is named dev-home- plus the folder it points to, since nothing there says which repo a
 # name belongs to. Codex reads one file, so setup writes the two joined.
@@ -1501,7 +1655,7 @@ if ($codexInstalled) {
     Sync-CodexRules -OperatingTemplate $operatingTemplate -GlobalPath $globalRulesFile -Values $Values -Note $codexNote
 }
 
-# 6. Settings. A missing setting is offered as a change: shown first, made only after a yes, and
+# 7. Settings. A missing setting is offered as a change: shown first, made only after a yes, and
 # with a backup. See Repair-Setting.
 
 $wantedDirs = @($ContentRoot, (ConvertTo-ComparablePath -Path $ToolsRoot))

@@ -7,8 +7,8 @@ or a rule, the tools see the change at once, with nothing to copy. Setup makes f
 directory junctions, or as symbolic links when Windows Developer Mode is on; neither needs admin
 rights.
 
-- **In your dev-home-tools folder,** two things that belong to this PC only. Git ignores both, so
-  they never go to GitHub, and an update never overwrites them.
+- **In your dev-home-tools folder,** three things that belong to this PC only. Git ignores them,
+  so they never go to GitHub, and an update never overwrites them.
   - `.generated/`: this PC's copy of the skills, the scripts they share, and the operating
     rules, at the same paths they have under `templates/`. In this repo, they hold a
     placeholder wherever a folder path goes, because everyone keeps their folders in different
@@ -18,7 +18,16 @@ rights.
     text. Setup rewrites this folder whenever it runs, so don't edit it; put skills of your own
     in your dev-home. Each skill's `SKILL.md` and the operating rules carry a note saying so,
     with the path of the template to change instead, because an agent working in another
-    project sees only this copy.
+    project sees only this copy. Python adds `__pycache__` folders beside the scripts when they
+    run, so they start faster next time; setup leaves those alone.
+  - `.python\`: a directory junction to the folder of the Python the skills' scripts run with,
+    so every skill command can name `.python\python.exe` here: a short path, the same on every
+    PC, with no spaces to quote. Setup looks first for the Python install manager's shortcuts,
+    in `%LocalAppData%\Python\bin`, whose `python.exe` moves on to newer Pythons as you install
+    them, and then for the newest Python 3.12 or later in the registry, which is where the
+    traditional installer records one. It looks only when it makes the junction, or when the
+    `python.exe` the junction leads to is gone; other runs just check that it's there. It
+    always makes a junction here, even with Developer Mode on.
   - `local-settings.json`: this PC's answers to setup's questions: where your dev-home is,
     whether to install updates automatically, and which extra Claude Code folders to set up.
     The scripts read it to find your dev-home.
@@ -45,6 +54,6 @@ rights.
   rebase. With signing off, a commit never stops in the middle of a sync to ask for your signing
   passphrase. Your project repos keep signing as usual.
 
-**To remove it all:** delete each link with `cmd /c rmdir <link>`, delete `~\.codex\AGENTS.md`,
-take the added lines out of the settings files, then delete your dev-home-tools folder. Your
-dev-home stays as it is.
+**To remove it all:** delete each link with `cmd /c rmdir <link>`, `.python` included, delete
+`~\.codex\AGENTS.md`, take the added lines out of the settings files, then delete your
+dev-home-tools folder. Your dev-home stays as it is.

@@ -1,0 +1,59 @@
+# For people changing dev-home-tools only. Users never install anything from here: the scripts
+# use only Python's standard library. AGENTS.md's "Testing" section says how to run each tool.
+
+[project]
+name = "dev-home-tools"
+version = "0"
+description = "Development settings for dev-home-tools. Not a package."
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["internal/tests"]
+pythonpath = ["internal/tests"]
+# Each group of tests that shares a sandbox runs in one worker, and the groups run in parallel.
+addopts = ["-n", "auto", "--dist", "loadgroup"]
+
+[tool.coverage.run]
+# The tests run the scripts as separate processes, from the generated copies in each sandbox.
+patch = ["subprocess"]
+branch = true
+include = ["*/shared-skill-scripts/*.py"]
+parallel = true
+# The test processes themselves never run the scripts, so they collect nothing of their own.
+disable_warnings = ["no-data-collected"]
+
+[tool.coverage.paths]
+# Each sandbox's generated copy has the same lines as its template.
+source = ["templates/shared-skill-scripts/", "*/.generated/shared-skill-scripts/"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["internal/tests", "templates/shared-skill-scripts"]
+# The tests' sandboxes hold copies of this repo.
+extend-exclude = [".test-sandbox"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "N", "PTH", "C4", "PIE", "RET"]
+# os.path.abspath makes a path full without following links, which Path.resolve() would do.
+ignore = ["PTH100"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+files = ["templates/shared-skill-scripts", "internal/tests"]
+mypy_path = "internal/tests"
+explicit_package_bases = true
+
+[dependency-groups]
+dev = [
+    "mypy>=2.4.0",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.16.10",
+]

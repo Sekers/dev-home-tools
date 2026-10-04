@@ -43,12 +43,14 @@ Works with Claude Code, Codex, or both. Windows only, for now. To start, see
 | What | Why | Install |
 | --- | --- | --- |
 | PowerShell 7.2 or later | Runs the scripts. Windows PowerShell 5.1 can't. | `winget install --id Microsoft.PowerShell --source winget` |
+| Python 3.12 or later | Runs the scripts the skills use. Only Python itself: nothing else to install. | The Python install manager: `winget install 9NQ7512CXL7T -e --accept-package-agreements --disable-interactivity`, then `py install 3.14` (or the latest version). |
 | Git 2.31 or later | Every sync with GitHub. | `winget install --id Git.Git --source winget` |
 | GitHub CLI (`gh`) | Creates or clones your dev-home on GitHub, and files issues for `/handoff issue`. | `winget install --id GitHub.cli --source winget` |
 | Claude Code, Codex, or both | The agents the skills and rules are for. | Each tool's own installer. |
 
 Open a new PowerShell window after installing, so the tools are on the PATH. Nothing here needs
-admin rights.
+admin rights. Python doesn't have to be on the PATH: setup finds it (see
+[What setup changes](docs/reference/setup-changes.md)).
 
 ## Set up a PC
 
@@ -247,6 +249,11 @@ Everything beyond getting started is in the `docs/` folder:
   run setup and read its output. In the Claude desktop app's Cowork sessions, Claude Code skips
   rule folders linked from outside the session's folder, so the rules may not load there.
 - **A skill seems to be missing.** Run setup with `-Quiet`, then restart the agent.
+- **A skill says dev-home-tools needs Python.** Install Python 3.12 or later (see
+  [Requirements](#requirements)), then run setup again.
+- **A skill says it has changed since the session loaded it.** An update changed the skill's
+  steps. Type its command again, such as `/handoff`, to load the new ones; you don't need a new
+  session.
 - **Setup reports a dev-home repo with no commits.** A setup run stopped partway through
   creating it, for example because git didn't know your name yet. If that folder holds nothing
   you need, delete it, fix the cause, and run setup again.
@@ -259,24 +266,31 @@ Everything beyond getting started is in the `docs/` folder:
 | `templates/` | Everything setup fills in with each PC's paths. |
 | `templates/operating-rules/` | The operating rules every session loads, along with your global rules. Filled in on every setup run, into `.generated/`. |
 | `templates/skills/` | The skills, one folder each. Filled in on every setup run, into `.generated/`. |
-| `templates/skill-scripts/` | Scripts that the skills share and only agents run. Filled in on every setup run, into `.generated/`. |
+| `templates/shared-skill-scripts/` | Python scripts that the skills share and only agents run. Filled in on every setup run, into `.generated/`. |
+| `templates/skill-scripts/` | Only a stand-in for an old path, which tells a session with old skill steps to load the new ones. Removed once the scripts have all moved to Python. |
 | `templates/dev-home-starter/` | The files a brand-new dev-home starts with. Filled in once, when setup creates it. |
 | `internal/` | dev-home-tools' own machinery, which nobody runs directly. |
 | `internal/shared/` | What the three scripts share, one file per job: `git.ps1` runs git, and `output.ps1` prints status lines. |
-| `internal/tests/` | The test runner. |
+| `internal/tests/` | The tests: pytest files, and `Invoke-Tests.ps1` for the PowerShell scripts that haven't moved to Python yet. |
+| `pyproject.toml`, `uv.lock` | The development tools and their settings. People who only use dev-home-tools never need them. |
 | `docs/` | Everything this README leaves out (see [Documentation](#documentation)). |
 
 [AGENTS.md](AGENTS.md) has the rules for changing this repo, for people and agents alike, and
-[Design decisions](docs/development/decisions.md) says why it works the way it does. Before
-committing, run:
+[Design decisions](docs/development/decisions.md) says why it works the way it does.
+
+Changing dev-home-tools takes [uv](https://docs.astral.sh/uv/), which installs the pinned
+development tools (pytest, ruff, and mypy) the first time you run them. Before committing, run:
 
 ```powershell
-pwsh -NoProfile -File internal/tests/Invoke-Tests.ps1
+uv run pytest
+uv run ruff check
+uv run ruff format --check
+uv run mypy
 ```
 
-It tests the working tree in throwaway copies under `.test-sandbox/`, never your real profile or
-dev-home, and needs no network. Never point this folder's scripts at a test dev-home: they would
-rewrite the files your real links depend on.
+The tests check the working tree in throwaway copies under `.test-sandbox/`, never your real
+profile or dev-home, and need no network. Never point this folder's scripts at a test dev-home:
+they would rewrite the files your real links depend on.
 
 ## License
 

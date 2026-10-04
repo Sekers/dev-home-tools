@@ -1,7 +1,7 @@
 ---
 name: knowledge
 description: Private general knowledge base for coding and AI work (languages, tools, platforms, and AI agents such as Claude Code and Codex), kept in the private dev-home repo. Check it before researching or testing a general question about these, or asking the user to test one, even partway through other work. Also use when the user runs /knowledge (run alone, it syncs the knowledge base with GitHub), asks to look something up in or add something to the knowledge base, or when a hard-won general finding comes up during work.
-allowed-tools: "Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 *)"
+allowed-tools: "Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill knowledge --stamp {{SKILL_STAMP}}) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill knowledge --stamp {{SKILL_STAMP}}) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 *)"
 ---
 
 # Knowledge base
@@ -23,8 +23,14 @@ Never stage, commit, stash, or discard a file yourself.
 Run this when the user runs /knowledge with nothing after it, and as step 3 of Add or update. A
 lookup reads the local copy and never syncs.
 
-1. Run `pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1`. It syncs with GitHub, then runs setup.
-   Pass on anything it prints beyond `OK`:
+1. Run
+   `{{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill knowledge --stamp {{SKILL_STAMP}}`.
+   It syncs dev-home with GitHub and runs setup, then checks that this skill hasn't changed since
+   you loaded it. If it can't start because `{{PYTHON}}` doesn't exist, tell the user that
+   dev-home-tools needs Python 3.12 or later, and that running its `setup.ps1` says what to do,
+   then stop. Pass on anything it prints beyond `OK`:
+   - `RELOAD`: this skill has changed since you loaded it, so these steps are out of date. Show
+     the line, and stop: the user runs the command again to load the new steps.
    - `OFFLINE`: GitHub couldn't be reached. When the line is about dev-home, say the knowledge
      base may be stale; when it's about dev-home-tools, say its updates weren't checked. Then
      continue.

@@ -1,32 +1,49 @@
 #Requires -Version 7.2
 <#
 .SYNOPSIS
-    Tests setup.ps1, sync.ps1, update.ps1, and the skills' facts.ps1 end to end, in throwaway
-    copies of this repo, and checks internal/shared/, which the first three load, the scripts
-    the skills share, and the links in README.md and docs/.
+    Tests setup.ps1, sync.ps1, and update.ps1 end to end, in throwaway copies of this repo, and
+    checks internal/shared/, which the three load, and the links in README.md and docs/.
 
 .DESCRIPTION
+    uv run pytest runs this script, one group at a time, beside the Python tests in this folder,
+    which cover the scripts the skills share. The groups here move to pytest as the scripts they
+    test move to Python.
+
     Never runs the scripts in this folder. Each group of tests builds a sandbox under
     .test-sandbox/, which git ignores: a copy of this repo's working tree (uncommitted changes
     included), a scratch profile, a dev-home with some content, and local bare repos standing in
     for GitHub. The copy's local-settings.json sets testHomeDir before anything in the copy runs,
     so every setup run from it, including the ones sync.ps1 and update.ps1 start, uses the
-    scratch profile instead of yours. Nothing here uses the network or GitHub.
+    scratch profile instead of yours. The scratch profile's Python install manager folder is a
+    junction to a real Python, which setup links the copy's .python to. Nothing here uses the
+    network or GitHub.
 
     Prints PASS, FAIL, or SKIP for each check, and exits 1 if any check failed. A group's sandbox
     is deleted when all its checks pass, and kept for a look when one fails, or with -Keep.
 
     Not covered, so check these by hand: setup's first-run questions, cloning or creating
-    dev-home with gh, and answering yes to a settings change.
+    dev-home with gh, answering yes to a settings change, and finding a Python through the
+    registry, which a test profile skips.
+
+.PARAMETER Group
+    The groups to run: setup, sync, shared, docs. All of them when left out.
+
+.PARAMETER PythonDir
+    A folder holding a Python 3.12 or later as python.exe, for the sandboxes' Python install
+    manager folder. pytest passes its own base Python. When left out, the real install manager's
+    shortcut folder.
 
 .PARAMETER Keep
     Keep every sandbox, even when its checks pass.
 
 .EXAMPLE
-    pwsh -NoProfile -File internal/tests/Invoke-Tests.ps1
+    pwsh -NoProfile -File internal/tests/Invoke-Tests.ps1 -Group setup
 #>
 [CmdletBinding()]
 param(
+    [ValidateSet('setup', 'sync', 'shared', 'docs')]
+    [string[]]$Group = @('setup', 'sync', 'shared', 'docs'),
+    [string]$PythonDir = (Join-Path ([System.Environment]::GetFolderPath('LocalApplicationData')) 'Python' 'bin'),
     [switch]$Keep
 )
 
@@ -36,6 +53,14 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $SandboxRoot = Join-Path $RepoRoot '.test-sandbox'
 $Pwsh = [System.Environment]::ProcessPath
+# What New-Sandbox leaves out of the copy: PC-specific files, and the development tools' own.
+# internal/tests/helpers.py has the same list.
+$NotCopied = @('.git', '.generated', 'local-settings.json', '.test-sandbox', '.python', '.venv', '.pytest_cache',
+    '.ruff_cache', '.mypy_cache', '.coverage', 'htmlcov')
+if (-not (Test-Path -LiteralPath (Join-Path $PythonDir 'python.exe') -PathType Leaf)) {
+    Write-Host ('No python.exe in {0}. Install Python with the Python install manager, or name a folder that has one with -PythonDir.' -f $PythonDir) -ForegroundColor Red
+    exit 1
+}
 $script:Checks = 0
 $script:Failures = 0
 $script:GroupFailed = $false
@@ -170,6 +195,17 @@ function Get-LinkTarget {
     return $item.LinkTarget
 }
 
+function Get-GeneratedStamp {
+    # Each different stamp in a generated skill's commands, which name it as --skill <name>
+    # --stamp <stamp>.
+    param(
+        [Parameter(Mandatory)][string]$Generated,
+        [Parameter(Mandatory)][string]$Name
+    )
+    $text = [System.IO.File]::ReadAllText((Join-Path $Generated "skills/$Name/SKILL.md"))
+    @([regex]::Matches($text, "--skill $Name --stamp ([0-9a-f]+)") | ForEach-Object { $_.Groups[1].Value }) | Select-Object -Unique
+}
+
 function Test-Link {
     param(
         [Parameter(Mandatory)][string]$Name,
@@ -204,12 +240,15 @@ function New-Sandbox {
         Upstream    = Join-Path $root 'tools-upstream'
     }
 
-    # The copy: this repo's working tree, without its git data, generated files, settings, or
-    # sandboxes.
+    # The copy: this repo's working tree, without its git data, generated files, settings,
+    # sandboxes, Python link, or development tools and their caches.
     New-Item -ItemType Directory -Path $box.Tools | Out-Null
     foreach ($item in @(Get-ChildItem -LiteralPath $RepoRoot -Force)) {
-        if ($item.Name -in @('.git', '.generated', 'local-settings.json', '.test-sandbox')) { continue }
+        if (($item.Name -in $NotCopied) -or ($item.Name -like '.coverage.*')) { continue }
         Copy-Item -LiteralPath $item.FullName -Destination $box.Tools -Recurse -Force
+    }
+    foreach ($cache in @(Get-ChildItem -LiteralPath $box.Tools -Recurse -Directory -Force -Filter '__pycache__')) {
+        Remove-Item -LiteralPath $cache.FullName -Recurse -Force
     }
     $settings = [ordered]@{
         contentDir       = $box.Content.Replace('\', '/')
@@ -224,6 +263,10 @@ function New-Sandbox {
     $claudeSettings = [ordered]@{ permissions = [ordered]@{ additionalDirectories = @($box.Content, $box.Tools) } }
     Write-TextFile -Path (Join-Path $box.Profile '.claude/settings.json') -Text ($claudeSettings | ConvertTo-Json -Depth 5)
     Write-TextFile -Path (Join-Path $box.Profile '.codex/config.toml') -Text ("project_doc_max_bytes = 65536`n`n[sandbox_workspace_write]`nwritable_roots = ['{0}']`n" -f $box.Content)
+    # Where setup looks for the Python install manager's shortcuts in a test profile.
+    $pythonParent = Join-Path $box.Profile 'AppData/Local/Python'
+    New-Item -ItemType Directory -Path $pythonParent -Force | Out-Null
+    New-Item -ItemType Junction -Path (Join-Path $pythonParent 'bin') -Target $PythonDir | Out-Null
 
     # dev-home, with a remote and some content.
     Invoke-Git @('init', '--quiet', '--bare', '-b', 'main', $box.Remote) | Out-Null
@@ -264,7 +307,8 @@ function Remove-Sandbox {
         else { [System.IO.File]::Delete($item.FullName) }
     }
     Remove-Item -LiteralPath $full -Recurse -Force
-    if (@(Get-ChildItem -LiteralPath $SandboxRoot -Force).Count -eq 0) { Remove-Item -LiteralPath $SandboxRoot -Force }
+    # Other groups may be running at the same time, and one may have just made its sandbox here.
+    try { [System.IO.Directory]::Delete($SandboxRoot, $false) } catch { }
 }
 
 function Complete-Group {
@@ -330,7 +374,15 @@ function Test-Setup {
     $nested = @(Get-ChildItem -LiteralPath (Join-Path $generated 'skills') -Recurse -Filter 'SKILL.md' | Select-String -Pattern 'PowerShell\(\s*pwsh')
     Test-Check 'pre-approves pwsh commands only for the Bash tool' ($nested.Count -eq 0) @($nested | ForEach-Object { '{0}:{1}' -f $_.Path, $_.LineNumber })
     Test-Check 'points the handoff skill at its generated template' ($skill.Contains("$toolsForward/.generated/skills/handoff/template.md"))
-    Test-Check 'writes the shared scripts, and their folder into the pre-approvals' ((Test-Path -LiteralPath "$generated/skill-scripts/facts.ps1" -PathType Leaf) -and $skill.Contains("Bash(pwsh -NoProfile -File $toolsForward/.generated/skill-scripts/facts.ps1 handoff environment)"))
+    $prepareCommand = '{0}/.python/python.exe -I {0}/.generated/shared-skill-scripts/prepare.py --skill handoff --stamp ' -f $toolsForward
+    Test-Check 'writes the shared scripts, and Python and their folder into the pre-approvals' ((Test-Path -LiteralPath "$generated/shared-skill-scripts/facts.py" -PathType Leaf) -and (Test-Path -LiteralPath "$generated/shared-skill-scripts/prepare.py" -PathType Leaf) -and ($skill -match ([regex]::Escape("Bash($prepareCommand") + '[0-9a-f]{12} handoff environment newer-commits\)')))
+    Test-Check 'writes the stand-in for the old path of facts.ps1' (Test-Path -LiteralPath "$generated/skill-scripts/facts.ps1" -PathType Leaf)
+    Test-Link 'links .python to the Python it finds' (Join-Path $box.Tools '.python') (Join-Path $box.Profile 'AppData/Local/Python/bin')
+
+    # Each skill's commands carry one stamp of its own, the start of a SHA-256.
+    $stamps = @{}
+    foreach ($name in @('handoff', 'knowledge')) { $stamps[$name] = @(Get-GeneratedStamp -Generated $generated -Name $name) }
+    Test-Check 'stamps each skill''s commands with one stamp of its own' (($stamps['handoff'].Count -eq 1) -and ($stamps['knowledge'].Count -eq 1) -and ($stamps['handoff'][0] -match '^[0-9a-f]{12}$') -and ($stamps['handoff'][0] -ne $stamps['knowledge'][0])) @(('handoff: ' + ($stamps['handoff'] -join ', ')), ('knowledge: ' + ($stamps['knowledge'] -join ', ')))
 
     # Each file a tool loads gets the note, whatever skills there are, and no other file does.
     $marker = '<!-- Generated by dev-home-tools setup from '
@@ -371,6 +423,74 @@ function Test-Setup {
     $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
     $other = @($run.Lines | Where-Object { $_ -notmatch '^TEST\s' })
     Test-Check 'a second run changes nothing and prints nothing else' (($run.ExitCode -eq 0) -and ($other.Count -eq 0)) $run.Lines
+
+    # A stamp follows the text an agent loads, SKILL.md, and not the skill's other files.
+    $handoffFolder = Join-Path $box.Tools 'templates/skills/handoff'
+    $skillText = [System.IO.File]::ReadAllText((Join-Path $handoffFolder 'SKILL.md'))
+    $templateText = [System.IO.File]::ReadAllText((Join-Path $handoffFolder 'template.md'))
+    Add-Content -LiteralPath (Join-Path $handoffFolder 'template.md') -Value '- A line added to the template.'
+    Invoke-Script -Path $setup -Arguments @('-Quiet') | Out-Null
+    $afterTemplate = @(Get-GeneratedStamp -Generated $generated -Name 'handoff')
+    Add-Content -LiteralPath (Join-Path $handoffFolder 'SKILL.md') -Value 'A line added to the skill.'
+    Invoke-Script -Path $setup -Arguments @('-Quiet') | Out-Null
+    $afterSkill = @(Get-GeneratedStamp -Generated $generated -Name 'handoff')
+    Test-Check 'a skill''s stamp changes with its SKILL.md, and not with its other files' ((($afterTemplate -join '') -eq $stamps['handoff'][0]) -and ($afterSkill.Count -eq 1) -and ($afterSkill[0] -ne $stamps['handoff'][0])) @("first: $($stamps['handoff'])", "after the template: $afterTemplate", "after SKILL.md: $afterSkill")
+    Write-TextFile -Path (Join-Path $handoffFolder 'SKILL.md') -Text $skillText
+    Write-TextFile -Path (Join-Path $handoffFolder 'template.md') -Text $templateText
+    $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
+    Test-Check 'the stamp comes back with the text' ((($run.ExitCode -eq 0)) -and ((@(Get-GeneratedStamp -Generated $generated -Name 'handoff') -join '') -eq $stamps['handoff'][0])) $run.Lines
+
+    # .python: re-pointed once its python.exe is gone, reported when no Python is found, and left
+    # alone when it isn't a link.
+    $pythonLink = Join-Path $box.Tools '.python'
+    $pythonBin = Join-Path $box.Profile 'AppData/Local/Python/bin'
+    $noPython = Join-Path $box.Root 'no-python'
+    New-Item -ItemType Directory -Path $noPython | Out-Null
+    [System.IO.Directory]::Delete($pythonLink, $false)
+    New-Item -ItemType Junction -Path $pythonLink -Target $noPython | Out-Null
+    $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
+    Test-Check 're-points .python when its python.exe is gone' (($run.ExitCode -eq 0) -and (Test-HasLine $run.Lines '^LINKED\s+Python for the skills')) $run.Lines
+    Test-Link '.python links to the Python it finds again' $pythonLink $pythonBin
+    [System.IO.Directory]::Delete($pythonBin, $false)
+    $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
+    Test-Check 'reports when no Python 3.12 or later is found' (($run.ExitCode -eq 1) -and (Test-HasLine $run.Lines '^PROBLEM\s+Python for the skills: no Python 3\.12 or later')) $run.Lines
+    New-Item -ItemType Junction -Path $pythonBin -Target $PythonDir | Out-Null
+    [System.IO.Directory]::Delete($pythonLink, $false)
+    New-Item -ItemType Directory -Path $pythonLink | Out-Null
+    $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
+    Test-Check 'leaves alone a .python that is not a link' (($run.ExitCode -eq 1) -and (Test-HasLine $run.Lines 'is not a link') -and (Test-Path -LiteralPath $pythonLink -PathType Container) -and ($null -eq (Get-LinkTarget $pythonLink))) $run.Lines
+    [System.IO.Directory]::Delete($pythonLink, $false)
+    $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
+    Test-Link 'links .python again once the folder is gone' $pythonLink $pythonBin
+
+    # In the generated folder: Python's bytecode cache stays beside the scripts, a link that isn't
+    # setup's stays and nothing behind it changes, and a folder whose templates are gone goes,
+    # cache and all.
+    $cacheFile = Join-Path $generated 'shared-skill-scripts/__pycache__/facts.cpython-399.pyc'
+    Write-TextFile -Path $cacheFile -Text 'cache'
+    $outside = Join-Path $box.Root 'outside'
+    Write-TextFile -Path (Join-Path $outside 'keep.txt') -Text "keep`n"
+    $topLink = Join-Path $generated 'someone-elses-link'
+    $innerLink = Join-Path $generated 'skills/handoff/someone-elses-link'
+    New-Item -ItemType Junction -Path $topLink -Target $outside | Out-Null
+    New-Item -ItemType Junction -Path $innerLink -Target $outside | Out-Null
+    $oldScripts = Join-Path $generated 'old-scripts'
+    Write-TextFile -Path (Join-Path $oldScripts 'old.py') -Text "pass`n"
+    Write-TextFile -Path (Join-Path $oldScripts '__pycache__/old.cpython-399.pyc') -Text 'cache'
+    $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
+    Test-Check 'keeps Python''s bytecode cache beside the scripts' (($run.ExitCode -eq 0) -and (Test-Path -LiteralPath $cacheFile -PathType Leaf)) $run.Lines
+    Test-Check 'leaves links in the generated folder alone, and what they point to' ((Test-Path -LiteralPath (Join-Path $outside 'keep.txt')) -and ($null -ne (Get-LinkTarget $topLink)) -and ($null -ne (Get-LinkTarget $innerLink))) $run.Lines
+    Test-Check 'removes a generated folder with no templates, cache and all' (-not (Test-Path -LiteralPath $oldScripts)) $run.Lines
+    [System.IO.Directory]::Delete($topLink, $false)
+    [System.IO.Directory]::Delete($innerLink, $false)
+    $standIns = Join-Path $generated 'skill-scripts'
+    [System.IO.Directory]::Delete($standIns, $true)
+    New-Item -ItemType Junction -Path $standIns -Target $outside | Out-Null
+    $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
+    Test-Check 'reports a generated folder that is a link, and writes nothing through it' (($run.ExitCode -eq 1) -and (Test-HasLine $run.Lines 'is a link, so setup left it alone') -and (@(Get-ChildItem -LiteralPath $outside -Force).Count -eq 1)) $run.Lines
+    [System.IO.Directory]::Delete($standIns, $false)
+    $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
+    Test-Check 'writes that folder again once the link is gone' (($run.ExitCode -eq 0) -and (Test-Path -LiteralPath (Join-Path $standIns 'facts.ps1') -PathType Leaf)) $run.Lines
 
     Copy-Item -LiteralPath (Join-Path $box.Profile '.claude/settings.json') -Destination (Join-Path $box.Root 'claude-settings.json')
     Copy-Item -LiteralPath (Join-Path $box.Profile '.codex/config.toml') -Destination (Join-Path $box.Root 'config.toml')
@@ -757,208 +877,6 @@ function Test-Sync {
 }
 
 # ---------------------------------------------------------------------------------------------
-# The skills' facts.ps1
-
-function Invoke-Facts {
-    # Runs facts.ps1 in a folder, for the handoff topic unless others are named. Returns the exit
-    # code, the output lines, the values printed, and their keys in the order printed.
-    param(
-        [Parameter(Mandatory)][string]$Script,
-        [Parameter(Mandatory)][string]$Folder,
-        [string[]]$Topics = @('handoff')
-    )
-    Push-Location -LiteralPath $Folder
-    try { $run = Invoke-Script -Path $Script -Arguments $Topics } finally { Pop-Location }
-    $values = @{}
-    $keys = [System.Collections.Generic.List[string]]::new()
-    foreach ($line in $run.Lines) {
-        if ($line -match '^(\w+): (.*)$') {
-            $values[$Matches[1]] = $Matches[2]
-            $keys.Add($Matches[1])
-        }
-    }
-    return [pscustomobject]@{ ExitCode = $run.ExitCode; Lines = $run.Lines; Values = $values; Keys = $keys }
-}
-
-function Get-TestFirstCommit {
-    # The start of a repo's first commit on the main line, worked out here without facts.ps1.
-    param([Parameter(Mandatory)][string]$Repo)
-    return (Invoke-Git @('-C', $Repo, 'rev-list', '--first-parent', '--max-parents=0', 'HEAD'))[0].Substring(0, 7)
-}
-
-function Test-Facts {
-    Write-Host
-    Write-Host 'skill scripts: facts.ps1' -ForegroundColor Cyan
-    $script:GroupFailed = $false
-    $box = New-Sandbox -Name 'facts'
-    $run = Invoke-Script -Path (Join-Path $box.Tools 'setup.ps1') -Arguments @('-Quiet')
-    Test-Check 'setup runs cleanly first' ($run.ExitCode -eq 0) $run.Lines
-    $facts = Join-Path $box.Tools '.generated/skill-scripts/facts.ps1'
-
-    # Git also looks for a repo in parent folders, and the sandbox is inside this repo.
-    $ceiling = $env:GIT_CEILING_DIRECTORIES
-    $env:GIT_CEILING_DIRECTORIES = $box.Root.Replace('\', '/')
-    # facts.ps1 picks the link form from CLAUDE_CODE_ENTRYPOINT, which the session running the
-    # tests may have set. The checks run without it, except where they set it.
-    $entrypoint = $env:CLAUDE_CODE_ENTRYPOINT
-    $env:CLAUDE_CODE_ENTRYPOINT = $null
-    try {
-        $repo = Join-Path $box.Root 'Sample Repo'
-        Invoke-Git @('init', '--quiet', '-b', 'main', $repo) | Out-Null
-        Invoke-Git @('-C', $repo, 'commit', '--quiet', '--allow-empty', '-m', 'test: first') | Out-Null
-        Invoke-Git @('-C', $repo, 'remote', 'add', 'origin', 'https://example.com/placeholder.git') | Out-Null
-        $id = Get-TestFirstCommit -Repo $repo
-
-        # Each address, and the folder under handoffs/ it should get. {id} stands for the start of
-        # the sample repo's first commit.
-        $cases = [ordered]@{
-            'https://github.com/You/Tool.git'                      = 'github/you/tool'
-            'git@github.com:You/Tool.git'                          = 'github/you/tool'
-            'ssh://git@github.com/You/Tool'                        = 'github/you/tool'
-            'https://user:secret@github.com:443/you/tool/'         = 'github/you/tool'
-            'https://gitlab.com/Team/Sub/App.git'                  = 'gitlab/team/sub/app'
-            'git@gitlab.com:team/sub/app.git'                      = 'gitlab/team/sub/app'
-            'https://someone@bitbucket.org/Space/Repo.git'         = 'bitbucket/space/repo'
-            'git@bitbucket.org:space/repo.git'                     = 'bitbucket/space/repo'
-            'https://Org@dev.azure.com/Org/My%20Project/_git/Repo' = 'azure-devops/org/my project/repo'
-            'git@ssh.dev.azure.com:v3/Org/My%20Project/Repo'       = 'azure-devops/org/my project/repo'
-            'https://dev.azure.com/Org/_git/Repo'                  = 'azure-devops/org/repo/repo'
-            'https://git.example.com/team/app.git'                 = 'other/sample repo-{id}'
-            'git@git.example.com:team/app.git'                     = 'other/sample repo-{id}'
-            'https://github.com/just-an-owner'                     = 'other/sample repo-{id}'
-            'https://github.com/you/%2E%2E'                        = 'other/sample repo-{id}'
-            'https://gitlab.com/team/../../outside'                = 'other/sample repo-{id}'
-            'https://github.com/you/to*ol'                         = 'other/sample repo-{id}'
-            'C:/repos/tool'                                        = 'local/sample repo-{id}'
-            'C:\repos\tool'                                        = 'local/sample repo-{id}'
-            'file:///C:/repos/tool'                                = 'local/sample repo-{id}'
-            '../tool'                                              = 'local/sample repo-{id}'
-        }
-        foreach ($address in $cases.Keys) {
-            $folder = $cases[$address].Replace('{id}', $id)
-            Invoke-Git @('-C', $repo, 'remote', 'set-url', 'origin', $address) | Out-Null
-            $result = Invoke-Facts -Script $facts -Folder $repo
-            Test-Check ('files {0} under {1}' -f $address, $folder) (($result.ExitCode -eq 0) -and ($result.Values['handoff'] -ceq "handoffs/$folder/HANDOFF.md")) $result.Lines
-        }
-
-        Invoke-Git @('-C', $repo, 'remote', 'set-url', 'origin', 'https://github.com/You/Tool.git') | Out-Null
-        $result = Invoke-Facts -Script $facts -Folder $repo
-        $v = $result.Values
-        Test-Check 'prints the service, the name, and the draft path' (($v['service'] -ceq 'github') -and ($v['name'] -ceq 'you/tool') -and ($v['draft'] -ceq '.drafts/github/you/tool/issue.md')) $result.Lines
-        Test-Check 'the handoff topic prints its six lines, in order, and nothing else' (($result.Lines.Count -eq 6) -and (($result.Keys -join ' ') -ceq 'service name handoff draft link project')) $result.Lines
-
-        # The other topic, and how topics are asked for.
-        $environmentLine = 'environment: {0}' -f [System.Environment]::MachineName
-        $result = Invoke-Facts -Script $facts -Folder $repo -Topics @('environment')
-        Test-Check 'the environment topic prints this computer''s name, and nothing else' (($result.ExitCode -eq 0) -and ($result.Lines.Count -eq 1) -and ($result.Lines[0] -ceq $environmentLine)) $result.Lines
-        $result = Invoke-Facts -Script $facts -Folder $repo -Topics @('environment', 'handoff')
-        Test-Check 'two topics print in the order asked' (($result.ExitCode -eq 0) -and (($result.Keys -join ' ') -ceq 'environment service name handoff draft link project')) $result.Lines
-        $result = Invoke-Facts -Script $facts -Folder $repo -Topics @()
-        Test-Check 'with no topic, stops and names the topics' (($result.ExitCode -eq 1) -and ($result.Keys.Count -eq 0) -and (Test-HasLine $result.Lines 'at least one topic: handoff, environment')) $result.Lines
-        $result = Invoke-Facts -Script $facts -Folder $repo -Topics @('environment', 'weather')
-        Test-Check 'an unknown topic stops it before any fact is printed' (($result.ExitCode -eq 1) -and ($result.Keys.Count -eq 0) -and (Test-HasLine $result.Lines 'No such topic: weather')) $result.Lines
-        # The sandbox keeps dev-home beside the sample repo.
-        Test-Check 'prints the handoff and the project folder relative to the current folder' (($v['link'] -ceq '../dev-home/handoffs/github/you/tool/HANDOFF.md') -and ($v['project'] -ceq '.')) $result.Lines
-
-        # A repo named with an accent, a space, #, %, and parentheses: a link target can't hold them as is.
-        Invoke-Git @('-C', $repo, 'remote', 'set-url', 'origin', 'https://dev.azure.com/Org/My%20Project/_git/R%C3%A9po%20%231%20(100%25)') | Out-Null
-        $result = Invoke-Facts -Script $facts -Folder $repo
-        Test-Check 'the link percent-encodes what a link target can''t hold' ($result.Values['link'] -ceq '../dev-home/handoffs/azure-devops/org/my%20project/r%C3%A9po%20%231%20%28100%25%29/HANDOFF.md') $result.Lines
-
-        Invoke-Git @('-C', $repo, 'remote', 'set-url', 'origin', 'https://git.example.com/team/app.git') | Out-Null
-        $result = Invoke-Facts -Script $facts -Folder $repo
-        $v = $result.Values
-        Test-Check 'another host: service other, named by folder and first commit' (($v['service'] -ceq 'other') -and ($v['name'] -ceq "sample repo-$id") -and ($v['draft'] -ceq ".drafts/other/sample repo-$id/issue.md")) $result.Lines
-
-        Invoke-Git @('-C', $repo, 'remote', 'remove', 'origin') | Out-Null
-        $result = Invoke-Facts -Script $facts -Folder $repo
-        $v = $result.Values
-        Test-Check 'no origin: service local, named by folder and first commit' (($v['service'] -ceq 'local') -and ($v['name'] -ceq "sample repo-$id") -and ($v['handoff'] -ceq "handoffs/local/sample repo-$id/HANDOFF.md")) $result.Lines
-        Test-Check 'the link writes a space in the folder name as %20' ($v['link'] -ceq "../dev-home/handoffs/local/sample%20repo-$id/HANDOFF.md") $result.Lines
-
-        $sub = Join-Path $repo 'docs'
-        New-Item -ItemType Directory -Path $sub | Out-Null
-        $result = Invoke-Facts -Script $facts -Folder $sub
-        Test-Check 'in a subfolder, the links lead up to the handoff and the project folder' (($result.Values['link'] -ceq "../../dev-home/handoffs/local/sample%20repo-$id/HANDOFF.md") -and ($result.Values['project'] -ceq '..')) $result.Lines
-
-        # Claude Code's CLI shows replies in a terminal, which opens file:/// URLs but not relative
-        # paths. Git may spell the project folder's drive letter in another case.
-        $env:CLAUDE_CODE_ENTRYPOINT = 'cli'
-        try { $result = Invoke-Facts -Script $facts -Folder $sub } finally { $env:CLAUDE_CODE_ENTRYPOINT = $null }
-        $handoffUrl = 'file:///{0}/handoffs/local/sample%20repo-{1}/HANDOFF.md' -f $box.Content.Replace('\', '/'), $id
-        $projectUrl = 'file:///{0}' -f $repo.Replace('\', '/').Replace(' ', '%20')
-        Test-Check 'in Claude Code''s CLI, the links are file:/// URLs, and project is the top of the checkout' (($result.Values['link'] -ceq $handoffUrl) -and ($result.Values['project'] -eq $projectUrl)) $result.Lines
-
-        $env:CLAUDE_CODE_ENTRYPOINT = 'claude-vscode'
-        try { $result = Invoke-Facts -Script $facts -Folder $repo } finally { $env:CLAUDE_CODE_ENTRYPOINT = $null }
-        Test-Check 'anywhere else Claude Code runs, the links stay relative' (($result.Values['link'] -ceq "../dev-home/handoffs/local/sample%20repo-$id/HANDOFF.md") -and ($result.Values['project'] -ceq '.')) $result.Lines
-
-        # Merging in unrelated history gives the repo a second first commit.
-        Invoke-Git @('-C', $repo, 'checkout', '--quiet', '--orphan', 'other-history') | Out-Null
-        Invoke-Git @('-C', $repo, 'commit', '--quiet', '--allow-empty', '-m', 'test: other history') | Out-Null
-        Invoke-Git @('-C', $repo, 'checkout', '--quiet', 'main') | Out-Null
-        Invoke-Git @('-C', $repo, 'merge', '--quiet', '--no-ff', '--allow-unrelated-histories', '-m', 'test: merge', 'other-history') | Out-Null
-        $roots = Invoke-Git @('-C', $repo, 'rev-list', '--max-parents=0', 'HEAD')
-        $result = Invoke-Facts -Script $facts -Folder $repo
-        Test-Check 'merged-in unrelated history keeps the main line''s first commit' (($roots.Count -eq 2) -and ($result.Values['handoff'] -ceq "handoffs/local/sample repo-$id/HANDOFF.md")) (@($roots) + $result.Lines)
-
-        $empty = Join-Path $box.Root 'Empty Repo'
-        Invoke-Git @('init', '--quiet', '-b', 'main', $empty) | Out-Null
-        $result = Invoke-Facts -Script $facts -Folder $empty
-        Test-Check 'a repo with no commits yet goes by its folder name alone' ($result.Values['handoff'] -ceq 'handoffs/local/empty repo/HANDOFF.md') $result.Lines
-
-        # A shallow clone's oldest commit is only where the download stopped, not the first one.
-        $source = Join-Path $box.Root 'shallow-source'
-        Invoke-Git @('init', '--quiet', '-b', 'main', $source) | Out-Null
-        Invoke-Git @('-C', $source, 'commit', '--quiet', '--allow-empty', '-m', 'test: one') | Out-Null
-        Invoke-Git @('-C', $source, 'commit', '--quiet', '--allow-empty', '-m', 'test: two') | Out-Null
-        $shallow = Join-Path $box.Root 'Shallow Clone'
-        Invoke-Git @('clone', '--quiet', '--depth', '1', ('file:///' + $source.Replace('\', '/')), $shallow) | Out-Null
-        $result = Invoke-Facts -Script $facts -Folder $shallow
-        Test-Check 'a shallow clone goes by its folder name alone' ($result.Values['handoff'] -ceq 'handoffs/local/shallow clone/HANDOFF.md') $result.Lines
-
-        $plain = Join-Path $box.Root 'Plain Folder'
-        New-Item -ItemType Directory -Path $plain | Out-Null
-        $result = Invoke-Facts -Script $facts -Folder $plain
-        Test-Check 'a folder outside git goes under local, by its name, and is the project folder' (($result.Values['handoff'] -ceq 'handoffs/local/plain folder/HANDOFF.md') -and ($result.Values['project'] -ceq '.')) $result.Lines
-
-        $main = Join-Path $box.Root 'Main Checkout'
-        $worktree = Join-Path $box.Root 'worktree'
-        Invoke-Git @('init', '--quiet', '-b', 'main', $main) | Out-Null
-        Invoke-Git @('-C', $main, 'commit', '--quiet', '--allow-empty', '-m', 'test: main') | Out-Null
-        Invoke-Git @('-C', $main, 'worktree', 'add', '--quiet', $worktree) | Out-Null
-        $mainId = Get-TestFirstCommit -Repo $main
-        $result = Invoke-Facts -Script $facts -Folder $worktree
-        Test-Check 'a worktree with no origin uses its main checkout''s folder name and first commit' ($result.Values['handoff'] -ceq "handoffs/local/main checkout-$mainId/HANDOFF.md") $result.Lines
-        Invoke-Git @('-C', $main, 'remote', 'add', 'origin', 'git@github.com:you/tool.git') | Out-Null
-        $result = Invoke-Facts -Script $facts -Folder $worktree
-        Test-Check 'a worktree uses its main checkout''s origin' ($result.Values['handoff'] -ceq 'handoffs/github/you/tool/HANDOFF.md') $result.Lines
-
-        # When git fails, a guessed path would file the handoff in the wrong place.
-        $broken = Join-Path $box.Root 'Broken Repo'
-        Invoke-Git @('init', '--quiet', '-b', 'main', $broken) | Out-Null
-        Invoke-Git @('-C', $broken, 'commit', '--quiet', '--allow-empty', '-m', 'test: first') | Out-Null
-        Add-Content -LiteralPath (Join-Path $broken '.git/config') -Value '[broken'
-        $result = Invoke-Facts -Script $facts -Folder $broken
-        Test-Check 'in a repo git can''t read, stops with git''s error instead of guessing' (($result.ExitCode -eq 1) -and (-not $result.Values.ContainsKey('handoff')) -and (Test-HasLine $result.Lines 'bad config')) $result.Lines
-        $result = Invoke-Facts -Script $facts -Folder $broken -Topics @('environment', 'handoff')
-        Test-Check 'when one topic fails, prints no fact from the others either' (($result.ExitCode -eq 1) -and ($result.Keys.Count -eq 0)) $result.Lines
-
-        $path = $env:PATH
-        $env:PATH = (@($path -split ';' | Where-Object { $_ -and (-not (Test-Path -LiteralPath (Join-Path $_ 'git.exe'))) }) -join ';')
-        try { $result = Invoke-Facts -Script $facts -Folder $main } finally { $env:PATH = $path }
-        Test-Check 'without git, stops with a message instead of guessing' (($result.ExitCode -eq 1) -and (-not $result.Values.ContainsKey('handoff')) -and (Test-HasLine $result.Lines 'git was not found')) $result.Lines
-    }
-    finally {
-        $env:GIT_CEILING_DIRECTORIES = $ceiling
-        $env:CLAUDE_CODE_ENTRYPOINT = $entrypoint
-    }
-
-    Test-RealProfile -Box $box
-    Complete-Group -Box $box
-}
-
-# ---------------------------------------------------------------------------------------------
 # internal/shared/, read without running anything
 
 function Find-ProcessWideChange {
@@ -1065,139 +983,6 @@ function Test-Shared {
 }
 
 # ---------------------------------------------------------------------------------------------
-# templates/skill-scripts/, read without running anything
-
-function Find-ChangeOrNetworkUse {
-    # Where a script changes something or reaches the network, as far as its text can show: a
-    # command that writes, removes, downloads, or starts another program; output sent to a file;
-    # a .NET call that writes a file or uses the network; a command whose name is worked out as
-    # it runs; or git, unless it goes through Invoke-Git with a subcommand that only reads. Read
-    # from the parsed script, so an alias such as rm counts too. Returns each statement found.
-    param([Parameter(Mandatory)][System.Management.Automation.Language.Ast]$Ast)
-    $aliases = @{}
-    foreach ($alias in @(Get-Alias)) { $aliases[$alias.Name] = $alias.Definition }
-    $banned = @('Set-Content', 'Add-Content', 'Clear-Content', 'Out-File', 'New-Item', 'Remove-Item', 'Move-Item', 'Copy-Item',
-        'Rename-Item', 'Set-Item', 'Clear-Item', 'Set-ItemProperty', 'Export-Csv', 'Export-Clixml', 'Start-Process',
-        'Invoke-Expression', 'Invoke-WebRequest', 'Invoke-RestMethod', 'Start-BitsTransfer', 'Test-Connection',
-        'Test-NetConnection', 'gh', 'curl', 'wget', 'ssh', 'scp', 'pwsh', 'powershell', 'cmd')
-    # What Invoke-Git may be given: the first word, or first two, of a git command that only reads.
-    $gitReads = @('rev-parse', 'rev-list', 'remote get-url')
-    $isString = { $args[0] -is [System.Management.Automation.Language.StringConstantExpressionAst] }
-
-    $found = [System.Collections.Generic.List[System.Management.Automation.Language.Ast]]::new()
-    foreach ($node in $Ast.FindAll({ $args[0] -is [System.Management.Automation.Language.CommandAst] }, $true)) {
-        $command = $node.GetCommandName()
-        if (-not $command) { $found.Add($node); continue }
-        if ($aliases.ContainsKey($command)) { $command = $aliases[$command] }
-        $command = $command -replace '\.exe$', ''
-        if ($banned -contains $command) { $found.Add($node); continue }
-        if ($command -eq 'git') {
-            # Only the function that wraps git may run it. What that function is given is checked
-            # where it's called.
-            $function = $node.Parent
-            while ($function -and ($function -isnot [System.Management.Automation.Language.FunctionDefinitionAst])) { $function = $function.Parent }
-            if ((-not $function) -or ($function.Name -ne 'Invoke-Git')) { $found.Add($node) }
-            continue
-        }
-        if ($command -eq 'Invoke-Git') {
-            $words = @()
-            for ($i = 0; $i -lt ($node.CommandElements.Count - 1); $i++) {
-                $element = $node.CommandElements[$i]
-                if (($element -is [System.Management.Automation.Language.CommandParameterAst]) -and ($element.ParameterName -eq 'Arguments')) {
-                    $words = @($node.CommandElements[$i + 1].FindAll($isString, $true) | ForEach-Object { $_.Value })
-                }
-            }
-            $firstTwo = @($words | Select-Object -First 2) -join ' '
-            if (($words.Count -eq 0) -or (($gitReads -notcontains $words[0]) -and ($gitReads -notcontains $firstTwo))) { $found.Add($node) }
-        }
-    }
-    foreach ($node in $Ast.FindAll({ $args[0] -is [System.Management.Automation.Language.FileRedirectionAst] }, $true)) {
-        if ($node.Location.Extent.Text -ne '$null') { $found.Add($node) }
-    }
-    foreach ($node in $Ast.FindAll({ $args[0] -is [System.Management.Automation.Language.InvokeMemberExpressionAst] }, $true)) {
-        if ((-not $node.Static) -or ($node.Expression -isnot [System.Management.Automation.Language.TypeExpressionAst])) { continue }
-        if (($node.Expression.TypeName.FullName -match '(^|\.)(File|Directory)$') -and ($node.Member.Value -notmatch '^(Exists|Read\w*|Get\w*|Enumerate\w*)$')) { $found.Add($node) }
-    }
-    foreach ($node in $Ast.FindAll({ $args[0] -is [System.Management.Automation.Language.TypeExpressionAst] }, $true)) {
-        if ($node.TypeName.FullName -match '(^|\.)(Net|Diagnostics)\.|Registry') { $found.Add($node) }
-    }
-
-    # The whole statement each one is in, once each.
-    $seen = [System.Collections.Generic.HashSet[int]]::new()
-    foreach ($node in $found) {
-        $statement = $node
-        while ($statement.Parent -and ($statement -isnot [System.Management.Automation.Language.PipelineAst])) { $statement = $statement.Parent }
-        if ($statement -isnot [System.Management.Automation.Language.PipelineAst]) { $statement = $node }
-        if ($seen.Add($statement.Extent.StartOffset)) { $statement }
-    }
-}
-
-function Test-SkillScripts {
-    Write-Host
-    Write-Host 'templates/skill-scripts/' -ForegroundColor Cyan
-    $script:GroupFailed = $false
-    $scriptsRoot = Join-Path $RepoRoot 'templates/skill-scripts'
-    $shared = @(Get-ChildItem -LiteralPath $scriptsRoot -Filter '*.ps1' -File)
-    # A skill is a folder with a SKILL.md, as setup sees it.
-    $skills = @(Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'templates/skills') -Directory |
-            Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'SKILL.md') })
-
-    # Each script's description names the skills that run it, so whoever changes the script knows
-    # what depends on it. A skill runs it when any of the skill's files holds its path.
-    $wrongCallers = [System.Collections.Generic.List[string]]::new()
-    foreach ($file in $shared) {
-        $listed = @()
-        if ((Get-Content -LiteralPath $file.FullName -Raw) -match '(?m)^\s*Called by:\s*(.+?)\s*$') { $listed = @($Matches[1] -split '\s*,\s*' | Sort-Object) }
-        $path = '{{SKILL_SCRIPTS_DIR}}/' + $file.Name
-        $callers = @($skills | Where-Object {
-                @(Get-ChildItem -LiteralPath $_.FullName -Recurse -File | Where-Object { ([string](Get-Content -LiteralPath $_.FullName -Raw)).Contains($path) }).Count -gt 0
-            } | ForEach-Object { $_.Name } | Sort-Object)
-        if (($listed -join ', ') -cne ($callers -join ', ')) {
-            $wrongCallers.Add(('{0} says "Called by: {1}", but these skills run it: {2}' -f $file.Name, ($listed -join ', '), ($callers -join ', ')))
-        }
-    }
-    Test-Check 'each shared script lists exactly the skills that run it' (($shared.Count -gt 0) -and ($wrongCallers.Count -eq 0)) $wrongCallers
-
-    # A skill writes each command in full, and pre-approves that exact text, so a command that
-    # differs by one word would ask the user first.
-    $commands = 0
-    $wrongCommands = [System.Collections.Generic.List[string]]::new()
-    foreach ($skill in $skills) {
-        $text = [string](Get-Content -LiteralPath (Join-Path $skill.FullName 'SKILL.md') -Raw)
-        $allowed = if ($text -match '(?m)^allowed-tools:\s*"(.*)"\s*$') { $Matches[1] } else { '' }
-        foreach ($match in [regex]::Matches($text, '`(pwsh -NoProfile -File \{\{SKILL_SCRIPTS_DIR\}\}/([^\s`]+)[^`]*)`')) {
-            $commands++
-            if (-not (Test-Path -LiteralPath (Join-Path $scriptsRoot $match.Groups[2].Value) -PathType Leaf)) {
-                $wrongCommands.Add(('{0} runs {1}, which is not in templates/skill-scripts/' -f $skill.Name, $match.Groups[2].Value))
-            }
-            if (-not $allowed.Contains(('Bash({0})' -f $match.Groups[1].Value))) {
-                $wrongCommands.Add(('{0} does not pre-approve: {1}' -f $skill.Name, $match.Groups[1].Value))
-            }
-        }
-    }
-    Test-Check 'each shared-script command in a skill names a script that exists, and is pre-approved word for word' (($commands -gt 0) -and ($wrongCommands.Count -eq 0)) $wrongCommands
-
-    # facts.ps1 only reports, and only from this PC, which is what lets a skill run it without
-    # asking. First, that the search finds each kind of change and network use, and no reads.
-    $planted = @('Set-Content x.txt 1', 'rm x.txt', '"a" > x.txt', '[System.IO.File]::WriteAllText(''x'', ''y'')',
-        'Invoke-WebRequest https://example.com', '[System.Net.WebClient]::new()', 'gh issue list', 'git fetch',
-        'Invoke-Git -Arguments @(''fetch'', ''origin'')', '& $anything')
-    $reads = @('Get-Content x.txt', '$read = [System.IO.File]::ReadAllText(''x'')', 'Test-Path x', '$read = "a" 2>$null',
-        '[regex]::Replace(''a'', ''b'', ''c'')', 'Invoke-Git -Arguments @(''rev-parse'', ''HEAD'')',
-        'Invoke-Git -Arguments @(''remote'', ''get-url'', ''origin'')', 'function Invoke-Git { param($Arguments) & git @Arguments }')
-    $sample = [System.Management.Automation.Language.Parser]::ParseInput((($planted + $reads) -join "`n"), [ref]$null, [ref]$null)
-    $caught = @(Find-ChangeOrNetworkUse -Ast $sample | ForEach-Object { $_.Extent.Text })
-    Test-Check 'the search for changes and network use finds each kind, aliases included, and no reads' (($caught.Count -eq $planted.Count) -and (@($planted | Where-Object { $caught -notcontains $_ }).Count -eq 0)) $caught
-
-    $uses = [System.Collections.Generic.List[string]]::new()
-    $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $scriptsRoot 'facts.ps1'), [ref]$null, [ref]$null)
-    foreach ($node in @(Find-ChangeOrNetworkUse -Ast $ast)) {
-        $uses.Add(('facts.ps1:{0}: {1}' -f $node.Extent.StartLineNumber, $node.Extent.Text))
-    }
-    Test-Check 'facts.ps1 changes nothing and never uses the network' ($uses.Count -eq 0) $uses
-}
-
-# ---------------------------------------------------------------------------------------------
 # README.md and docs/
 
 function Get-MarkdownLink {
@@ -1285,12 +1070,10 @@ function Test-Docs {
 # ---------------------------------------------------------------------------------------------
 
 Write-Host ('Testing the working tree of {0}' -f $RepoRoot)
-Test-Setup
-Test-Sync
-Test-Facts
-Test-Shared
-Test-SkillScripts
-Test-Docs
+if ($Group -contains 'setup') { Test-Setup }
+if ($Group -contains 'sync') { Test-Sync }
+if ($Group -contains 'shared') { Test-Shared }
+if ($Group -contains 'docs') { Test-Docs }
 Write-Host
 if ($script:Failures -gt 0) {
     Write-Host ('{0} of {1} checks failed.' -f $script:Failures, $script:Checks) -ForegroundColor Red

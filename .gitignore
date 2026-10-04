@@ -3,8 +3,21 @@
 .generated/
 local-settings.json
 
-# Throwaway copies that internal/tests/Invoke-Tests.ps1 builds and runs.
+# This PC's link to the Python the skills run, which setup.ps1 makes.
+.python/
+
+# Throwaway copies that the tests build and run.
 .test-sandbox/
+
+# The development tools (see pyproject.toml) and what they write.
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
 
 # Windows thumbnail cache files
 Thumbs.db
