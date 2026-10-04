@@ -1,15 +1,15 @@
 # Written by setup.ps1 on each PC: the skills, the scripts they share, and the rules, with this
 # PC's paths filled in, and this PC's settings. Never commit either.
-.generated/
-local-settings.json
+/internal/.generated/
+/local-settings.json
 
 # This PC's link to the Python the skills run, which setup.ps1 makes.
-.python/
+/internal/.python/
 
 # Throwaway copies that the tests build and run.
 .test-sandbox/
 
-# The development tools (see pyproject.toml) and what they write.
+# The development tools (see internal/development/pyproject.toml) and what they write.
 .venv/
 __pycache__/
 .pytest_cache/

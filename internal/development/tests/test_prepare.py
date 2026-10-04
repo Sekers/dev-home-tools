@@ -16,7 +16,6 @@ from helpers import (
     Sandbox,
     git,
     new_repo,
-    run,
     run_command,
     run_pwsh,
     sandbox_for,
@@ -152,20 +151,6 @@ def test_when_the_syncs_setup_changes_the_skill_says_reload_and_no_facts(
     assert result.keys == [], str(result)
     assert new_command != command, "the skill on disk has a new stamp"
     assert run_command(box, command, cwd=project).keys == FACT_KEYS, "and the old one is back"
-
-
-def test_the_old_path_of_facts_ps1_says_the_skill_changed(box: Sandbox, project: Path) -> None:
-    # A session that loaded the handoff skill before the move to facts.py runs this.
-    pwsh = shutil.which("pwsh") or "pwsh"
-    stand_in = str(box.generated / "skill-scripts" / "facts.ps1")
-    result = run(
-        box, [pwsh, "-NoProfile", "-File", stand_in, "handoff", "environment"], cwd=project
-    )
-    assert result.code == 1, str(result)
-    assert result.keys == [], str(result)
-    assert result.has_line(r"handoff skill has changed .* run the skill's command again"), str(
-        result
-    )
 
 
 def test_commits_nothing(box: Sandbox, project: Path) -> None:

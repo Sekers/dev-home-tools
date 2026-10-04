@@ -264,33 +264,33 @@ Everything beyond getting started is in the `docs/` folder:
 | --- | --- |
 | `setup.ps1`, `sync.ps1`, `update.ps1` | The scripts (see [The scripts](docs/reference/scripts.md)). |
 | `templates/` | Everything setup fills in with each PC's paths. |
-| `templates/operating-rules/` | The operating rules every session loads, along with your global rules. Filled in on every setup run, into `.generated/`. |
-| `templates/skills/` | The skills, one folder each. Filled in on every setup run, into `.generated/`. |
-| `templates/shared-skill-scripts/` | Python scripts that the skills share and only agents run. Filled in on every setup run, into `.generated/`. |
-| `templates/skill-scripts/` | Only a stand-in for an old path, which tells a session with old skill steps to load the new ones. Removed once the scripts have all moved to Python. |
+| `templates/operating-rules/` | The operating rules every session loads, along with your global rules. Filled in on every setup run, into `internal/.generated/`. |
+| `templates/skills/` | The skills, one folder each. Filled in on every setup run, into `internal/.generated/`. |
+| `templates/shared-skill-scripts/` | Python scripts that the skills share and only agents run. Filled in on every setup run, into `internal/.generated/`. |
 | `templates/dev-home-starter/` | The files a brand-new dev-home starts with. Filled in once, when setup creates it. |
 | `internal/` | dev-home-tools' own machinery, which nobody runs directly. |
 | `internal/shared/` | What the three scripts share, one file per job: `git.ps1` runs git, and `output.ps1` prints status lines. |
-| `internal/tests/` | The tests: pytest files, and `Invoke-Tests.ps1` for the PowerShell scripts that haven't moved to Python yet. |
-| `pyproject.toml`, `uv.lock` | The development tools and their settings. People who only use dev-home-tools never need them. |
+| `internal/development/` | Only for changing dev-home-tools: the development tools' settings (`pyproject.toml`, `uv.lock`) and the tests (`tests/`: pytest files, and `Invoke-Tests.ps1` for the PowerShell scripts that haven't moved to Python yet). People who only use dev-home-tools never need it. |
 | `docs/` | Everything this README leaves out (see [Documentation](#documentation)). |
 
 [AGENTS.md](AGENTS.md) has the rules for changing this repo, for people and agents alike, and
 [Design decisions](docs/development/decisions.md) says why it works the way it does.
 
 Changing dev-home-tools takes [uv](https://docs.astral.sh/uv/), which installs the pinned
-development tools (pytest, ruff, and mypy) the first time you run them. Before committing, run:
+development tools (pytest, ruff, and mypy) the first time you run them. Before committing, run
+these from this folder:
 
 ```powershell
-uv run pytest
-uv run ruff check
-uv run ruff format --check
-uv run mypy
+uv run --directory internal/development pytest
+uv run --directory internal/development ruff check --config pyproject.toml . ../../templates/shared-skill-scripts
+uv run --directory internal/development ruff format --check --config pyproject.toml . ../../templates/shared-skill-scripts
+uv run --directory internal/development mypy
 ```
 
-The tests check the working tree in throwaway copies under `.test-sandbox/`, never your real
-profile or dev-home, and need no network. Never point this folder's scripts at a test dev-home:
-they would rewrite the files your real links depend on.
+The tools run from `internal/development/`, so their environment and caches stay there. The
+tests check the working tree in throwaway copies under `internal/development/.test-sandbox/`,
+never your real profile or dev-home, and need no network. Never point this folder's scripts at
+a test dev-home: they would rewrite the files your real links depend on.
 
 ## License
 

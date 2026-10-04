@@ -17,22 +17,37 @@ Never leave it to the reader to guess which: name the repo whenever both could f
 | Always-on rules | `templates/operating-rules/operating-rules.md`: the operating rules, the same for everyone | `global-rules/global-rules.md`: that person's global rules |
 | Skills | `templates/skills/`: the `handoff` and `knowledge` skills. `templates/shared-skill-scripts/`: the scripts they share | `skills/`: that person's own skills |
 | `AGENTS.md`, `CLAUDE.md`, `README.md` | About dev-home-tools, and working on it | About that dev-home, and working in it |
-| Only here | `setup.ps1`, `sync.ps1`, `update.ps1`, `templates/dev-home-starter/`, `internal/`, `docs/`, `pyproject.toml` | `handoffs/`, `knowledge/` |
+| Only here | `setup.ps1`, `sync.ps1`, `update.ps1`, `templates/dev-home-starter/`, `internal/`, `docs/` | `handoffs/`, `knowledge/` |
 
+- The root holds only what must be there, and the scripts a person runs by hand:
+  `.gitattributes`, `.gitignore`, `AGENTS.md`, `CLAUDE.md`, `LICENSE`, `README.md`,
+  `setup.ps1`, `sync.ps1`, `update.ps1`, and the folders `templates/`, `internal/`, and
+  `docs/`. Setup adds `local-settings.json` on each PC. Never add a file or folder to the
+  root, or have a script or tool create one there, without asking the person you work for
+  first, in a question of its own.
 - `templates/dev-home-starter/` holds a new dev-home's first files. Setup copies them in once,
   and after that they're the person's own: a change to the starter never reaches an existing
   dev-home.
-- `internal/` is dev-home-tools' own machinery, which nobody runs directly: `internal/shared/`,
-  which the three scripts load, and `internal/tests/`.
-- Where a script goes depends on who runs it. The root holds only what a person may run by hand;
-  agents run those too. A script that only agents run goes under `templates/`: in its skill's
-  folder when one skill uses it, and in `templates/shared-skill-scripts/` when skills share it.
-  The same goes for anything else a skill has: one skill's in its own folder, and what several
-  skills share in a `templates/shared-skill-*` folder for its kind.
+- `internal/` is dev-home-tools' own machinery, which nobody runs directly:
+  - `internal/shared/`: what the three scripts load.
+  - `internal/.generated/` and `internal/.python/`: what setup makes on each PC (see
+    "Templates, generated files, and names"). Git ignores both.
+  - `internal/development/`: everything only people changing dev-home-tools use: the
+    development tools' settings (`pyproject.toml`, `uv.lock`), the tests, and what the tools
+    write there, such as `.venv/`, their caches, and the tests' `.test-sandbox/`.
+- Where a script goes depends on who runs it. The only scripts in the root are the ones a person
+  may run by hand; agents run those too. A script that only agents run goes under
+  `templates/`: in its skill's folder when one skill uses it, and in
+  `templates/shared-skill-scripts/` when skills share it. The same goes for anything else a
+  skill has: one skill's in its own folder, and what several skills share in a
+  `templates/shared-skill-*` folder for its kind.
 - dev-home-tools is moving from PowerShell to Python in three phases: the skills' scripts
   first, then `sync.ps1` and `update.ps1`, then `setup.ps1`. `docs/development/decisions.md`
-  has the plan. Until it's done, the old paths keep working: `templates/skill-scripts/` holds
-  only a stand-in for the old `facts.ps1`.
+  has the plan.
+- No backwards compatibility in the scripts, for now: no code that moves an older layout
+  forward, keeps an old path working, or forwards an old script to a new one. When a change
+  needs something done on each PC that's already set up, say so, so it gets done there by hand.
+  `docs/development/decisions.md` says why, and when that changes.
 
 ## Privacy
 
@@ -59,20 +74,20 @@ Never leave it to the reader to guess which: name the repo whenever both could f
   forward-slash absolute paths.
   - `{{TOOLS_DIR}}`: this repo's folder on that PC.
   - `{{CONTENT_DIR}}`: that person's dev-home folder.
-  - `{{SKILL_DIR}}`: the skill's own folder under `.generated/skills/` (skills only).
+  - `{{SKILL_DIR}}`: the skill's own folder under `internal/.generated/skills/` (skills only).
   - `{{SHARED_SKILL_SCRIPTS_DIR}}`: the shared scripts' folder,
-    `.generated/shared-skill-scripts/`.
-  - `{{PYTHON}}`: `.python/python.exe` in this repo's folder, the Python the scripts run with.
-    `.python/` is a junction setup makes to a Python 3.12 or later, so the path is short, has no
-    spaces, and is the same on every PC.
+    `internal/.generated/shared-skill-scripts/`.
+  - `{{PYTHON}}`: `internal/.python/python.exe` in this repo's folder, the Python the scripts
+    run with. `internal/.python/` is a junction setup makes to a Python 3.12 or later, so the
+    path is short, has no spaces, and is the same on every PC.
   - `{{SKILL_STAMP}}`: the skill's stamp, a fingerprint of its `SKILL.md` (skills only). See
     "Skills".
-- `templates/operating-rules/`, `templates/skills/`, `templates/shared-skill-scripts/`, and
-  `templates/skill-scripts/` are filled in on every setup run and written to `.generated/`, at the
-  same paths. The skills and rules there are what gets linked into the tools, and the skills run
-  the shared scripts from there. The starter has no copy there, because setup fills it in only
-  once (see "The two repos"). Python adds `__pycache__` folders there when the scripts run, and
-  setup leaves those, and any link, alone.
+- `templates/operating-rules/`, `templates/skills/`, and `templates/shared-skill-scripts/` are
+  filled in on every setup run and written to `internal/.generated/`, at the same paths. The
+  skills and rules there are what gets linked into the tools, and the skills run the shared
+  scripts from there. The starter has no copy there, because setup fills it in only once (see
+  "The two repos"). Python adds `__pycache__` folders there when the scripts run, and setup
+  leaves those, and any link, alone.
 - A file and its folder keep the same name at every stage: template, generated copy, and link,
   such as `operating-rules/operating-rules.md`. The links in each Claude Code folder's `rules/`
   are the exception: nothing there says which repo a name belongs to, so each is named
@@ -80,8 +95,8 @@ Never leave it to the reader to guess which: name the repo whenever both could f
 - Pre-approvals in `allowed-tools` match the literal command text, so write every command with a
   placeholder where the path goes, never a variable or `~`. After setup fills it in, the command
   in the steps and the pre-approval match exactly.
-- Never edit `.generated/` or `local-settings.json`, or change `.python/`. Setup rewrites them,
-  and git ignores them.
+- Never edit `internal/.generated/` or `local-settings.json`, or change `internal/.python/`.
+  Setup rewrites them, and git ignores them.
 
 ## Skills (templates/skills/)
 
@@ -175,9 +190,9 @@ Never leave it to the reader to guess which: name the repo whenever both could f
   to start gets the new copies. Put anything the scripts would otherwise each copy there. The
   files only define functions, and no script defines one with the same name (a test checks).
 - Safe to re-run. setup.ps1 never overwrites or deletes anything except its own generated files,
-  links whose target is gone, links it made to skills that no longer exist, the `.python/`
-  junction once the `python.exe` it leads to is gone, and settings files the person said yes to
-  changing. A settings change is shown as a diff first, waits for a typed
+  links whose target is gone, links it made to skills that no longer exist, the
+  `internal/.python/` junction once the `python.exe` it leads to is gone, and settings files the
+  person said yes to changing. A settings change is shown as a diff first, waits for a typed
   yes, saves a dated backup, and is never offered for a file the script can't fully parse.
   sync.ps1 never stages, commits, or discards a file it wasn't given, and runs no destructive git
   command: no `add -A`, stash, `reset`, `checkout`, `clean`, or rebase.
@@ -226,25 +241,38 @@ Never leave it to the reader to guess which: name the repo whenever both could f
 
 ## Testing
 
-- Before proposing a commit, run `uv run pytest`, `uv run ruff check`,
-  `uv run ruff format --check`, and `uv run mypy`. uv installs the tools pinned in
-  `pyproject.toml` and `uv.lock`, for development only: people who use dev-home-tools never
-  need them. The tests check the working tree, uncommitted changes included, and need no network
-  or GitHub.
-- `uv run pytest` is the one entry point. It runs the Python tests in `internal/tests/`, which
-  share `helpers.py`, and runs `Invoke-Tests.ps1` one group at a time for the PowerShell scripts
-  that haven't moved to Python yet. Each phase of the move takes its scripts' groups to pytest.
-- The tests never run the scripts in this folder. They copy the repo into `.test-sandbox/` (git
-  ignores it) and run the copy, whose `local-settings.json` sets `testHomeDir`, so every setup
-  run from the copy uses a scratch profile instead of the real one.
+- Before proposing a commit, run these four, from this repo's root:
+
+  ```text
+  uv run --directory internal/development pytest
+  uv run --directory internal/development ruff check --config pyproject.toml . ../../templates/shared-skill-scripts
+  uv run --directory internal/development ruff format --check --config pyproject.toml . ../../templates/shared-skill-scripts
+  uv run --directory internal/development mypy
+  ```
+
+  uv installs the tools pinned in `internal/development/pyproject.toml` and `uv.lock`, for
+  development only: people who use dev-home-tools never need them. The tools run from that
+  folder, so their settings, `.venv`, and caches stay out of the root. Ruff looks for settings
+  only in each file's own folder and the ones above it, so the ruff commands name them for the
+  skill scripts. The tests check the working tree, uncommitted changes included, and need no
+  network or GitHub.
+- pytest is the one entry point. It runs the Python tests in `internal/development/tests/`,
+  which share `helpers.py`, and runs `Invoke-Tests.ps1` one group at a time for the PowerShell
+  scripts that haven't moved to Python yet. Each phase of the move takes its scripts' groups to
+  pytest.
+- The tests never run the scripts in this folder. They copy the repo into
+  `internal/development/.test-sandbox/` (git ignores it), leaving out `internal/development/`
+  and what's set up for this PC, and run the copy, whose `local-settings.json` sets
+  `testHomeDir`, so every setup run from the copy uses a scratch profile instead of the real
+  one.
 - Test only through them. This folder may be someone's live setup: running its scripts against
-  a test dev-home rewrites `.generated/` and `local-settings.json`, which their real links depend
-  on. Never add `testHomeDir` to a real `local-settings.json`.
+  a test dev-home rewrites `internal/.generated/` and `local-settings.json`, which their real
+  links depend on. Never add `testHomeDir` to a real `local-settings.json`.
 - Run the skills' commands word for word from the sandbox's generated skills, as `helpers.py`
   does. It starts each with the test environment's Python, by its real path, in place of
-  `.python/python.exe`, because a virtual environment's `python.exe` can't run through a
-  junction; that also lets coverage measure the scripts. One test runs a command unchanged.
-  `uv run pytest --cov` reports coverage, on demand and with no minimum.
+  `internal/.python/python.exe`, because a virtual environment's `python.exe` can't run through
+  a junction; that also lets coverage measure the scripts. One test runs a command unchanged.
+  Adding `--cov` to the pytest command reports coverage, on demand and with no minimum.
 - Add a test for every behavior you add or change. Fake only what needs a person or an outside
   service, such as a console answer, `gh`, Developer Mode, or another platform; git and the file
   system stay real. Use `monkeypatch` and small typed fakes first, and `unittest.mock` only with

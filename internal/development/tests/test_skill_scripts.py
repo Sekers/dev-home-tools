@@ -72,12 +72,6 @@ def test_each_shared_script_command_is_stamped_and_pre_approved_word_for_word(
         assert f"PowerShell({command})" in approvals, f"not pre-approved for PowerShell: {command}"
 
 
-def test_no_skill_names_the_old_scripts_folder() -> None:
-    # Setup no longer fills it in. Only the stand-in for an old path is still there.
-    text = {s.name: (s / "SKILL.md").read_text(encoding="utf-8") for s in skills()}
-    assert [name for name, skill in text.items() if "{{SKILL_SCRIPTS_DIR}}" in skill] == []
-
-
 # Samples for the searches below: each line in a "found" list must be found, and nothing in a
 # "not found" list.
 CHANGES = [

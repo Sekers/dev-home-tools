@@ -17,7 +17,7 @@ GROUPS = ["setup", "sync", "shared", "docs"]
 @pytest.mark.parametrize("group", GROUPS)
 def test_powershell_group(group: str) -> None:
     pwsh = shutil.which("pwsh") or "pwsh"
-    script = REPO_ROOT / "internal" / "tests" / "Invoke-Tests.ps1"
+    script = REPO_ROOT / "internal" / "development" / "tests" / "Invoke-Tests.ps1"
     done = subprocess.run(
         [pwsh, "-NoProfile", "-File", str(script), "-Group", group, "-PythonDir", sys.base_prefix],
         cwd=REPO_ROOT,

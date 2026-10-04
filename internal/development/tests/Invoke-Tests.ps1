@@ -5,18 +5,19 @@
     checks internal/shared/, which the three load, and the links in README.md and docs/.
 
 .DESCRIPTION
-    uv run pytest runs this script, one group at a time, beside the Python tests in this folder,
+    pytest runs this script, one group at a time, beside the Python tests in this folder,
     which cover the scripts the skills share. The groups here move to pytest as the scripts they
     test move to Python.
 
-    Never runs the scripts in this folder. Each group of tests builds a sandbox under
-    .test-sandbox/, which git ignores: a copy of this repo's working tree (uncommitted changes
-    included), a scratch profile, a dev-home with some content, and local bare repos standing in
-    for GitHub. The copy's local-settings.json sets testHomeDir before anything in the copy runs,
-    so every setup run from it, including the ones sync.ps1 and update.ps1 start, uses the
-    scratch profile instead of yours. The scratch profile's Python install manager folder is a
-    junction to a real Python, which setup links the copy's .python to. Nothing here uses the
-    network or GitHub.
+    Never runs the scripts in this repo. Each group of tests builds a sandbox under
+    internal/development/.test-sandbox/, which git ignores: a copy of this repo's working tree
+    (uncommitted changes included, development tools left out), a scratch profile, a dev-home
+    with some content, and local bare repos standing in for GitHub. The copy's
+    local-settings.json sets testHomeDir before anything in the copy runs, so every setup run
+    from it, including the ones sync.ps1 and update.ps1 start, uses the scratch profile instead
+    of yours. The scratch profile's Python install manager folder is a junction to a real
+    Python, which setup links the copy's internal/.python to. Nothing here uses the network or
+    GitHub.
 
     Prints PASS, FAIL, or SKIP for each check, and exits 1 if any check failed. A group's sandbox
     is deleted when all its checks pass, and kept for a look when one fails, or with -Keep.
@@ -37,7 +38,7 @@
     Keep every sandbox, even when its checks pass.
 
 .EXAMPLE
-    pwsh -NoProfile -File internal/tests/Invoke-Tests.ps1 -Group setup
+    pwsh -NoProfile -File internal/development/tests/Invoke-Tests.ps1 -Group setup
 #>
 [CmdletBinding()]
 param(
@@ -49,14 +50,15 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# This file is in internal/tests/, two folders below the repo's root.
-$RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$SandboxRoot = Join-Path $RepoRoot '.test-sandbox'
+# This file is in internal/development/tests/, three folders below the repo's root.
+$RepoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+$SandboxRoot = Join-Path $RepoRoot 'internal/development/.test-sandbox'
 $Pwsh = [System.Environment]::ProcessPath
-# What New-Sandbox leaves out of the copy: PC-specific files, and the development tools' own.
-# internal/tests/helpers.py has the same list.
-$NotCopied = @('.git', '.generated', 'local-settings.json', '.test-sandbox', '.python', '.venv', '.pytest_cache',
-    '.ruff_cache', '.mypy_cache', '.coverage', 'htmlcov')
+# What New-Sandbox leaves out of the copy, by its path in the repo: what belongs to this PC
+# (including the Python link, which would copy the Python install), and everything for
+# development, the sandboxes among it. Python's __pycache__ folders are left out wherever they
+# are. helpers.py, beside this file, has the same list.
+$NotCopied = @('.git', 'local-settings.json', 'internal/.generated', 'internal/.python', 'internal/development')
 if (-not (Test-Path -LiteralPath (Join-Path $PythonDir 'python.exe') -PathType Leaf)) {
     Write-Host ('No python.exe in {0}. Install Python with the Python install manager, or name a folder that has one with -PythonDir.' -f $PythonDir) -ForegroundColor Red
     exit 1
@@ -220,6 +222,26 @@ function Test-Link {
 # ---------------------------------------------------------------------------------------------
 # Sandboxes
 
+function Copy-RepoFolder {
+    # Copies a folder of this repo into a sandbox, file by file, leaving out what $NotCopied
+    # names, Python's __pycache__ folders, and every link: Copy-Item -Recurse would copy what a
+    # link points to, such as a whole Python install.
+    param(
+        [Parameter(Mandatory)][string]$Source,
+        [Parameter(Mandatory)][string]$Destination,
+        [string]$Relative = ''
+    )
+    New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    foreach ($item in @(Get-ChildItem -LiteralPath $Source -Force)) {
+        $path = if ($Relative) { '{0}/{1}' -f $Relative, $item.Name } else { $item.Name }
+        if (($NotCopied -contains $path) -or ($item.Name -eq '__pycache__')) { continue }
+        if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { continue }
+        $target = Join-Path $Destination $item.Name
+        if ($item.PSIsContainer) { Copy-RepoFolder -Source $item.FullName -Destination $target -Relative $path }
+        else { Copy-Item -LiteralPath $item.FullName -Destination $target -Force }
+    }
+}
+
 function New-Sandbox {
     # Builds a sandbox and returns its paths. The copy's local-settings.json, with testHomeDir,
     # is written before anything in the copy can run. With -ToolsRepo, the copy is also a git
@@ -240,16 +262,8 @@ function New-Sandbox {
         Upstream    = Join-Path $root 'tools-upstream'
     }
 
-    # The copy: this repo's working tree, without its git data, generated files, settings,
-    # sandboxes, Python link, or development tools and their caches.
-    New-Item -ItemType Directory -Path $box.Tools | Out-Null
-    foreach ($item in @(Get-ChildItem -LiteralPath $RepoRoot -Force)) {
-        if (($item.Name -in $NotCopied) -or ($item.Name -like '.coverage.*')) { continue }
-        Copy-Item -LiteralPath $item.FullName -Destination $box.Tools -Recurse -Force
-    }
-    foreach ($cache in @(Get-ChildItem -LiteralPath $box.Tools -Recurse -Directory -Force -Filter '__pycache__')) {
-        Remove-Item -LiteralPath $cache.FullName -Recurse -Force
-    }
+    # The copy: this repo's working tree, without what $NotCopied names.
+    Copy-RepoFolder -Source $RepoRoot -Destination $box.Tools
     $settings = [ordered]@{
         contentDir       = $box.Content.Replace('\', '/')
         autoUpdate       = $false
@@ -357,10 +371,11 @@ function Test-Setup {
     $script:GroupFailed = $false
     $box = New-Sandbox -Name 'setup'
     $setup = Join-Path $box.Tools 'setup.ps1'
-    $generated = Join-Path $box.Tools '.generated'
+    $generated = Join-Path $box.Tools 'internal/.generated'
     $toolsForward = $box.Tools.Replace('\', '/')
     $codexRules = Join-Path $box.Profile '.codex/AGENTS.md'
     $settingsPath = Join-Path $box.Tools 'local-settings.json'
+    $rootBefore = @(Get-ChildItem -LiteralPath $box.Tools -Force | ForEach-Object { $_.Name })
 
     $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
     Test-Check 'first run exits 0' ($run.ExitCode -eq 0) $run.Lines
@@ -373,11 +388,14 @@ function Test-Setup {
     # Claude Code's PowerShell tool never pre-approves a command that starts another PowerShell.
     $nested = @(Get-ChildItem -LiteralPath (Join-Path $generated 'skills') -Recurse -Filter 'SKILL.md' | Select-String -Pattern 'PowerShell\(\s*pwsh')
     Test-Check 'pre-approves pwsh commands only for the Bash tool' ($nested.Count -eq 0) @($nested | ForEach-Object { '{0}:{1}' -f $_.Path, $_.LineNumber })
-    Test-Check 'points the handoff skill at its generated template' ($skill.Contains("$toolsForward/.generated/skills/handoff/template.md"))
-    $prepareCommand = '{0}/.python/python.exe -I {0}/.generated/shared-skill-scripts/prepare.py --skill handoff --stamp ' -f $toolsForward
+    Test-Check 'points the handoff skill at its generated template' ($skill.Contains("$toolsForward/internal/.generated/skills/handoff/template.md"))
+    $prepareCommand = '{0}/internal/.python/python.exe -I {0}/internal/.generated/shared-skill-scripts/prepare.py --skill handoff --stamp ' -f $toolsForward
     Test-Check 'writes the shared scripts, and Python and their folder into the pre-approvals' ((Test-Path -LiteralPath "$generated/shared-skill-scripts/facts.py" -PathType Leaf) -and (Test-Path -LiteralPath "$generated/shared-skill-scripts/prepare.py" -PathType Leaf) -and ($skill -match ([regex]::Escape("Bash($prepareCommand") + '[0-9a-f]{12} handoff environment newer-commits\)')))
-    Test-Check 'writes the stand-in for the old path of facts.ps1' (Test-Path -LiteralPath "$generated/skill-scripts/facts.ps1" -PathType Leaf)
-    Test-Link 'links .python to the Python it finds' (Join-Path $box.Tools '.python') (Join-Path $box.Profile 'AppData/Local/Python/bin')
+    Test-Link 'links internal/.python to the Python it finds' (Join-Path $box.Tools 'internal/.python') (Join-Path $box.Profile 'AppData/Local/Python/bin')
+    # The root holds what must be there (AGENTS.md says what). local-settings.json, setup's one
+    # file there, was already written for the test profile.
+    $rootAdded = @(Get-ChildItem -LiteralPath $box.Tools -Force | ForEach-Object { $_.Name } | Where-Object { $rootBefore -notcontains $_ })
+    Test-Check 'adds nothing to the root' ($rootAdded.Count -eq 0) $rootAdded
 
     # Each skill's commands carry one stamp of its own, the start of a SHA-256.
     $stamps = @{}
@@ -440,17 +458,17 @@ function Test-Setup {
     $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
     Test-Check 'the stamp comes back with the text' ((($run.ExitCode -eq 0)) -and ((@(Get-GeneratedStamp -Generated $generated -Name 'handoff') -join '') -eq $stamps['handoff'][0])) $run.Lines
 
-    # .python: re-pointed once its python.exe is gone, reported when no Python is found, and left
-    # alone when it isn't a link.
-    $pythonLink = Join-Path $box.Tools '.python'
+    # The Python link: re-pointed once its python.exe is gone, reported when no Python is found,
+    # and left alone when it isn't a link.
+    $pythonLink = Join-Path $box.Tools 'internal/.python'
     $pythonBin = Join-Path $box.Profile 'AppData/Local/Python/bin'
     $noPython = Join-Path $box.Root 'no-python'
     New-Item -ItemType Directory -Path $noPython | Out-Null
     [System.IO.Directory]::Delete($pythonLink, $false)
     New-Item -ItemType Junction -Path $pythonLink -Target $noPython | Out-Null
     $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
-    Test-Check 're-points .python when its python.exe is gone' (($run.ExitCode -eq 0) -and (Test-HasLine $run.Lines '^LINKED\s+Python for the skills')) $run.Lines
-    Test-Link '.python links to the Python it finds again' $pythonLink $pythonBin
+    Test-Check 're-points the Python link when its python.exe is gone' (($run.ExitCode -eq 0) -and (Test-HasLine $run.Lines '^LINKED\s+Python for the skills')) $run.Lines
+    Test-Link 'the Python link leads to the Python it finds again' $pythonLink $pythonBin
     [System.IO.Directory]::Delete($pythonBin, $false)
     $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
     Test-Check 'reports when no Python 3.12 or later is found' (($run.ExitCode -eq 1) -and (Test-HasLine $run.Lines '^PROBLEM\s+Python for the skills: no Python 3\.12 or later')) $run.Lines
@@ -458,10 +476,10 @@ function Test-Setup {
     [System.IO.Directory]::Delete($pythonLink, $false)
     New-Item -ItemType Directory -Path $pythonLink | Out-Null
     $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
-    Test-Check 'leaves alone a .python that is not a link' (($run.ExitCode -eq 1) -and (Test-HasLine $run.Lines 'is not a link') -and (Test-Path -LiteralPath $pythonLink -PathType Container) -and ($null -eq (Get-LinkTarget $pythonLink))) $run.Lines
+    Test-Check 'leaves alone an internal/.python that is not a link' (($run.ExitCode -eq 1) -and (Test-HasLine $run.Lines 'is not a link') -and (Test-Path -LiteralPath $pythonLink -PathType Container) -and ($null -eq (Get-LinkTarget $pythonLink))) $run.Lines
     [System.IO.Directory]::Delete($pythonLink, $false)
     $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
-    Test-Link 'links .python again once the folder is gone' $pythonLink $pythonBin
+    Test-Link 'links internal/.python again once the folder is gone' $pythonLink $pythonBin
 
     # In the generated folder: Python's bytecode cache stays beside the scripts, a link that isn't
     # setup's stays and nothing behind it changes, and a folder whose templates are gone goes,
@@ -483,14 +501,14 @@ function Test-Setup {
     Test-Check 'removes a generated folder with no templates, cache and all' (-not (Test-Path -LiteralPath $oldScripts)) $run.Lines
     [System.IO.Directory]::Delete($topLink, $false)
     [System.IO.Directory]::Delete($innerLink, $false)
-    $standIns = Join-Path $generated 'skill-scripts'
-    [System.IO.Directory]::Delete($standIns, $true)
-    New-Item -ItemType Junction -Path $standIns -Target $outside | Out-Null
+    $sharedScripts = Join-Path $generated 'shared-skill-scripts'
+    [System.IO.Directory]::Delete($sharedScripts, $true)
+    New-Item -ItemType Junction -Path $sharedScripts -Target $outside | Out-Null
     $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
     Test-Check 'reports a generated folder that is a link, and writes nothing through it' (($run.ExitCode -eq 1) -and (Test-HasLine $run.Lines 'is a link, so setup left it alone') -and (@(Get-ChildItem -LiteralPath $outside -Force).Count -eq 1)) $run.Lines
-    [System.IO.Directory]::Delete($standIns, $false)
+    [System.IO.Directory]::Delete($sharedScripts, $false)
     $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
-    Test-Check 'writes that folder again once the link is gone' (($run.ExitCode -eq 0) -and (Test-Path -LiteralPath (Join-Path $standIns 'facts.ps1') -PathType Leaf)) $run.Lines
+    Test-Check 'writes that folder again once the link is gone' (($run.ExitCode -eq 0) -and (Test-Path -LiteralPath (Join-Path $sharedScripts 'facts.py') -PathType Leaf)) $run.Lines
 
     Copy-Item -LiteralPath (Join-Path $box.Profile '.claude/settings.json') -Destination (Join-Path $box.Root 'claude-settings.json')
     Copy-Item -LiteralPath (Join-Path $box.Profile '.codex/config.toml') -Destination (Join-Path $box.Root 'config.toml')
@@ -505,11 +523,6 @@ function Test-Setup {
     Add-Content -LiteralPath $operatingTemplate -Value '- A line added to the operating rules.'
     $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
     Test-Check 'a changed template reaches the generated copy and Codex''s rules' ((Get-Content -LiteralPath $codexRules -Raw).Contains('A line added to the operating rules.') -and (Get-Content -LiteralPath "$generated/operating-rules/operating-rules.md" -Raw).Contains('A line added to the operating rules.')) $run.Lines
-
-    # A Codex rules file written by an earlier version of setup, which started with another marker.
-    Write-TextFile -Path $codexRules -Text "<!-- Written by dev-home-tools setup.ps1, from its operating rules. -->`n`nOld rules.`n"
-    $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
-    Test-Check 'replaces a Codex rules file that an earlier setup wrote' (($run.ExitCode -eq 0) -and (Get-Content -LiteralPath $codexRules -Raw).StartsWith($marker)) $run.Lines
 
     # Two skills whose frontmatter ends in an unusual way: one closing line with trailing spaces,
     # and one with no closing line at all.
@@ -701,7 +714,7 @@ function Test-Sync {
     $sync = Join-Path $box.Tools 'sync.ps1'
     $update = Join-Path $box.Tools 'update.ps1'
     $settingsPath = Join-Path $box.Tools 'local-settings.json'
-    $generatedSkill = Join-Path $box.Tools '.generated/skills/handoff/SKILL.md'
+    $generatedSkill = Join-Path $box.Tools 'internal/.generated/skills/handoff/SKILL.md'
     $upstreamSkill = Join-Path $box.Upstream 'templates/skills/handoff/SKILL.md'
 
     $run = Invoke-Script -Path (Join-Path $box.Tools 'setup.ps1') -Arguments @('-Quiet')

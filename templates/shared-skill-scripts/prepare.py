@@ -23,8 +23,8 @@ written as UTF-8.
 
 Committing is never done here: a skill commits through sync.ps1 -Message.
 
-Examples, shortened: the skills give the full path of python.exe, which is .python/python.exe in
-dev-home-tools' folder, and of this script.
+Examples, shortened: the skills give the full path of python.exe, which is
+internal/.python/python.exe in dev-home-tools' folder, and of this script.
 
     python.exe -I prepare.py --skill handoff --stamp 3f9c2ab1d0e4 handoff environment newer-commits
 

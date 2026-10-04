@@ -12,7 +12,7 @@ them into Claude Code and Codex.
 **The option:** ship the skills, and perhaps hooks, as Claude Code and Codex plugins. That could
 bring each tool's own install and updates, no junctions or Windows-only steps, and hooks that
 enforce a rule instead of asking agents to follow it, such as blocking an edit under
-`.generated/`.
+`internal/.generated/`.
 
 **Why not:** Codex would gain nothing, and Claude Code would gain little that setup can't
 already do. Checked on 2026-09-30 against both tools' plugin docs, and with a test plugin in
@@ -54,27 +54,27 @@ become worth having.
 
 **Decision:** none for now, beyond the note at the top of each generated file.
 
-**The problem:** setup rewrites `.generated/` (and Codex's `AGENTS.md`) on every run without
-checking for edits, so an edit made there is lost at the next sync, with no message. Each
-skill's `SKILL.md` and the operating rules open with a note naming the template to change
+**The problem:** setup rewrites `internal/.generated/` (and Codex's `AGENTS.md`) on every run
+without checking for edits, so an edit made there is lost at the next sync, with no message.
+Each skill's `SKILL.md` and the operating rules open with a note naming the template to change
 instead, which agents see when the skill or rules load, and people see when they open the file.
-That leaves the generated files with no note (`facts.py`, `prepare.py`, the stand-in
-`facts.ps1`, `filing-rules.md`, and the handoff `template.md`, which can't have one because it's
-copied into every new handoff), and anyone who ignores the note.
+That leaves the generated files with no note (`facts.py`, `prepare.py`, `filing-rules.md`, and
+the handoff `template.md`, which can't have one because it's copied into every new handoff), and
+anyone who ignores the note.
 
 **Options set aside:** record what setup last wrote and, when a file differs, keep a copy and
 report a `PROBLEM` (as chezmoi does); keep a `.bak` of the old file (as Ruler does); or make the
 generated files read-only.
 
 **Look again if:** an edit is ever actually lost, or plugins are looked at again (see above),
-where a hook could block agents' edits under `.generated/`.
+where a hook could block agents' edits under `internal/.generated/`.
 
 ## Scripts the skills share are generated once, and skills point to them
 
 **Decision:** a script that more than one skill may run, and that only agents run, lives in
 `templates/shared-skill-scripts/`. Setup generates one copy into
-`.generated/shared-skill-scripts/`, and every skill runs that copy. The first was `facts.py`,
-which reports facts about where a session is running, one topic at a time.
+`internal/.generated/shared-skill-scripts/`, and every skill runs that copy. The first was
+`facts.py`, which reports facts about where a session is running, one topic at a time.
 
 **Why not a copy in each skill's folder:** most published skills are built that way, so that a
 skill can be installed alone. These skills come with the toolkit, so that buys little here. One
@@ -86,8 +86,8 @@ one of those.
 
 **Why not inside `templates/skills/`:** setup and the tests treat every folder there as a skill:
 setup generates and links only the ones with a `SKILL.md`, and removes any other folder from
-`.generated/skills/`, and the docs test wants a page in `docs/skills/` for each. A shared folder
-there would need an exception in each of those.
+`internal/.generated/skills/`, and the docs test wants a page in `docs/skills/` for each. A
+shared folder there would need an exception in each of those.
 
 **Why not `internal/`, or a folder of its own, run in place:** a half-finished edit to a script
 that runs in place is live at once in every session on the PC. A generated script changes only
@@ -246,16 +246,16 @@ tests run setup with input from `NUL` and from an open, silent pipe.
 
 **Look again if:** a phase can't be done without adding time.
 
-## The skills run Python through a .python junction
+## The skills run Python through a junction, internal/.python
 
 **Decision:** every skill command starts with `{{PYTHON}} -I`, and setup fills in `{{PYTHON}}`
-as `.python/python.exe` in dev-home-tools' folder. `.python/` is a directory junction setup makes
-to the Python install manager's shortcut folder, `%LocalAppData%\Python\bin`, or else to the
-folder of the newest Python 3.12 or later in the registry (PEP 514), which covers the
-traditional installer. Each run checks only that the junction's `python.exe` is there, which
-starts no process. Setup starts Python to check its version only when it makes the junction, or
-re-points it because that `python.exe` is gone. A symbolic link will do the same job on macOS and
-Linux.
+as `internal/.python/python.exe` in dev-home-tools' folder. `internal/.python/` is a directory
+junction setup makes to the Python install manager's shortcut folder,
+`%LocalAppData%\Python\bin`, or else to the folder of the newest Python 3.12 or later in the
+registry (PEP 514), which covers the traditional installer. Each run checks only that the
+junction's `python.exe` is there, which starts no process. Setup starts Python to check its
+version only when it makes the junction, or re-points it because that `python.exe` is gone. A
+symbolic link will do the same job on macOS and Linux.
 
 **Why a junction:** dev-home-tools' path has no spaces, so the command is the same unquoted text
 in Claude Code's Bash and PowerShell tools and in Codex, and each is pre-approved as both
@@ -268,10 +268,12 @@ both tools pre-approving a Python command). Python runs normally through a junct
 ones as they're installed, with no work for setup. They ignore a virtual environment and a
 script's request for a version, so a project's environment can't change which Python runs.
 
-**Why it lives at the root:** it belongs to the PC, like `local-settings.json`. In
-`.generated/`, setup's cleanup deleted the files inside any folder it didn't expect, which
-through a junction would have been the Python install. That cleanup now never looks inside a
-link, either.
+**Why `internal/`:** it's machinery nobody runs directly, which is what `internal/` is for, and
+the root is kept to what must be there (see "What the root holds"). It isn't generated content,
+so not `internal/.generated/`; and sync's and setup's agent commands will run through it too in
+phases 2 and 3, so not `shared-skill-scripts/`. The dot keeps it apart from Python code that
+phase 2 may put in `internal/`. Setup's cleanup of the generated files never looks inside a link,
+so a junction nearby can't lead it into the Python install.
 
 **Why `-I`:** it ignores `PYTHON*` environment variables and the user's site-packages, so nothing
 in a project's environment can change what loads. It costs no measurable time. It also leaves the
@@ -286,11 +288,13 @@ alone. Without it, compiling a 600-line module took about 8 ms on every run.
   for phase 2's commit messages.
 - `python` from the PATH: on Windows it goes through the Microsoft Store alias, which took about
   0.42 s to start.
-- Pointing a test sandbox's `.python/` at the test environment's Python: a virtual environment's
-  `python.exe` can't run through a junction ("failed to locate pyvenv.cfg", tested with uv's
-  virtual environment and Python 3.14). The tests start the skills' commands with that
-  environment's Python by its real path instead, and one test runs a command through
-  `.python/`.
+- Pointing a test sandbox's Python link at the test environment's Python: a virtual
+  environment's `python.exe` can't run through a junction ("failed to locate pyvenv.cfg",
+  tested with uv's virtual environment and Python 3.14). The tests start the skills' commands
+  with that environment's Python by its real path instead, and one test runs a command through
+  the link.
+- One root folder for everything that belongs to the PC (the settings, the generated files, and
+  the link): a bigger change, for files that had no need to move.
 
 **Not tested yet:** the install manager's shortcut after its runtime is uninstalled
 (`py install --refresh` repairs it); a junction on a Dev Drive, which is ReFS and documented as
@@ -336,31 +340,45 @@ instead.
 
 **Look again if:** the tools reload a skill by themselves when its file changes.
 
-## Old paths keep working through the move
+## No backwards compatibility in the scripts, for now
 
-**Decision:** each old path keeps working until one cleanup after phase 3.
+**Decision:** the scripts carry no code for older versions of dev-home-tools: nothing that moves
+an older layout forward, keeps an old path working, or forwards an old script to a new one. When
+a change needs something done on each PC that's already set up, such as deleting a folder the
+old layout used, it's done there by hand, and the change says what.
 
-- Phase 1: `templates/skill-scripts/` keeps only a stand-in `facts.ps1`, which prints that the
-  skill has changed and exits 1. The handoff skill as it was before phase 1 runs `facts.ps1` and
-  stops on an error, so the agent shows the message, and the next typed `/handoff` loads the new
-  steps. The knowledge skill as it was then only ran `sync.ps1`, so phase 1 doesn't affect it.
-- Phases 2 and 3: `sync.ps1`, `update.ps1`, and `setup.ps1` forward to the Python versions:
-  people run them, and the operating rules name them but load only when a session starts. A
-  forwarder costs one more start of Python, about 35 ms, only on an old path.
+**Why:** only the user's own two PCs run dev-home-tools today, so a step by hand on each is
+cheaper than code that stays in the scripts long after both have moved. And dev-home-tools has
+no changelog or version numbers yet, so there's nothing to say which versions such code would
+have to cover.
 
-**Look again if:** phase 3 is done.
+**What it means for the move to Python:** a session that loaded a skill before an update can
+find its old steps naming paths that are gone. Its steps say to show the error and stop, and
+typing the command again loads the new ones; the skill's stamp catches the rest (see above).
+In phases 2 and 3, `sync.ps1`, `update.ps1`, and `setup.ps1` don't forward to the Python
+versions: the operating rules and the docs change with them, and each PC is updated by hand.
+
+**Options set aside:**
+
+- Setup moving an older layout forward, such as removing the root's `.generated/` from before
+  the generated files moved into `internal/`, and re-pointing the links into it.
+- A stand-in at an old script's path, printing that the skill changed.
+- Forwarders from the PowerShell scripts to their Python versions through phases 2 and 3.
+
+**Look again if:** dev-home-tools gets a changelog and version numbers, or people other than its
+author use it.
 
 ## The tests run on pytest
 
-**Decision:** `uv run pytest` is the one entry point for the tests. A root `pyproject.toml`
+**Decision:** pytest is the one entry point for the tests. `internal/development/pyproject.toml`
 holds the 3.12 floor, a development group (`pytest`, `pytest-xdist`, `pytest-cov`, `ruff`,
-`mypy`), and each tool's settings, and `uv.lock` pins them. `mypy` runs in strict mode and `ruff`
-checks and formats from the first Python file. The tests in `internal/tests/` share
-`helpers.py`, and until phase 3 `test_powershell.py` runs `Invoke-Tests.ps1` one group at a time
-for the scripts not moved yet. Fakes only stand in for what needs a person or an outside
-service; git and the file system stay real. Coverage is a report run on demand, with no minimum.
-A test checks that the scripts use only the standard library, since the test tools are
-importable when the tests run them.
+`mypy`), and each tool's settings, and `uv.lock` beside it pins them (see "What the root holds"
+for why there). `mypy` runs in strict mode and `ruff` checks and formats from the first Python
+file. The tests in `internal/development/tests/` share `helpers.py`, and until phase 3
+`test_powershell.py` runs `Invoke-Tests.ps1` one group at a time for the scripts not moved yet.
+Fakes only stand in for what needs a person or an outside service; git and the file system stay
+real. Coverage is a report run on demand, with no minimum. A test checks that the scripts use
+only the standard library, since the test tools are importable when the tests run them.
 
 **Why:** fixtures share one sandbox among a module's tests, `pytest-xdist` runs the groups in
 parallel (the whole suite, PowerShell groups included, in about 30 s), and the "needs a person"
@@ -377,3 +395,57 @@ paths can get tests once they're Python, with small fakes for the person.
 - A coverage minimum: the number would steer what gets tested.
 
 **Look again if:** CI is added, or the suite gets slow.
+
+## What the root holds
+
+**Decision:** the root holds only what must be there, and the scripts a person runs by hand.
+AGENTS.md lists them, with the rule to ask before adding anything there. The rest of what used to
+be there lives under `internal/`: the generated files in `internal/.generated/`, the Python link
+in `internal/.python/`, and everything for development in `internal/development/` (the tools'
+settings, the tests, and what the tools write: `.venv`, caches, and the test sandboxes).
+
+**Why each item stays:**
+
+- `.gitattributes` and `.gitignore`: git applies them to the whole repo only from the root.
+- `AGENTS.md` and `CLAUDE.md`: Codex and Claude Code read them from the root.
+- `LICENSE`: GitHub's docs put it in the root.
+- `README.md`: GitHub's front page, and where people look first. GitHub would also show one from
+  `docs/` or `.github/`, so this one is convention.
+- `setup.ps1`, `sync.ps1`, and `update.ps1`: people run them by hand. They stay the real scripts,
+  with no shortcuts: after phase 3 they run as `py <path>\setup.py`, since the Python install
+  manager's `py` is an app execution alias in `%LocalAppData%\Microsoft\WindowsApps`, which
+  Windows puts on every user's PATH by default (aliases arrived in Windows 10 version 1709), and
+  as `python3` on macOS and Linux.
+- `templates/`: the repo's main content, what setup fills in and links into the tools.
+- `internal/`: there to keep everything else out of the root.
+- `docs/`: GitHub Pages, without a build workflow, publishes only from the root or `docs/`.
+- `local-settings.json`: people edit it by hand to change a setting.
+
+**Why `.generated/` moved, though every PC's links pointed into it:** that was only a reason
+about the cost of moving, and on its merits the folder is machinery nobody runs or edits. It
+moved in the same update as phase 1's other changes to it, so each PC goes through one
+transition. On a PC set up before, the old folder is deleted by hand; setup then replaces the
+links into it, as it does any link whose target is gone.
+
+**Why `internal/development/`, with the tests in it:** ruff finds its settings by looking in a
+file's folder and the ones above it, so tests under the settings get them with no flag, in the
+editor too. "development" matches `docs/development/`; `dev/` or `dev-tools/` would read like
+"dev-home" or "dev-home-tools".
+
+**What it costs:** longer development commands (`uv run --directory internal/development ...`).
+Ruff has to be given its settings for the skill scripts, which aren't under them, and an editor's
+ruff extension and test panel won't find them for those files without settings of its own. The
+usual fix for the editor, a `.vscode/settings.json`, would be a root folder, so it needs its own
+decision.
+
+**Options set aside:**
+
+- `pyproject.toml` and `uv.lock` in the root, where Python projects usually keep them: the tools
+  would find them without flags, but they and what the tools write would add seven entries to
+  the root, and dev-home-tools isn't a package.
+- Shortcuts in the root for setup, sync, and update, with the real scripts elsewhere: running
+  the real ones is just as easy.
+- The tests staying in `internal/tests/`: ruff wouldn't find its settings for them.
+
+**Look again if:** dev-home-tools becomes a Python package, an editor's settings become worth a
+root folder, or a `-Configure` switch means nobody edits `local-settings.json` by hand.

@@ -121,8 +121,8 @@ ALL TOPICS
 Every line is written as UTF-8, so an accented letter in a name, path, or commit subject reaches
 the agent as it is.
 
-Example, shortened: the skills give the full path of python.exe, which is .python/python.exe in
-dev-home-tools' folder, and of this script.
+Example, shortened: the skills give the full path of python.exe, which is
+internal/.python/python.exe in dev-home-tools' folder, and of this script.
 
     python.exe -I facts.py handoff environment
 """
@@ -156,9 +156,12 @@ SERVICES = {
     "ssh.dev.azure.com": "azure-devops",
 }
 
-# dev-home's folder and dev-home-tools' folder, filled in by setup.
+# dev-home's folder, filled in by setup.
 CONTENT_DIR = "{{CONTENT_DIR}}"
-TOOLS_DIR = "{{TOOLS_DIR}}"
+
+# The generated skills, beside the folder setup writes this script to, so that setup alone
+# decides where the generated files go.
+GENERATED_SKILLS = Path(__file__).parent.parent / "skills"
 
 
 class FactsError(Exception):
@@ -238,7 +241,7 @@ def skill_changed(request: Request) -> str | None:
     name = request.skill
     if not re.fullmatch(r"[a-z0-9-]+", name):
         raise FactsError(f"No skill can be named {name}.")
-    path = Path(TOOLS_DIR) / ".generated" / "skills" / name / "SKILL.md"
+    path = GENERATED_SKILLS / name / "SKILL.md"
     current = None
     try:
         text = path.read_text(encoding="utf-8")

@@ -1,5 +1,6 @@
 # For people changing dev-home-tools only. Users never install anything from here: the scripts
-# use only Python's standard library. AGENTS.md's "Testing" section says how to run each tool.
+# use only Python's standard library. Paths here are relative to this folder, and the tools run
+# from it: AGENTS.md's "Testing" section has the commands.
 
 [project]
 name = "dev-home-tools"
@@ -12,8 +13,8 @@ dependencies = []
 package = false
 
 [tool.pytest.ini_options]
-testpaths = ["internal/tests"]
-pythonpath = ["internal/tests"]
+testpaths = ["tests"]
+pythonpath = ["tests"]
 # Each group of tests that shares a sandbox runs in one worker, and the groups run in parallel.
 addopts = ["-n", "auto", "--dist", "loadgroup"]
 
@@ -28,12 +29,12 @@ disable_warnings = ["no-data-collected"]
 
 [tool.coverage.paths]
 # Each sandbox's generated copy has the same lines as its template.
-source = ["templates/shared-skill-scripts/", "*/.generated/shared-skill-scripts/"]
+source = ["../../templates/shared-skill-scripts/", "*/.generated/shared-skill-scripts/"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["internal/tests", "templates/shared-skill-scripts"]
+src = ["tests", "../../templates/shared-skill-scripts"]
 # The tests' sandboxes hold copies of this repo.
 extend-exclude = [".test-sandbox"]
 
@@ -45,8 +46,8 @@ ignore = ["PTH100"]
 [tool.mypy]
 strict = true
 python_version = "3.12"
-files = ["templates/shared-skill-scripts", "internal/tests"]
-mypy_path = "internal/tests"
+files = ["tests", "../../templates/shared-skill-scripts"]
+mypy_path = "tests"
 explicit_package_bases = true
 
 [dependency-groups]

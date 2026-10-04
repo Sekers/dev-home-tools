@@ -1,16 +1,18 @@
 """What the tests share: sandboxes, running scripts as agents run them, and reading scripts' code.
 
-A test never runs the scripts in this repo. It builds a sandbox under .test-sandbox/, which git
-ignores: a copy of this repo's working tree (uncommitted changes included), a scratch profile, a
+A test never runs the scripts in this repo. It builds a sandbox under
+internal/development/.test-sandbox/, which git ignores: a copy of this repo's working tree
+(uncommitted changes included, development tools left out), a scratch profile, a
 dev-home with some content, and local bare repos standing in for GitHub. The copy's
 local-settings.json sets testHomeDir before anything in the copy runs, so every setup run from
 it, including the ones sync.ps1 and update.ps1 start, uses the scratch profile instead of the
 real one. run refuses a script outside a sandbox. Nothing here uses the network or GitHub.
 
 The skills' commands are taken word for word from the sandbox's generated skills. They start
-with .python/python.exe, a junction setup makes. A virtual environment's python.exe can't run
-through a junction, so the tests start each command with this environment's own Python instead,
-by its real path, which lets coverage measure the scripts. One test runs a command unchanged.
+with internal/.python/python.exe, a junction setup makes. A virtual environment's python.exe
+can't run through a junction, so the tests start each command with this environment's own
+Python instead, by its real path, which lets coverage measure the scripts. One test runs a
+command unchanged.
 """
 
 import ast
@@ -29,23 +31,20 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-SANDBOX_ROOT = REPO_ROOT / ".test-sandbox"
+# This file is in internal/development/tests/, three folders below the repo's root.
+REPO_ROOT = Path(__file__).resolve().parents[3]
+SANDBOX_ROOT = REPO_ROOT / "internal" / "development" / ".test-sandbox"
 
-# What a sandbox's copy leaves out: PC-specific files, and the development tools' own.
+# What a sandbox's copy leaves out, by its path in the repo: what belongs to this PC (including
+# the Python link, which would copy the Python install), and everything for development, the
+# sandboxes among it. Python's __pycache__ folders are left out wherever they are.
 # Invoke-Tests.ps1 has the same list.
 NOT_COPIED = {
     ".git",
-    ".generated",
     "local-settings.json",
-    ".test-sandbox",
-    ".python",
-    ".venv",
-    ".pytest_cache",
-    ".ruff_cache",
-    ".mypy_cache",
-    ".coverage",
-    "htmlcov",
+    "internal/.generated",
+    "internal/.python",
+    "internal/development",
 }
 
 
@@ -77,7 +76,12 @@ class Sandbox:
 
     @property
     def generated(self) -> Path:
-        return self.tools / ".generated"
+        return self.tools / "internal" / ".generated"
+
+    @property
+    def python(self) -> Path:
+        """The Python link's python.exe, which every skill command starts with."""
+        return self.tools / "internal" / ".python" / "python.exe"
 
     @property
     def python_bin(self) -> Path:
@@ -176,17 +180,13 @@ def new_sandbox(name: str, *, tools_repo: bool = False) -> Sandbox:
     """Builds a sandbox. The copy's local-settings.json, with testHomeDir, is written before
     anything in the copy can run. With tools_repo, the copy is also a git repo with a remote,
     as a clone of dev-home-tools is. The profile's Python install manager folder is a junction
-    to this environment's base Python, which setup links the copy's .python to."""
+    to this environment's base Python, which setup links the copy's internal/.python to."""
     box = Sandbox(SANDBOX_ROOT / f"py-{name}-{uuid.uuid4().hex[:8]}")
     box.root.mkdir(parents=True)
 
     def leave_out(folder: str, names: list[str]) -> set[str]:
-        top = Path(folder) == REPO_ROOT
-        return {
-            n
-            for n in names
-            if n == "__pycache__" or n.startswith(".coverage.") or (top and n in NOT_COPIED)
-        }
+        here = Path(folder).relative_to(REPO_ROOT)
+        return {n for n in names if n == "__pycache__" or (here / n).as_posix() in NOT_COPIED}
 
     shutil.copytree(REPO_ROOT, box.tools, ignore=leave_out)
     settings = {
@@ -320,7 +320,7 @@ def skill_command(box: Sandbox, skill: str, script: str) -> str:
     """The command a sandbox's generated skill gives for one of the shared scripts, word for
     word. A skill may give the same command more than once, but never two different ones."""
     text = (box.generated / "skills" / skill / "SKILL.md").read_text(encoding="utf-8")
-    python = (box.tools / ".python" / "python.exe").as_posix()
+    python = box.python.as_posix()
     path = (box.generated / "shared-skill-scripts" / script).as_posix()
     pattern = rf"`({re.escape(python)} -I {re.escape(path)}[^`]*)`"
     commands: set[str] = {match.group(1) for match in re.finditer(pattern, text)}
@@ -338,9 +338,9 @@ def run_command(
 ) -> Run:
     """Runs a skill's command. Its paths have no spaces, so it splits on them. Unless
     through_link, it starts with this environment's Python, by its real path, in place of the
-    sandbox's .python/python.exe (see the description above)."""
+    sandbox's internal/.python/python.exe (see the description above)."""
     words = command.split(" ")
-    assert words[0] == (box.tools / ".python" / "python.exe").as_posix(), command
+    assert words[0] == box.python.as_posix(), command
     if not through_link:
         words[0] = sys.executable
     return run(box, words, cwd=cwd, env=env)
