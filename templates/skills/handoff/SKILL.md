@@ -114,7 +114,11 @@ change the label.
 - **To do:** planned work, and decisions still to make. For a decision, start the item with
   "Decide whether" or similar: research it and recommend, but the user decides. Start an item
   with what it changes when that helps, such as "Wiki:" or "README:". A decision already made
-  but not built yet goes here, with enough detail to build it.
+  but not built yet goes here, with what a fresh session needs to build it without asking the
+  user anything already answered: what to change, any wording the user approved (word for
+  word), the reasons, and the options set aside, with why. Before the item is removed as built,
+  its reasons belong in the project's own files; if they aren't there yet, offer to move them
+  (see "Update").
 - **Bugs:** defects found but not fixed yet. One may become an issue in the project's tracker,
   public or private (see "GitHub issues").
 - **Waiting on others:** work blocked on someone or something outside the project: who, what,
@@ -233,6 +237,8 @@ Follow "Changing the handoff". While updating:
   between PCs more likely to conflict. Set the "State as of" line to what you actually checked
   this session; if you checked nothing, leave it. Don't run the project's tests or a build only
   to bring that line up to date: it records what the session already checked.
+- If this session made a plan, such as a plan file that only this PC keeps, carry into the
+  handoff whatever the work still needs from it (see To do in "Sections").
 - If the handoff doesn't match the template (`{{SKILL_DIR}}/template.md`), bring it in line as
   part of this update: add missing headings, put them in the template's order, and move each
   item from an old section to the one that fits now, such as Backlog or Wiki items into To do, a
