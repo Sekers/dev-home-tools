@@ -3,25 +3,27 @@
 Called by: handoff, knowledge
 
 Every skill command that syncs dev-home starts with this script, so the agent gets what it needs
-before its own work from one call. First it runs sync.ps1, which syncs dev-home with GitHub,
-checks dev-home-tools for updates, and runs setup. Then it loads facts.py, the copy beside this
-one, which that setup run has just brought up to date, and with it:
+before its own work from one call. First it runs sync, which syncs dev-home with GitHub, checks
+dev-home-tools for updates, and runs setup. Then it loads facts.py, the copy beside this one,
+which that setup run has just brought up to date, and with it:
 
 - checks the skill's stamp, given as --skill and --stamp as facts.py takes them. When the skill
   has changed since the agent loaded it, it prints a RELOAD line saying so, and no facts, because
   the agent's steps are out of date.
 - prints the lines of the facts.py topics named after the options, if any.
 
-sync.ps1's lines come first, then the RELOAD line or the facts. It always exits 0. Everything it
-has to say is in its lines: sync.ps1's status lines, RELOAD, the facts, and a PROBLEM line when
-facts.py or this script stops. A failing exit code would make a tool report the whole call as
-failed, and an agent could stop or retry instead of doing what the skill says about each line.
+The sync's lines come first, then the RELOAD line or the facts. It always exits 0. Everything it
+has to say is in its lines: the sync's status lines, RELOAD, the facts, and a PROBLEM line when
+the sync, facts.py, or this script stops. A failing exit code would make a tool report the whole
+call as failed, and an agent could stop or retry instead of doing what the skill says about each
+line.
 
-sync.ps1 runs in a PowerShell process of its own, and writes its lines straight to this
-script's output. facts.py runs inside this process. This script's own lines, and the facts, are
-written as UTF-8.
+The sync runs inside this process: it's the code of sync.py in dev-home-tools' root, which this
+script loads from internal/shared/ there, as sync.py does. Its setup run is PowerShell, in a
+process of its own, and writes its lines straight to this script's output. facts.py runs inside
+this process too. Everything this process prints is written as UTF-8.
 
-Committing is never done here: a skill commits through sync.ps1 -Message.
+Committing is never done here: a skill commits through sync.py --message.
 
 Examples, shortened: the skills give the full path of python.exe, which is
 internal/.python/python.exe in dev-home-tools' folder, and of this script.
@@ -36,10 +38,9 @@ handoff is, the computer's name, and the project's commits since the handoff's l
 Syncs dev-home, then checks that the knowledge skill hasn't changed.
 """
 
+import importlib
 import importlib.util
 import io
-import os
-import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -49,44 +50,15 @@ TOOLS_DIR = "{{TOOLS_DIR}}"
 
 
 def write_status(state: str, message: str) -> None:
-    """A status line in the same format as sync.ps1's, which skills already handle."""
-    print(f"{state:<9} {message}")
+    """A status line in the same format as the sync's, which skills already handle."""
+    print(f"{state:<9} {message}", flush=True)
 
 
-def find_pwsh() -> str | None:
-    """PowerShell 7's full path, from the folders in PATH, never from the current folder, which
-    here is a project's: a program of the same name there must never run."""
-    name = "pwsh.exe" if sys.platform == "win32" else "pwsh"
-    for folder in os.environ.get("PATH", "").split(os.pathsep):
-        if folder and Path(folder).is_absolute() and (Path(folder) / name).is_file():
-            return str(Path(folder) / name)
-    return None
-
-
-def run_sync() -> None:
-    """Runs sync.ps1, which prints its own lines, PROBLEM lines included. Its exit code is 1 when
-    the user needs to act, and its lines already say why, so the code itself is ignored."""
-    pwsh = find_pwsh()
-    if pwsh is None:
-        write_status(
-            "PROBLEM",
-            "PowerShell 7 (pwsh) was not found, so dev-home was not synced. "
-            "Install it (see dev-home-tools' README), then try again.",
-        )
-        return
-    sys.stdout.flush()
-    subprocess.run(
-        [pwsh, "-NoProfile", "-File", f"{TOOLS_DIR}/sync.ps1"],
-        stdin=subprocess.DEVNULL,
-        check=False,
-    )
-
-
-def load_facts() -> ModuleType:
-    """Loads facts.py from beside this script, by its path: python -I leaves this script's
+def load_from_path(name: str, path: Path, folder: Path | None = None) -> ModuleType:
+    """Loads a module, or with a folder a package, by its path: python -I leaves this script's
     folder off the import path."""
-    path = Path(__file__).with_name("facts.py")
-    spec = importlib.util.spec_from_file_location("dev_home_facts", path)
+    locations = [str(folder)] if folder else None
+    spec = importlib.util.spec_from_file_location(name, path, submodule_search_locations=locations)
     if spec is None or spec.loader is None:
         raise ImportError(f"{path} could not be loaded")
     module = importlib.util.module_from_spec(spec)
@@ -95,11 +67,28 @@ def load_facts() -> ModuleType:
     return module
 
 
+def run_sync() -> None:
+    """Runs the sync, which prints its own lines, PROBLEM lines included. It returns 1 when the
+    user needs to act, and its lines already say why, so the number itself is ignored. When it
+    can't be loaded, or stops, a PROBLEM line says so, and the facts still follow."""
+    try:
+        shared = Path(TOOLS_DIR) / "internal" / "shared"
+        package = load_from_path("dev_home_tools_shared", shared / "__init__.py", shared)
+        importlib.import_module(f"{package.__name__}.sync").main([])
+    except Exception as error:
+        write_status(
+            "PROBLEM",
+            f"The sync stopped, so dev-home may be behind: {type(error).__name__}: {error}. If an"
+            f" update has a fix, the user installs it by hand: git -C {TOOLS_DIR} pull --ff-only,"
+            f" then pwsh -NoProfile -File {TOOLS_DIR}/setup.ps1",
+        )
+
+
 def main(argv: list[str]) -> int:
     """Syncs, then checks the skill's stamp and prints the facts. Always returns 0."""
     try:
         run_sync()
-        facts = load_facts()
+        facts = load_from_path("dev_home_facts", Path(__file__).with_name("facts.py"))
         try:
             request = facts.parse_request(argv)
             changed = facts.skill_changed(request)

@@ -2,7 +2,7 @@
 
 This is my private repo for project handoffs and a general knowledge base, shared by my PCs
 through GitHub. The tooling that works with it (the skills, the always-on operating rules,
-setup.ps1, and sync.ps1) lives in my clone of dev-home-tools, at `{{TOOLS_DIR}}`.
+setup.ps1, and sync.py) lives in my clone of dev-home-tools, at `{{TOOLS_DIR}}`.
 
 ## Privacy
 
@@ -39,10 +39,10 @@ setup.ps1, and sync.ps1) lives in my clone of dev-home-tools, at `{{TOOLS_DIR}}`
 
 - Sessions in several projects, and Codex, use this repo at the same time, so a file you didn't
   change may be someone's work in progress. Never stage, commit, stash, reset, or discard it.
-- Run git here only through `pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1`. It syncs with
-  GitHub; add `-Message "<area>: <what>"` and the paths to commit exactly those paths first.
-  Show its `PROBLEM` lines to me.
-- Never delete a lock file such as `.git/index.lock`. If sync.ps1 says git stayed busy, ask me.
+- Run git here only through `{{PYTHON}} -I {{TOOLS_DIR}}/sync.py`. It syncs with GitHub; add
+  `--message "<area>: <what>"` and the paths to commit exactly those paths first. Show its
+  `PROBLEM` lines to me.
+- Never delete a lock file such as `.git/index.lock`. If sync.py says git stayed busy, ask me.
 - Commit messages read `<area>: <what>`, for example `handoff: you/tool` or
   `knowledge: powershell/pipeline-binding`.
 - Commit signing is turned off in this repo's own config on purpose. That is not bypassing

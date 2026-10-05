@@ -3,13 +3,18 @@
 | Script | What it's for |
 | --- | --- |
 | `setup.ps1` | Sets up this PC. Safe to run any number of times. `-WhatIf` previews; `-Quiet` prints only changes and problems, and never asks (agents run it this way); `-ContentDir <folder>` points it at a different dev-home. |
-| `sync.ps1` | Syncs your dev-home with GitHub, and commits only the files it's given. Agents run all their git in dev-home through it. Then it runs `update.ps1` and setup quietly (see [When they run](#when-they-run)). You can run it too. |
-| `update.ps1` | Shows the dev-home-tools commits waiting on GitHub, and installs them after a yes. With `-Quiet`, as a sync runs it, it never asks: it reports what's waiting, and installs it only when `autoUpdate` is on. |
+| `sync.py` | Syncs your dev-home with GitHub, and commits only the files it's given. Agents run all their git in dev-home through it. Then it checks for updates as `update.py` does, and runs setup quietly (see [When they run](#when-they-run)). You can run it too; `--help` says how to commit with it. |
+| `update.py` | Shows the dev-home-tools commits waiting on GitHub, and installs them after a yes. With `--quiet`, as a sync runs it, it never asks: it reports what's waiting, and installs it only when `autoUpdate` is on. |
+
+`sync.py` and `update.py` are Python, and `setup.ps1` is still PowerShell. Run the Python ones
+with the Python install manager's `py`, such as `py C:\Programming\dev-home-tools\sync.py`. Each
+is a short entry point that loads its code from `internal/shared/`.
 
 The skills also run two Python scripts of their own, which only agents run, from
 `templates/shared-skill-scripts/`: `prepare.py` starts each skill command that syncs, by running
-`sync.ps1` and then reporting what the skill needs, such as where the project's handoff is; and
-`facts.py` reports that alone, which is how the handoff skill starts in Codex.
+the sync inside its own process and then reporting what the skill needs, such as where the
+project's handoff is; and `facts.py` reports that alone, which is how the handoff skill starts in
+Codex.
 
 ## When they run
 
@@ -17,13 +22,13 @@ Nothing runs on a schedule. Each script runs only when you or an agent starts it
 
 | Script | When it runs |
 | --- | --- |
-| `sync.ps1` | In Claude Code, agents run it at the start of every `/handoff` command, for a plain `/knowledge`, and before adding to the knowledge base, through the skills' `prepare.py`; that sync also runs `update.ps1` and setup. Then they run it again to commit and push each change they make. That second sync skips the update check, and runs setup only if it brought in commits from GitHub, because the sync just before it did both. A lookup, `/knowledge <question>`, never syncs, and Codex never runs it. You can run it any time. |
-| `update.ps1` | Each sync that isn't committing runs it quietly, to check for updates. You run it yourself to look at an update and install it, when `autoUpdate` is off (see [Updates](#updates)). |
-| `setup.ps1` | You run it once per PC, and again to change a setting or to say yes to a settings change. After that, syncs run it quietly, as above, and so does `update.ps1` after you install an update. That quiet run never asks anything, and never changes Claude Code's or Codex's settings. |
+| `sync.py` | In Claude Code, agents run it at the start of every `/handoff` command, for a plain `/knowledge`, and before adding to the knowledge base, through the skills' `prepare.py`; that sync also checks for updates and runs setup. Then they run it again to commit and push each change they make. That second sync skips the update check, and runs setup only if it brought in commits from GitHub, because the sync just before it did both. A lookup, `/knowledge <question>`, never syncs, and Codex never runs it. You can run it any time. |
+| `update.py` | Each sync that isn't committing runs its check, quietly. You run it yourself to look at an update and install it, when `autoUpdate` is off (see [Updates](#updates)). |
+| `setup.ps1` | You run it once per PC, and again to change a setting or to say yes to a settings change. After that, syncs run it quietly, as above, and so does `update.py` after you install an update. That quiet run never asks anything, and never changes Claude Code's or Codex's settings. |
 
 ## What they report
 
-Agents pass on what `sync.ps1` reports, and `prepare.py` with it:
+Agents pass on what `sync.py` reports, and `prepare.py` with it:
 
 | Word | Meaning |
 | --- | --- |
@@ -50,15 +55,15 @@ the first time you ran setup:
 
 | `autoUpdate` | When new commits are waiting | What you do |
 | --- | --- | --- |
-| Off (the default) | Nothing is installed, and the agent tells you an update is waiting. | When you're ready, run `update.ps1` (below). It lists the commits and the files they change, and installs them only if you answer `y`. |
+| Off (the default) | Nothing is installed, and the agent tells you an update is waiting. | When you're ready, run `update.py` (below). It lists the commits and the files they change, and installs them only if you answer `y`. |
 | On | The sync installs them, and the agent tells you it did. | Nothing. |
 
 ```powershell
-pwsh -NoProfile -File C:\Programming\dev-home-tools\update.ps1
+py C:\Programming\dev-home-tools\update.py
 ```
 
-Either way, `update.ps1` does the work: the sync runs it quietly, and you run it yourself to look
-first. So an update is always installed the same way:
+Either way, `update.py`'s code does the work: the sync runs it quietly, and you run it yourself
+to look first. So an update is always installed the same way:
 
 - **It only moves your copy forward to GitHub's version.** It never merges, so if you've made
   commits of your own in your dev-home-tools folder, nothing is installed, and the agent says

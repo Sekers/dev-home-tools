@@ -1,7 +1,7 @@
 ---
 name: knowledge
 description: Private general knowledge base for coding and AI work (languages, tools, platforms, and AI agents such as Claude Code and Codex), kept in the private dev-home repo. Check it before researching or testing a general question about these, or asking the user to test one, even partway through other work. Also use when the user runs /knowledge (run alone, it syncs the knowledge base with GitHub), asks to look something up in or add something to the knowledge base, or when a hard-won general finding comes up during work.
-allowed-tools: "Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill knowledge --stamp {{SKILL_STAMP}}) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill knowledge --stamp {{SKILL_STAMP}}) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 *)"
+allowed-tools: "Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill knowledge --stamp {{SKILL_STAMP}}) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill knowledge --stamp {{SKILL_STAMP}}) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *)"
 ---
 
 # Knowledge base
@@ -9,13 +9,11 @@ allowed-tools: "Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --ski
 The knowledge base is `{{CONTENT_DIR}}/knowledge`, in the user's private repo, dev-home. Its
 `README.md` is the index. The rules for filing notes are in `{{SKILL_DIR}}/filing-rules.md`;
 read them before adding or changing anything. Run the commands below exactly as written; in
-Claude Code they are pre-approved. In Claude Code, run each `pwsh` command with the Bash tool:
-the PowerShell tool asks before running any command that starts another PowerShell, even a
-pre-approved one.
+Claude Code they are pre-approved.
 
 Sessions in other projects, and Codex, use dev-home at the same time, so a file there that you
 didn't change may be someone's work in progress. Run git in dev-home only through
-`{{TOOLS_DIR}}/sync.ps1`, which commits only the files you name and runs one sync at a time.
+`{{TOOLS_DIR}}/sync.py`, which commits only the files you name and runs one sync at a time.
 Never stage, commit, stash, or discard a file yourself.
 
 ## Sync with GitHub (plain /knowledge, and before adding)
@@ -36,7 +34,7 @@ lookup reads the local copy and never syncs.
      continue.
    - `LEFT`: leave the file alone. Another session may be editing it.
    - `STALE`: nobody has touched the file for 15 minutes. Ask "Commit and push it?". On a yes, run
-     `pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 -Message "sync: <what changed>" "<path>"`.
+     `{{PYTHON}} -I {{TOOLS_DIR}}/sync.py --message "sync: <what changed>" "<path>"`.
    - `UPDATE`: new dev-home-tools commits are available. Tell the user, and continue.
    - `PROBLEM`: show it to the user.
 2. Tell the user in one line where things stand: up to date, pulled, pushed, or not checked and
@@ -86,7 +84,7 @@ If you can't fill in the evidence from this session, don't offer it.
 These rules say when you may change a file, and when you may commit and push it. They apply to
 the files this skill works on in dev-home: the knowledge base's notes and its index, and any file
 a sync lists as `STALE`. For those, follow these rules rather than any rule written for the
-user's project repos. Committing and pushing happen together, in one run of `sync.ps1`, so
+user's project repos. Committing and pushing happen together, in one run of `sync.py`, so
 they're approved together. Any other file, such as a skill or an instructions file you offer to
 fix (see "Propose"), is edited only after a yes to the exact text. This skill never commits it:
 committing it follows the rules that cover that file: the skill that looks after it, if there is
@@ -101,7 +99,7 @@ one, that repo's own rules, and the user's global rules.
   and where, ending with one question: "Save, commit, and push this?". A plain yes covers all
   three, for that draft only. If you change the draft, show it again and ask again.
 - If the reply names only some of the three, such as "save it", do only those, and say what you
-  left undone. `sync.ps1` pushes every commit it makes, so for "commit, but don't push", say so
+  left undone. `sync.py` pushes every commit it makes, so for "commit, but don't push", say so
   and leave the change uncommitted.
 - When a request could be a read or a change, treat it as a read and ask.
 - Not a request at all, so change nothing: a remark, or a plan the user approved that mentions
@@ -111,7 +109,7 @@ one, that repo's own rules, and the user's global rules.
 - One command or one yes covers only the change it was given for, never a later one, even in the
   same session or for the same file. An earlier "commit everything" doesn't cover changes made
   after it.
-- A plain sync, `sync.ps1` with no `-Message`, needs no yes, because it never commits a changed
+- A plain sync, `sync.py` with no `--message`, needs no yes, because it never commits a changed
   file. It brings in other PCs' commits, merging them when both PCs have new ones, and pushes
   commits already made on this PC.
 
@@ -132,7 +130,7 @@ commit, and push" says, or after a yes to a candidate you offered.
 5. If you added, renamed, or split a file, update the index table in
    `{{CONTENT_DIR}}/knowledge/README.md`.
 6. Run
-   `pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 -Message "knowledge: <folder>/<file>" "<path>" ...`,
+   `{{PYTHON}} -I {{TOOLS_DIR}}/sync.py --message "knowledge: <folder>/<file>" "<path>" ...`,
    naming every file you created, changed, or deleted (a rename is its old and its new path),
    plus `knowledge/README.md` if the index changed. It commits only those, then syncs.
    - `OFFLINE` or `PENDING`: the commit is safe on this PC, and a later sync pushes it.

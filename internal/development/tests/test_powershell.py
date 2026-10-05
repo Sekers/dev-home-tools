@@ -11,7 +11,7 @@ import pytest
 
 from helpers import REPO_ROOT
 
-GROUPS = ["setup", "sync", "shared", "docs"]
+GROUPS = ["setup", "shared", "docs"]
 
 
 @pytest.mark.parametrize("group", GROUPS)

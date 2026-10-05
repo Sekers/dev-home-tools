@@ -1,21 +1,20 @@
 #Requires -Version 7.2
 <#
 .SYNOPSIS
-    Tests setup.ps1, sync.ps1, and update.ps1 end to end, in throwaway copies of this repo, and
-    checks internal/shared/, which the three load, and the links in README.md and docs/.
+    Tests setup.ps1 end to end, in throwaway copies of this repo, and checks the PowerShell files
+    in internal/shared/, which it loads, and the links in README.md and docs/.
 
 .DESCRIPTION
     pytest runs this script, one group at a time, beside the Python tests in this folder,
-    which cover the scripts the skills share. The groups here move to pytest as the scripts they
-    test move to Python.
+    which cover the Python scripts. The groups here move to pytest as the scripts they test move
+    to Python.
 
     Never runs the scripts in this repo. Each group of tests builds a sandbox under
     internal/development/.test-sandbox/, which git ignores: a copy of this repo's working tree
     (uncommitted changes included, development tools left out), a scratch profile, a dev-home
     with some content, and local bare repos standing in for GitHub. The copy's
     local-settings.json sets testHomeDir before anything in the copy runs, so every setup run
-    from it, including the ones sync.ps1 and update.ps1 start, uses the scratch profile instead
-    of yours. The scratch profile's Python install manager folder is a junction to a real
+    from it uses the scratch profile instead of yours. The scratch profile's Python install manager folder is a junction to a real
     Python, which setup links the copy's internal/.python to. Nothing here uses the network or
     GitHub.
 
@@ -27,7 +26,7 @@
     registry, which a test profile skips.
 
 .PARAMETER Group
-    The groups to run: setup, sync, shared, docs. All of them when left out.
+    The groups to run: setup, shared, docs. All of them when left out.
 
 .PARAMETER PythonDir
     A folder holding a Python 3.12 or later as python.exe, for the sandboxes' Python install
@@ -42,8 +41,8 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('setup', 'sync', 'shared', 'docs')]
-    [string[]]$Group = @('setup', 'sync', 'shared', 'docs'),
+    [ValidateSet('setup', 'shared', 'docs')]
+    [string[]]$Group = @('setup', 'shared', 'docs'),
     [string]$PythonDir = (Join-Path ([System.Environment]::GetFolderPath('LocalApplicationData')) 'Python' 'bin'),
     [switch]$Keep
 )
@@ -121,66 +120,15 @@ function Invoke-Script {
     # never wait for an answer. Returns the exit code and the output lines.
     param(
         [Parameter(Mandatory)][string]$Path,
-        [string[]]$Arguments = @(),
-        [string]$Answer = ''
+        [string[]]$Arguments = @()
     )
     $full = [System.IO.Path]::GetFullPath($Path)
     if (-not $full.StartsWith(([System.IO.Path]::GetFullPath($SandboxRoot) + [System.IO.Path]::DirectorySeparatorChar), [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "Refusing to run $full, which is not in a sandbox."
     }
     $ErrorActionPreference = 'Continue'
-    $out = @($Answer | & $Pwsh -NoProfile -File $full @Arguments 2>&1 | ForEach-Object { [string]$_ })
+    $out = @('' | & $Pwsh -NoProfile -File $full @Arguments 2>&1 | ForEach-Object { [string]$_ })
     return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Lines = $out }
-}
-
-function Invoke-WhileAsking {
-    # Runs one of a sandbox copy's scripts, waits for the output line that comes just before its
-    # question, runs the Meanwhile block, then answers. Returns the exit code and the output lines.
-    param(
-        [Parameter(Mandatory)][string]$Path,
-        [Parameter(Mandatory)][string]$Prompt,
-        [Parameter(Mandatory)][string]$Answer,
-        [Parameter(Mandatory)][scriptblock]$Meanwhile
-    )
-    $full = [System.IO.Path]::GetFullPath($Path)
-    if (-not $full.StartsWith(([System.IO.Path]::GetFullPath($SandboxRoot) + [System.IO.Path]::DirectorySeparatorChar), [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw "Refusing to run $full, which is not in a sandbox."
-    }
-    $info = [System.Diagnostics.ProcessStartInfo]::new($Pwsh)
-    foreach ($argument in @('-NoProfile', '-File', $full)) { $info.ArgumentList.Add($argument) }
-    $info.UseShellExecute = $false
-    $info.RedirectStandardInput = $true
-    $info.RedirectStandardOutput = $true
-    $process = [System.Diagnostics.Process]::Start($info)
-    $lines = [System.Collections.Generic.List[string]]::new()
-    try {
-        $asked = $false
-        while (-not $asked) {
-            $read = $process.StandardOutput.ReadLineAsync()
-            if ((-not $read.Wait([TimeSpan]::FromSeconds(60))) -or ($null -eq $read.Result)) { break }
-            $lines.Add($read.Result)
-            $asked = $read.Result -match $Prompt
-        }
-        if (-not $asked) {
-            $process.Kill($true)
-            $lines.Add("(the script never reached the line matching $Prompt)")
-            return [pscustomobject]@{ ExitCode = -1; Lines = $lines.ToArray() }
-        }
-        & $Meanwhile
-        $process.StandardInput.WriteLine($Answer)
-        $process.StandardInput.Close()
-        $rest = $process.StandardOutput.ReadToEndAsync()
-        if (-not $process.WaitForExit(120000)) {
-            $process.Kill($true)
-            $lines.Add('(the script did not finish within 2 minutes)')
-            return [pscustomobject]@{ ExitCode = -1; Lines = $lines.ToArray() }
-        }
-        $lines.AddRange([string[]]($rest.Result -split "\r?\n"))
-        return [pscustomobject]@{ ExitCode = $process.ExitCode; Lines = $lines.ToArray() }
-    }
-    finally {
-        $process.Dispose()
-    }
 }
 
 function Write-TextFile {
@@ -244,22 +192,16 @@ function Copy-RepoFolder {
 
 function New-Sandbox {
     # Builds a sandbox and returns its paths. The copy's local-settings.json, with testHomeDir,
-    # is written before anything in the copy can run. With -ToolsRepo, the copy is also a git
-    # repo with a remote, and a second clone stands in for the maintainer pushing updates.
-    param(
-        [Parameter(Mandatory)][string]$Name,
-        [switch]$ToolsRepo
-    )
+    # is written before anything in the copy can run.
+    param([Parameter(Mandatory)][string]$Name)
     $root = Join-Path $SandboxRoot ('{0}-{1}' -f $Name, (Get-Date -Format 'yyyyMMdd-HHmmss'))
     New-Item -ItemType Directory -Path $root -Force | Out-Null
     $box = [pscustomobject]@{
-        Root        = $root
-        Tools       = Join-Path $root 'tools'
-        Profile     = Join-Path $root 'profile'
-        Content     = Join-Path $root 'dev-home'
-        Remote      = Join-Path $root 'dev-home-remote.git'
-        ToolsRemote = Join-Path $root 'tools-remote.git'
-        Upstream    = Join-Path $root 'tools-upstream'
+        Root    = $root
+        Tools   = Join-Path $root 'tools'
+        Profile = Join-Path $root 'profile'
+        Content = Join-Path $root 'dev-home'
+        Remote  = Join-Path $root 'dev-home-remote.git'
     }
 
     # The copy: this repo's working tree, without what $NotCopied names.
@@ -295,16 +237,6 @@ function New-Sandbox {
     Invoke-Git (@('-C', $box.Content, 'add', '--') + @($files.Keys)) | Out-Null
     Invoke-Git @('-C', $box.Content, 'commit', '--quiet', '-m', 'test: content') | Out-Null
     Invoke-Git @('-C', $box.Content, 'push', '--quiet', '-u', 'origin', 'main') | Out-Null
-
-    if ($ToolsRepo) {
-        Invoke-Git @('-C', $box.Tools, 'init', '--quiet', '-b', 'main') | Out-Null
-        Invoke-Git @('-C', $box.Tools, 'add', '-A') | Out-Null
-        Invoke-Git @('-C', $box.Tools, 'commit', '--quiet', '-m', 'test: tools') | Out-Null
-        Invoke-Git @('init', '--quiet', '--bare', '-b', 'main', $box.ToolsRemote) | Out-Null
-        Invoke-Git @('-C', $box.Tools, 'remote', 'add', 'origin', $box.ToolsRemote) | Out-Null
-        Invoke-Git @('-C', $box.Tools, 'push', '--quiet', '-u', 'origin', 'main') | Out-Null
-        Invoke-Git @('clone', '--quiet', $box.ToolsRemote, $box.Upstream) | Out-Null
-    }
     return $box
 }
 
@@ -384,7 +316,7 @@ function Test-Setup {
     $leftover = @(Get-ChildItem -LiteralPath $generated -Recurse -File -ErrorAction SilentlyContinue | Select-String -Pattern '\{\{[A-Z_]+\}\}')
     Test-Check 'fills in every placeholder' ((Test-Path -LiteralPath "$generated/skills/handoff/SKILL.md") -and ($leftover.Count -eq 0)) @($leftover | ForEach-Object { '{0}:{1}' -f $_.Path, $_.LineNumber })
     $skill = Get-Content -LiteralPath "$generated/skills/handoff/SKILL.md" -Raw
-    Test-Check 'writes the copy''s path into the pre-approvals' ($skill.Contains("Bash(pwsh -NoProfile -File $toolsForward/sync.ps1)"))
+    Test-Check 'writes the copy''s path into the pre-approvals' ($skill.Contains("Bash($toolsForward/internal/.python/python.exe -I $toolsForward/sync.py)"))
     # Claude Code's PowerShell tool never pre-approves a command that starts another PowerShell.
     $nested = @(Get-ChildItem -LiteralPath (Join-Path $generated 'skills') -Recurse -Filter 'SKILL.md' | Select-String -Pattern 'PowerShell\(\s*pwsh')
     Test-Check 'pre-approves pwsh commands only for the Bash tool' ($nested.Count -eq 0) @($nested | ForEach-Object { '{0}:{1}' -f $_.Path, $_.LineNumber })
@@ -673,12 +605,20 @@ function Test-Setup {
     Test-Check 'refuses a dev-home at the root of a drive' (($run.ExitCode -eq 1) -and (Test-HasLine $run.Lines 'root of a drive')) $run.Lines
     Write-TextFile -Path $settingsPath -Text $before
 
-    # This copy isn't a git clone. Git would otherwise use the repo around it, which here is the
-    # real one, so the ceiling is a second guard.
-    $ceiling = $env:GIT_CEILING_DIRECTORIES
-    $env:GIT_CEILING_DIRECTORIES = $box.Root.Replace('\', '/')
-    try { $run = Invoke-Script -Path (Join-Path $box.Tools 'update.ps1') } finally { $env:GIT_CEILING_DIRECTORIES = $ceiling }
-    Test-Check 'update.ps1 in a copy that is not a git clone stops before running git' (($run.ExitCode -eq 1) -and (Test-HasLine $run.Lines 'not a git clone')) $run.Lines
+    # Another git process holds a lock for a moment. The shared git helper waits, then tries again.
+    # It's loaded in a scope of its own, so its Invoke-Git can't replace this file's.
+    $lockRepo = Join-Path $box.Root 'lock-repo'
+    Invoke-Git @('init', '--quiet', '-b', 'main', $lockRepo) | Out-Null
+    Write-TextFile -Path (Join-Path $lockRepo 'file.md') -Text "text`n"
+    $lockFile = Join-Path $lockRepo '.git/index.lock'
+    Write-TextFile -Path $lockFile -Text ''
+    $release = Start-ThreadJob -ScriptBlock { Start-Sleep -Seconds 1; [System.IO.File]::Delete($using:lockFile) }
+    $result = & {
+        . (Join-Path $box.Tools 'internal/shared/git.ps1')
+        Invoke-Git -Repo $lockRepo -Arguments @('add', '--', 'file.md')
+    }
+    $release | Wait-Job | Remove-Job
+    Test-Check 'the shared git helper waits out another git process''s lock, then succeeds' (($result.ExitCode -eq 0) -and ($result.Tries -ge 2)) (@(('exit code {0} after {1} tries' -f $result.ExitCode, $result.Tries)) + @($result.Err))
 
     Test-SettingsPlans -Box $box
     Test-RealProfile -Box $box
@@ -730,231 +670,7 @@ function Test-SettingsPlans {
 }
 
 # ---------------------------------------------------------------------------------------------
-# sync.ps1 and update.ps1
-
-function Test-Sync {
-    Write-Host
-    Write-Host 'sync.ps1 and update.ps1' -ForegroundColor Cyan
-    $script:GroupFailed = $false
-    $box = New-Sandbox -Name 'sync' -ToolsRepo
-    $sync = Join-Path $box.Tools 'sync.ps1'
-    $update = Join-Path $box.Tools 'update.ps1'
-    $settingsPath = Join-Path $box.Tools 'local-settings.json'
-    $generatedSkill = Join-Path $box.Tools 'internal/.generated/skills/handoff/SKILL.md'
-    $upstreamSkill = Join-Path $box.Upstream 'templates/skills/handoff/SKILL.md'
-
-    $run = Invoke-Script -Path (Join-Path $box.Tools 'setup.ps1') -Arguments @('-Quiet')
-    Test-Check 'setup runs cleanly first' ($run.ExitCode -eq 0) $run.Lines
-
-    $run = Invoke-Script -Path $sync
-    Test-Check 'a plain sync says dev-home is up to date' (($run.ExitCode -eq 0) -and (Test-HasLine $run.Lines 'up to date') -and (-not (Test-HasLine $run.Lines '^(UPDATE|PROBLEM)\s'))) $run.Lines
-
-    # A skill of the user's own, created on this PC after setup ran.
-    $later = Join-Path $box.Content 'skills/later'
-    Write-TextFile -Path (Join-Path $later 'SKILL.md') -Text "---`nname: later`ndescription: A personal skill added after setup.`n---`n"
-    Add-Content -LiteralPath (Join-Path $box.Content 'handoffs/demo/HANDOFF.md') -Value 'Before the new skill is linked.'
-    $run = Invoke-Script -Path $sync -Arguments @('-Message', 'handoff: demo', 'handoffs/demo/HANDOFF.md')
-    Test-Check 'a sync that commits, with nothing new from GitHub, leaves setup to the next plain sync' (($run.ExitCode -eq 0) -and (Test-HasLine $run.Lines '^COMMITTED\s') -and ($null -eq (Get-LinkTarget (Join-Path $box.Profile '.claude/skills/later')))) $run.Lines
-    Invoke-Script -Path $sync | Out-Null
-    Test-Link 'a plain sync links a personal skill added since setup ran' (Join-Path $box.Profile '.claude/skills/later') $later
-    [System.IO.Directory]::Delete($later, $true)
-
-    Add-Content -LiteralPath (Join-Path $box.Content 'handoffs/demo/HANDOFF.md') -Value 'A new line.'
-    Write-TextFile -Path (Join-Path $box.Content 'notes.md') -Text "someone else's file`n"
-    $run = Invoke-Script -Path $sync -Arguments @('-Message', 'handoff: demo', 'handoffs/demo/HANDOFF.md')
-    $pushed = (Invoke-Git @('-C', $box.Remote, 'log', '-1', '--format=%s', 'main'))[0]
-    $untracked = Invoke-Git @('-C', $box.Content, 'status', '--porcelain')
-    Test-Check 'commits and pushes only the named file' (($run.ExitCode -eq 0) -and ($pushed -eq 'handoff: demo') -and (Test-HasLine $untracked '^\?\? notes\.md')) $run.Lines
-    Test-Check 'lists the other new file as LEFT' (Test-HasLine $run.Lines '^LEFT\s+notes\.md') $run.Lines
-    [System.IO.File]::Delete((Join-Path $box.Content 'notes.md'))
-
-    # A committed file deleted just now along with its folder, which leaves no time of its own.
-    Write-TextFile -Path (Join-Path $box.Content 'archive/old-note.md') -Text "an old note`n"
-    Invoke-Git @('-C', $box.Content, 'add', '--', 'archive/old-note.md') | Out-Null
-    Invoke-Git @('-C', $box.Content, 'commit', '--quiet', '-m', 'archive: old note') | Out-Null
-    Invoke-Git @('-C', $box.Content, 'push', '--quiet') | Out-Null
-    [System.IO.Directory]::Delete((Join-Path $box.Content 'archive'), $true)
-    $run = Invoke-Script -Path $sync
-    Test-Check 'a file deleted just now with its folder is LEFT, dated by the folder above' (Test-HasLine $run.Lines '^LEFT\s+archive/old-note\.md \(deleted, under a minute ago\)') $run.Lines
-    Invoke-Git @('-C', $box.Content, 'add', '--', 'archive/old-note.md') | Out-Null
-    Invoke-Git @('-C', $box.Content, 'commit', '--quiet', '-m', 'archive: remove old note') | Out-Null
-    Invoke-Git @('-C', $box.Content, 'push', '--quiet') | Out-Null
-
-    # Another PC pushes a new skill. A sync that commits brings it in, so it runs setup as well.
-    $otherPc = Join-Path $box.Root 'other-pc'
-    Invoke-Git @('clone', '--quiet', $box.Remote, $otherPc) | Out-Null
-    Write-TextFile -Path (Join-Path $otherPc 'skills/from-other-pc/SKILL.md') -Text "---`nname: from-other-pc`ndescription: A skill pushed from another PC.`n---`n"
-    Invoke-Git @('-C', $otherPc, 'add', '--', 'skills/from-other-pc/SKILL.md') | Out-Null
-    Invoke-Git @('-C', $otherPc, 'commit', '--quiet', '-m', 'skills: from another PC') | Out-Null
-    Invoke-Git @('-C', $otherPc, 'push', '--quiet') | Out-Null
-    Add-Content -LiteralPath (Join-Path $box.Content 'handoffs/demo/HANDOFF.md') -Value 'While another PC pushed.'
-    $run = Invoke-Script -Path $sync -Arguments @('-Message', 'handoff: demo', 'handoffs/demo/HANDOFF.md')
-    Test-Check 'a sync that commits and brings in new commits runs setup, so a skill from another PC gets linked' (($run.ExitCode -eq 0) -and (Test-HasLine $run.Lines '^(PULLED|MERGED)\s') -and ($null -ne (Get-LinkTarget (Join-Path $box.Profile '.claude/skills/from-other-pc')))) $run.Lines
-
-    Add-Content -LiteralPath $upstreamSkill -Value 'Upstream change one.'
-    Invoke-Git @('-C', $box.Upstream, 'commit', '--quiet', '-am', 'handoff: change one') | Out-Null
-    Invoke-Git @('-C', $box.Upstream, 'push', '--quiet') | Out-Null
-    $run = Invoke-Script -Path $sync
-    Test-Check 'with autoUpdate off, reports a waiting update and pulls nothing' (($run.ExitCode -eq 0) -and (Test-HasLine $run.Lines '^UPDATE\s') -and (-not (Get-Content -LiteralPath $generatedSkill -Raw).Contains('Upstream change one.'))) $run.Lines
-
-    Add-Content -LiteralPath (Join-Path $box.Content 'handoffs/demo/HANDOFF.md') -Value 'While an update waits.'
-    $run = Invoke-Script -Path $sync -Arguments @('-Message', 'handoff: demo', 'handoffs/demo/HANDOFF.md')
-    Test-Check 'a sync that commits skips the update check, which the plain sync before it just made' (($run.ExitCode -eq 0) -and (Test-HasLine $run.Lines '^COMMITTED\s') -and (-not (Test-HasLine $run.Lines '^UPDATE\s'))) $run.Lines
-
-    $settings = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
-    $settings.autoUpdate = $true
-    Write-TextFile -Path $settingsPath -Text ($settings | ConvertTo-Json)
-    $run = Invoke-Script -Path $sync
-    Test-Check 'with autoUpdate on, pulls the update and sets it up' (($run.ExitCode -eq 0) -and (Test-HasLine $run.Lines '^PULLED\s+1 commit to dev-home-tools') -and (Get-Content -LiteralPath $generatedSkill -Raw).Contains('Upstream change one.')) $run.Lines
-
-    # An automatic install never overwrites a local edit to a file the update changes.
-    Add-Content -LiteralPath $upstreamSkill -Value 'Upstream change one-b.'
-    Invoke-Git @('-C', $box.Upstream, 'commit', '--quiet', '-am', 'handoff: change one-b') | Out-Null
-    Invoke-Git @('-C', $box.Upstream, 'push', '--quiet') | Out-Null
-    $localSkill = Join-Path $box.Tools 'templates/skills/handoff/SKILL.md'
-    $localBytes = [System.IO.File]::ReadAllBytes($localSkill)
-    Add-Content -LiteralPath $localSkill -Value 'A local edit.'
-    $run = Invoke-Script -Path $sync
-    Test-Check 'with autoUpdate on, an update that would overwrite a local edit is not installed, and the edit stays' (($run.ExitCode -eq 0) -and (Test-HasLine $run.Lines '^UPDATE\s.*not installed') -and (Get-Content -LiteralPath $localSkill -Raw).Contains('A local edit.')) $run.Lines
-    [System.IO.File]::WriteAllBytes($localSkill, $localBytes)
-    $run = Invoke-Script -Path $sync
-    Test-Check 'once the local edit is gone, the next sync installs the update' (($run.ExitCode -eq 0) -and (Test-HasLine $run.Lines '^PULLED\s') -and (Get-Content -LiteralPath $generatedSkill -Raw).Contains('Upstream change one-b.')) $run.Lines
-    $settings.autoUpdate = $false
-    Write-TextFile -Path $settingsPath -Text ($settings | ConvertTo-Json)
-
-    $run = Invoke-Script -Path $update
-    Test-Check 'update.ps1 with nothing waiting says so' (($run.ExitCode -eq 0) -and (Test-HasLine $run.Lines 'up to date')) $run.Lines
-
-    Add-Content -LiteralPath $upstreamSkill -Value 'Upstream change two.'
-    Invoke-Git @('-C', $box.Upstream, 'commit', '--quiet', '-am', 'handoff: change two') | Out-Null
-    Invoke-Git @('-C', $box.Upstream, 'push', '--quiet') | Out-Null
-
-    # A broken update.ps1 can't stop the rest of a sync: setup still runs after it.
-    $updateBytes = [System.IO.File]::ReadAllBytes($update)
-    Write-TextFile -Path $update -Text "throw 'broken on purpose'`n"
-    $probe = Join-Path $box.Content 'skills/probe'
-    Write-TextFile -Path (Join-Path $probe 'SKILL.md') -Text "---`nname: probe`ndescription: A personal skill for this check.`n---`n"
-    $run = Invoke-Script -Path $sync
-    [System.IO.File]::WriteAllBytes($update, $updateBytes)
-    Test-Check 'a broken update.ps1 is reported, and setup still runs after it' (($run.ExitCode -eq 1) -and (Test-HasLine $run.Lines '^PROBLEM\s.*update\.ps1 stopped') -and ($null -ne (Get-LinkTarget (Join-Path $box.Profile '.claude/skills/probe')))) $run.Lines
-    [System.IO.Directory]::Delete($probe, $true)
-
-    $run = Invoke-Script -Path $update -Answer 'n'
-    Test-Check 'update.ps1 shows the waiting commit, and a no pulls nothing' ((Test-HasLine $run.Lines 'change two') -and (Test-HasLine $run.Lines 'Nothing was pulled') -and (-not (Get-Content -LiteralPath $generatedSkill -Raw).Contains('Upstream change two.'))) $run.Lines
-    $run = Invoke-Script -Path $update -Answer 'y'
-    Test-Check 'update.ps1 with a yes pulls and sets it up' (($run.ExitCode -eq 0) -and (Get-Content -LiteralPath $generatedSkill -Raw).Contains('Upstream change two.')) $run.Lines
-
-    # A sync in another session fetches a newer commit while update.ps1 waits for its answer.
-    Add-Content -LiteralPath $upstreamSkill -Value 'Upstream change three.'
-    Invoke-Git @('-C', $box.Upstream, 'commit', '--quiet', '-am', 'handoff: change three') | Out-Null
-    Invoke-Git @('-C', $box.Upstream, 'push', '--quiet') | Out-Null
-    $run = Invoke-WhileAsking -Path $update -Prompt '^To see every changed line first' -Answer 'y' -Meanwhile {
-        Add-Content -LiteralPath $upstreamSkill -Value 'Upstream change four.'
-        Invoke-Git @('-C', $box.Upstream, 'commit', '--quiet', '-am', 'handoff: change four') | Out-Null
-        Invoke-Git @('-C', $box.Upstream, 'push', '--quiet') | Out-Null
-        Invoke-Git @('-C', $box.Tools, 'fetch', '--quiet') | Out-Null
-    }
-    $head = (Invoke-Git @('-C', $box.Tools, 'log', '-1', '--format=%s'))[0]
-    $skillText = Get-Content -LiteralPath $generatedSkill -Raw
-    Test-Check 'update.ps1 pulls only the commits it showed, even if newer ones arrive while it asks' (($run.ExitCode -eq 0) -and ($head -eq 'handoff: change three') -and $skillText.Contains('Upstream change three.') -and (-not $skillText.Contains('Upstream change four.'))) (@("HEAD: $head") + $run.Lines)
-
-    # A clone with a commit of its own can't simply move forward, and update.ps1 would refuse.
-    Write-TextFile -Path (Join-Path $box.Tools 'local-note.md') -Text "a local change`n"
-    Invoke-Git @('-C', $box.Tools, 'add', '--', 'local-note.md') | Out-Null
-    Invoke-Git @('-C', $box.Tools, 'commit', '--quiet', '-m', 'local: note') | Out-Null
-    $run = Invoke-Script -Path $sync
-    Test-Check 'with commits of its own, the notice says to merge by hand, not to run update.ps1' (($run.ExitCode -eq 0) -and (Test-HasLine $run.Lines '^UPDATE\s.*merge them by hand') -and (-not (Test-HasLine $run.Lines 'update\.ps1'))) $run.Lines
-
-    # GitHub can't be reached for dev-home-tools, though it can for dev-home.
-    $toolsUrl = (Invoke-Git @('-C', $box.Tools, 'remote', 'get-url', 'origin'))[0]
-    Invoke-Git @('-C', $box.Tools, 'remote', 'set-url', 'origin', (Join-Path $box.Root 'missing.git')) | Out-Null
-    $run = Invoke-Script -Path $sync
-    Invoke-Git @('-C', $box.Tools, 'remote', 'set-url', 'origin', $toolsUrl) | Out-Null
-    Test-Check 'when dev-home-tools can''t be checked, a sync says OFFLINE for it alone and still succeeds' (($run.ExitCode -eq 0) -and (Test-HasLine $run.Lines '^OFFLINE\s.*dev-home-tools') -and (@($run.Lines | Where-Object { $_ -match '^OFFLINE\s' }).Count -eq 1)) $run.Lines
-
-    # And the other way around: GitHub can't be reached for dev-home.
-    $contentUrl = (Invoke-Git @('-C', $box.Content, 'remote', 'get-url', 'origin'))[0]
-    Invoke-Git @('-C', $box.Content, 'remote', 'set-url', 'origin', (Join-Path $box.Root 'missing.git')) | Out-Null
-    $run = Invoke-Script -Path $sync
-    Invoke-Git @('-C', $box.Content, 'remote', 'set-url', 'origin', $contentUrl) | Out-Null
-    Test-Check 'when dev-home can''t be synced, its OFFLINE line names dev-home, and the sync still succeeds' (($run.ExitCode -eq 0) -and (Test-HasLine $run.Lines '^OFFLINE\s+Could not reach GitHub, so dev-home may be behind') -and (@($run.Lines | Where-Object { $_ -match '^OFFLINE\s' }).Count -eq 1)) $run.Lines
-
-    Invoke-Git @('-C', $box.Tools, 'branch', '--quiet', '--unset-upstream') | Out-Null
-    $run = Invoke-Script -Path $sync
-    Test-Check 'a tooling clone with no upstream is skipped quietly' (($run.ExitCode -eq 0) -and (-not (Test-HasLine $run.Lines '^(UPDATE|OFFLINE)\s'))) $run.Lines
-
-    $run = Invoke-Script -Path $sync -Arguments @('-Message', 'no area', 'handoffs/demo/HANDOFF.md')
-    Test-Check 'refuses a commit message without an area' (($run.ExitCode -eq 1) -and (Test-HasLine $run.Lines '<area>: <what>')) $run.Lines
-    $run = Invoke-Script -Path $sync -Arguments @('-Message', 'handoff: demo', 'handoffs')
-    Test-Check 'refuses to commit a folder' (($run.ExitCode -eq 1) -and (Test-HasLine $run.Lines 'is a folder')) $run.Lines
-    $run = Invoke-Script -Path $sync -Arguments @('-Message', 'handoff: demo', '../outside.md')
-    Test-Check 'refuses a path outside dev-home' (($run.ExitCode -eq 1) -and (Test-HasLine $run.Lines 'not inside dev-home')) $run.Lines
-
-    $hidden = $settingsPath + '.off'
-    [System.IO.File]::Move($settingsPath, $hidden)
-    $run = Invoke-Script -Path $sync
-    Test-Check 'without local-settings.json, says to run setup' (($run.ExitCode -eq 1) -and (Test-HasLine $run.Lines 'not set up on this PC')) $run.Lines
-    [System.IO.File]::Move($hidden, $settingsPath)
-
-    # Another git process holds a lock for a moment. The shared git helper waits, then tries again.
-    # It's loaded in a scope of its own, so its Invoke-Git can't replace this file's.
-    $lockRepo = Join-Path $box.Root 'lock-repo'
-    Invoke-Git @('init', '--quiet', '-b', 'main', $lockRepo) | Out-Null
-    Write-TextFile -Path (Join-Path $lockRepo 'file.md') -Text "text`n"
-    $lockFile = Join-Path $lockRepo '.git/index.lock'
-    Write-TextFile -Path $lockFile -Text ''
-    $release = Start-ThreadJob -ScriptBlock { Start-Sleep -Seconds 1; [System.IO.File]::Delete($using:lockFile) }
-    $result = & {
-        . (Join-Path $box.Tools 'internal/shared/git.ps1')
-        Invoke-Git -Repo $lockRepo -Arguments @('add', '--', 'file.md')
-    }
-    $release | Wait-Job | Remove-Job
-    Test-Check 'the shared git helper waits out another git process''s lock, then succeeds' (($result.ExitCode -eq 0) -and ($result.Tries -ge 2)) (@(('exit code {0} after {1} tries' -f $result.ExitCode, $result.Tries)) + @($result.Err))
-
-    Test-RealProfile -Box $box
-    Complete-Group -Box $box
-}
-
-# ---------------------------------------------------------------------------------------------
-# internal/shared/, read without running anything
-
-function Find-ProcessWideChange {
-    # Where a script changes what its whole process shares: environment variables, the current
-    # folder, or a static property such as [Console]::OutputEncoding. Read from the parsed script
-    # rather than its text, so an alias such as cd counts too.
-    param([Parameter(Mandatory)][System.Management.Automation.Language.Ast]$Ast)
-    # Definition, not ResolvedCommandName, which stays empty until the command's module loads.
-    $aliases = @{}
-    foreach ($alias in @(Get-Alias)) { $aliases[$alias.Name] = $alias.Definition }
-    $folderCommands = @('Set-Location', 'Push-Location', 'Pop-Location')
-    $itemWriters = @('Set-Item', 'New-Item', 'Remove-Item', 'Clear-Item', 'Rename-Item', 'Move-Item', 'Copy-Item', 'Set-Content', 'Add-Content', 'Clear-Content')
-    foreach ($node in $Ast.FindAll({ $args[0] -is [System.Management.Automation.Language.CommandAst] }, $true)) {
-        $command = $node.GetCommandName()
-        if (-not $command) { continue }
-        if ($aliases.ContainsKey($command)) { $command = $aliases[$command] }
-        $toEnv = @($node.CommandElements | Where-Object { $_.Extent.Text -match '^[''"]?env:' }).Count -gt 0
-        if (($folderCommands -contains $command) -or (($itemWriters -contains $command) -and $toEnv)) { $node }
-    }
-    foreach ($node in $Ast.FindAll({ $args[0] -is [System.Management.Automation.Language.AssignmentStatementAst] }, $true)) {
-        $left = $node.Left
-        if ($left -is [System.Management.Automation.Language.ConvertExpressionAst]) { $left = $left.Child }
-        if (($left -is [System.Management.Automation.Language.VariableExpressionAst]) -and ($left.VariablePath.DriveName -eq 'env')) {
-            $node
-            continue
-        }
-        # A static property, or a property of one, such as [Console]::Out.NewLine.
-        while ($left -is [System.Management.Automation.Language.MemberExpressionAst]) {
-            if ($left.Static) {
-                $node
-                break
-            }
-            $left = $left.Expression
-        }
-    }
-    foreach ($node in $Ast.FindAll({ $args[0] -is [System.Management.Automation.Language.InvokeMemberExpressionAst] }, $true)) {
-        if ($node.Static -and (@('SetEnvironmentVariable', 'SetCurrentDirectory') -contains $node.Member.Value)) { $node }
-    }
-}
+# internal/shared/'s PowerShell files, read without running anything
 
 function Test-Shared {
     Write-Host
@@ -967,58 +683,13 @@ function Test-Shared {
             $ast.FindAll($isFunction, $true) | ForEach-Object { $_.Name }
         })
 
-    # A script's own function with the same name would quietly replace the shared one.
+    # Setup's own function with the same name would quietly replace the shared one.
     $clashes = [System.Collections.Generic.List[string]]::new()
-    foreach ($name in @('setup.ps1', 'sync.ps1', 'update.ps1')) {
-        $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $RepoRoot $name), [ref]$null, [ref]$null)
-        foreach ($function in $ast.FindAll($isFunction, $true)) {
-            if ($sharedNames -contains $function.Name) { $clashes.Add(('{0} defines {1}' -f $name, $function.Name)) }
-        }
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $RepoRoot 'setup.ps1'), [ref]$null, [ref]$null)
+    foreach ($function in $ast.FindAll($isFunction, $true)) {
+        if ($sharedNames -contains $function.Name) { $clashes.Add(('setup.ps1 defines {0}' -f $function.Name)) }
     }
-    Test-Check 'no script defines a function that internal/shared/ already defines' (($sharedNames.Count -gt 0) -and ($clashes.Count -eq 0)) $clashes
-
-    # sync.ps1 runs these inside its own process, so a change they made to what the whole process
-    # shares would carry over into the rest of the sync. First, that the search finds each kind
-    # of change, and no reads.
-    $planted = @('cd C:/', 'Push-Location C:/', 'Set-Item env:PLANTED 1', '$env:PLANTED = 1',
-        '[System.Environment]::SetEnvironmentVariable(''PLANTED'', ''1'')', '[Environment]::CurrentDirectory = ''C:/''',
-        '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8')
-    $reads = @('$read = $env:PLANTED', 'Get-Item env:PLANTED', '$read = [Console]::IsOutputRedirected', 'Get-Location')
-    $sample = [System.Management.Automation.Language.Parser]::ParseInput((($planted + $reads) -join "`n"), [ref]$null, [ref]$null)
-    $caught = @(Find-ProcessWideChange -Ast $sample | ForEach-Object { $_.Extent.Text })
-    Test-Check 'the search for process-wide changes finds each kind, aliases included, and no reads' (($caught.Count -eq $planted.Count) -and (@($planted | Where-Object { $caught -notcontains $_ }).Count -eq 0)) $caught
-
-    $leaks = [System.Collections.Generic.List[string]]::new()
-    foreach ($name in ($sharedFiles + @('update.ps1'))) {
-        $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $RepoRoot $name), [ref]$null, [ref]$null)
-        foreach ($node in @(Find-ProcessWideChange -Ast $ast)) {
-            $leaks.Add(('{0}:{1}: {2}' -f $name, $node.Extent.StartLineNumber, $node.Extent.Text))
-        }
-    }
-    Test-Check 'what sync.ps1 runs in its own process changes nothing the whole process shares' ($leaks.Count -eq 0) $leaks
-
-    # pwsh -File keeps sync.ps1's top-level variables in the global scope, where a script it runs
-    # in its own process can see them. So such a script sets every variable it reads: one it left
-    # unset would quietly pick up sync's variable of the same name.
-    $automatic = @('_', 'args', 'input', 'PSItem', 'true', 'false', 'null', 'this', 'PSScriptRoot', 'PSCommandPath',
-        'MyInvocation', 'PSCmdlet', 'PSBoundParameters', 'LASTEXITCODE', 'Matches', 'HOME', 'PWD', 'PID', 'Host',
-        'ErrorActionPreference', 'WhatIfPreference', 'IsWindows', 'PSVersionTable', 'Error')
-    $isVariable = { $args[0] -is [System.Management.Automation.Language.VariableExpressionAst] }
-    $unset = [System.Collections.Generic.List[string]]::new()
-    foreach ($name in ($sharedFiles + @('update.ps1'))) {
-        $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $RepoRoot $name), [ref]$null, [ref]$null)
-        $set =[System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-        $targets = @(foreach ($node in $ast.FindAll({ $args[0] -is [System.Management.Automation.Language.AssignmentStatementAst] }, $true)) { $node.Left.FindAll($isVariable, $true) }) +
-            @($ast.FindAll({ $args[0] -is [System.Management.Automation.Language.ParameterAst] }, $true) | ForEach-Object { $_.Name }) +
-            @($ast.FindAll({ $args[0] -is [System.Management.Automation.Language.ForEachStatementAst] }, $true) | ForEach-Object { $_.Variable })
-        foreach ($variable in $targets) { [void]$set.Add(($variable.VariablePath.UserPath -replace '^(script|global|local|private):', '')) }
-        foreach ($variable in $ast.FindAll($isVariable, $true)) {
-            if ($variable.VariablePath.IsDriveQualified) { continue }
-            $read = $variable.VariablePath.UserPath -replace '^(script|global|local|private):', ''
-            if ((-not $set.Contains($read)) -and ($automatic -notcontains $read)) { $unset.Add(('{0}:{1}: ${2}' -f $name, $variable.Extent.StartLineNumber, $read)) }
-        }
-    }
-    Test-Check 'what sync.ps1 runs in its own process reads only variables it sets itself' ($unset.Count -eq 0) $unset
+    Test-Check 'setup.ps1 defines no function that internal/shared/ already defines' (($sharedNames.Count -gt 0) -and ($clashes.Count -eq 0)) $clashes
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -1110,7 +781,6 @@ function Test-Docs {
 
 Write-Host ('Testing the working tree of {0}' -f $RepoRoot)
 if ($Group -contains 'setup') { Test-Setup }
-if ($Group -contains 'sync') { Test-Sync }
 if ($Group -contains 'shared') { Test-Shared }
 if ($Group -contains 'docs') { Test-Docs }
 Write-Host

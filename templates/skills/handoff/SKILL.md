@@ -1,7 +1,7 @@
 ---
 name: handoff
 description: Read or update this project's private session handoff (where the work stands, what's next up, what's waiting on the user or on others, to-dos, and bugs), kept in the private dev-home repo, and file handoff items as GitHub issues when asked. Use when the user runs /handoff or $handoff, asks where things stand or where we left off, asks to update the handoff or change what's next up, or asks to file a handoff item as a GitHub issue.
-allowed-tools: "Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill handoff --stamp {{SKILL_STAMP}} handoff environment newer-commits) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill handoff --stamp {{SKILL_STAMP}} handoff environment newer-commits) Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/facts.py --skill handoff --stamp {{SKILL_STAMP}} handoff environment newer-commits) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/facts.py --skill handoff --stamp {{SKILL_STAMP}} handoff environment newer-commits) Bash(gh label list *) Bash(gh issue list *) Bash(gh issue view *) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1) Bash(pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 *) PowerShell(gh label list *) PowerShell(gh issue list *) PowerShell(gh issue view *)"
+allowed-tools: "Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill handoff --stamp {{SKILL_STAMP}} handoff environment newer-commits) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill handoff --stamp {{SKILL_STAMP}} handoff environment newer-commits) Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/facts.py --skill handoff --stamp {{SKILL_STAMP}} handoff environment newer-commits) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/facts.py --skill handoff --stamp {{SKILL_STAMP}} handoff environment newer-commits) Bash(gh label list *) Bash(gh issue list *) Bash(gh issue view *) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *) PowerShell(gh label list *) PowerShell(gh issue list *) PowerShell(gh issue view *) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *)"
 ---
 
 # Handoff
@@ -11,13 +11,11 @@ progress, what's waiting on the user or on others, to-dos, and bugs, plus privat
 project's own files can't hold. Handoffs live in the user's private repo, dev-home, at
 `{{CONTENT_DIR}}`, never in the project itself. Run the commands below exactly as
 written. In Claude Code they are pre-approved, except `gh issue create`: whether that one asks
-first depends on the user's own permission settings. In Claude Code, run each `pwsh` command
-with the Bash tool: the PowerShell tool asks before running any command that starts another
-PowerShell, even a pre-approved one.
+first depends on the user's own permission settings.
 
 Sessions in other projects, and Codex, use dev-home at the same time, so a file there that you
 didn't change may be someone's work in progress. Run git in dev-home only through
-`{{TOOLS_DIR}}/sync.ps1`, which commits only the files you name and runs one sync at a time.
+`{{TOOLS_DIR}}/sync.py`, which commits only the files you name and runs one sync at a time.
 Never stage, commit, stash, or discard a file yourself.
 
 ## Commands
@@ -60,7 +58,7 @@ yet; link it anyway, since the link itself is right.
 These rules say when you may change a file, and when you may commit and push it. They apply to
 the files this skill works on in dev-home: the handoff, including moving it from an old path,
 and any file a sync lists as `STALE`. For those, follow these rules rather than any rule written
-for the user's project repos. Committing and pushing happen together, in one run of `sync.ps1`,
+for the user's project repos. Committing and pushing happen together, in one run of `sync.py`,
 so they're approved together. Other changes follow their own rules:
 
 - The project's own files, such as an item an update moves into them (see "Update"): edit them
@@ -81,7 +79,7 @@ For the handoff:
   and where, ending with one question: "Save, commit, and push this?". A plain yes covers all
   three, for that draft only. If you change the draft, show it again and ask again.
 - If the reply names only some of the three, such as "save it", do only those, and say what you
-  left undone. `sync.ps1` pushes every commit it makes, so for "commit, but don't push", say so
+  left undone. `sync.py` pushes every commit it makes, so for "commit, but don't push", say so
   and leave the change uncommitted.
 - When a request could be a read or a change, treat it as a read and ask.
 - Not a request at all, so change nothing: a remark, or a plan the user approved that mentions
@@ -92,7 +90,7 @@ For the handoff:
 - One command or one yes covers only the change it was given for, never a later one, even in the
   same session or for the same file. An earlier "commit everything" doesn't cover changes made
   after it.
-- A plain sync, `sync.ps1` with no `-Message`, needs no yes, because it never commits a changed
+- A plain sync, `sync.py` with no `--message`, needs no yes, because it never commits a changed
   file. It brings in other PCs' commits, merging them when both PCs have new ones, and pushes
   commits already made on this PC.
 
@@ -171,7 +169,7 @@ about this project doesn't belong here either.
    which one, if any, is this project under an old name or address, saying that you'll move it,
    commit, and push. When the user names one, move it to `<handoff>`, then run the command below,
    where `<old path>` is where it was, relative to dev-home:
-   `pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 -Message "handoff: <name>" "<old path>" "<handoff>"`.
+   `{{PYTHON}} -I {{TOOLS_DIR}}/sync.py --message "handoff: <name>" "<old path>" "<handoff>"`.
    If none is, offer to create one from `{{SKILL_DIR}}/template.md`: "Create it, commit, and
    push?". On a yes, create it and commit it as in "Changing the handoff".
 
@@ -192,7 +190,7 @@ about this project doesn't belong here either.
      be stale; when it's about dev-home-tools, say its updates weren't checked. Then continue.
    - `LEFT`: leave the file alone. Another session may be editing it.
    - `STALE`: nobody has touched the file for 15 minutes. Ask "Commit and push it?". On a yes, run
-     `pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 -Message "sync: <what changed>" "<path>"`.
+     `{{PYTHON}} -I {{TOOLS_DIR}}/sync.py --message "sync: <what changed>" "<path>"`.
    - `UPDATE`: new dev-home-tools commits are available. Tell the user, and continue.
    - `PROBLEM`: show it. When it's about syncing dev-home, say the handoff may be behind. Then
      continue, unless it says `facts.py` stopped (see "Find this project's handoff").
@@ -220,7 +218,7 @@ about this project doesn't belong here either.
    in another PC's version.
 4. After editing, check the handoff for anything rule 7 forbids, and take it out.
 5. Run
-   `pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1 -Message "handoff: <name>" "<handoff>"`.
+   `{{PYTHON}} -I {{TOOLS_DIR}}/sync.py --message "handoff: <name>" "<handoff>"`.
    It commits only this handoff, then syncs.
    - `OFFLINE` or `PENDING`: the commit is safe on this PC, and a later sync pushes it.
    - `PROBLEM`: stop and show it. The handoff is safe on this PC.

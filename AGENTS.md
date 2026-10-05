@@ -3,7 +3,7 @@
 **What this repository is:** the public tooling for dev-home, a private repo that each person
 keeps for AI-agent handoffs and a general knowledge base, shared across their PCs through GitHub,
 for Claude Code and Codex. This repo holds the `handoff` and `knowledge` skills and the scripts
-they share, the always-on operating rules, `setup.ps1`, `sync.ps1`, `update.ps1`, and the starter
+they share, the always-on operating rules, `setup.ps1`, `sync.py`, `update.py`, and the starter
 files for a new private repo. It never holds anyone's handoffs, knowledge, or global rules.
 README.md and `docs/` describe how people use it.
 
@@ -17,11 +17,11 @@ Never leave it to the reader to guess which: name the repo whenever both could f
 | Always-on rules | `templates/operating-rules/operating-rules.md`: the operating rules, the same for everyone | `global-rules/global-rules.md`: that person's global rules |
 | Skills | `templates/skills/`: the `handoff` and `knowledge` skills. `templates/shared-skill-scripts/`: the scripts they share | `skills/`: that person's own skills |
 | `AGENTS.md`, `CLAUDE.md`, `README.md` | About dev-home-tools, and working on it | About that dev-home, and working in it |
-| Only here | `setup.ps1`, `sync.ps1`, `update.ps1`, `templates/dev-home-starter/`, `internal/`, `docs/` | `handoffs/`, `knowledge/` |
+| Only here | `setup.ps1`, `sync.py`, `update.py`, `templates/dev-home-starter/`, `internal/`, `docs/` | `handoffs/`, `knowledge/` |
 
 - The root holds only what must be there, and the scripts a person runs by hand:
   `.gitattributes`, `.gitignore`, `AGENTS.md`, `CLAUDE.md`, `LICENSE`, `README.md`,
-  `setup.ps1`, `sync.ps1`, `update.ps1`, and the folders `templates/`, `internal/`, and
+  `setup.ps1`, `sync.py`, `update.py`, and the folders `templates/`, `internal/`, and
   `docs/`. Setup adds `local-settings.json` on each PC. Never add a file or folder to the
   root, or have a script or tool create one there, without asking the person you work for
   first, in a question of its own.
@@ -29,7 +29,9 @@ Never leave it to the reader to guess which: name the repo whenever both could f
   and after that they're the person's own: a change to the starter never reaches an existing
   dev-home.
 - `internal/` is dev-home-tools' own machinery, which nobody runs directly:
-  - `internal/shared/`: what the three scripts load.
+  - `internal/shared/`: the code the scripts in the root load. `sync.py` and `update.py` in the
+    root are short entry points that load the module of the same name from here, and
+    `prepare.py` loads the sync's from here too.
   - `internal/.generated/` and `internal/.python/`: what setup makes on each PC (see
     "Templates, generated files, and names"). Git ignores both.
   - `internal/development/`: everything only people changing dev-home-tools use: the
@@ -42,8 +44,8 @@ Never leave it to the reader to guess which: name the repo whenever both could f
   skill has: one skill's in its own folder, and what several skills share in a
   `templates/shared-skill-*` folder for its kind.
 - dev-home-tools is moving from PowerShell to Python in three phases: the skills' scripts
-  first, then `sync.ps1` and `update.ps1`, then `setup.ps1`. `docs/development/decisions.md`
-  has the plan.
+  first, then sync and update, then `setup.ps1`. The first two are done, so only setup is still
+  PowerShell. `docs/development/decisions.md` has the plan.
 - No backwards compatibility in the scripts, for now: no code that moves an older layout
   forward, keeps an old path working, or forwards an old script to a new one. When a change
   needs something done on each PC that's already set up, say so, so it gets done there by hand.
@@ -139,12 +141,13 @@ Never leave it to the reader to guess which: name the repo whenever both could f
   the one generated copy; never copy a script into each skill's folder.
   `docs/development/decisions.md` says why, and why they aren't at the root or in `internal/`.
 - One job per script, named for the job. `facts.py` reports facts about where a session is
-  running, one topic at a time. `prepare.py` prepares dev-home for a skill command: it runs
-  `sync.ps1`, checks the skill's stamp, then prints the facts for the topics it's given.
+  running, one topic at a time. `prepare.py` prepares dev-home for a skill command: it runs the
+  sync inside its own process, checks the skill's stamp, then prints the facts for the topics
+  it's given.
 - Every skill command that syncs starts with `prepare.py`, so the agent gets everything it needs
   before its own work in one call. Anything a skill needs at that point that takes no judgment
   goes in the scripts, not in steps for the agent. `prepare.py` always exits 0 and says
-  everything in its lines, and it never commits: skills commit through `sync.ps1 -Message`.
+  everything in its lines, and it never commits: skills commit through `sync.py --message`.
 - `facts.py` only reports, and only from this PC: it changes nothing and never uses the network.
   That's what makes it safe to pre-approve, and a test reads its code for both. Anything a skill
   needs done, rather than told, goes in a script of its own.
@@ -180,44 +183,54 @@ Never leave it to the reader to guess which: name the repo whenever both could f
   load in every session.
 - Codex's own `~/.codex/rules/` holds command policies, not these, and setup never touches it.
 
-## setup.ps1, sync.ps1, and update.ps1
+## setup.ps1, sync.py, and update.py
 
-- ASCII only. All three require PowerShell 7.2 or later, and support Windows only for now.
-- `internal/shared/` holds what the three share, one file per job, named for it: `git.ps1`
-  (`Invoke-Git`, which retries while another git process holds a lock) and `output.ps1`
-  (`Write-StatusLine`, which prints every status line in one format, and small text helpers).
-  Each script dot-sources the files it uses when it starts, so after an update the next script
-  to start gets the new copies. Put anything the scripts would otherwise each copy there. The
-  files only define functions, and no script defines one with the same name (a test checks).
+- ASCII only, and Windows only for now. setup.ps1 requires PowerShell 7.2 or later. sync.py and
+  update.py require Python 3.12 or later and use only its standard library (tests check).
+- `internal/shared/` holds their code, one file per job, named for it. For the Python scripts:
+  `sync.py` and `update.py`, the code of the entry points of the same name; `git.py` (`run_git`,
+  which retries while another git process holds a lock); `output.py` (`status_line`, which
+  prints every status line in one format, and small text helpers); `programs.py` (finding a
+  program, and running setup.ps1); and `settings.py` (this PC's `local-settings.json`). They
+  write UTF-8, read git's output as UTF-8, and find a program such as git by its full path in
+  `PATH`, never in the current folder. For setup.ps1: `git.ps1` and `output.ps1`, which it
+  dot-sources when it starts, and which only define functions; setup defines none with the same
+  name (a test checks). Put anything the scripts would otherwise each copy there.
+- The entry points in the root stay short: they check the Python version, load `internal/shared/`
+  by its path, and run the module of their own name (a test checks). `decisions.md` says why the
+  code isn't in the root.
 - Safe to re-run. setup.ps1 never overwrites or deletes anything except its own generated files,
   links whose target is gone, links it made to skills that no longer exist, the
   `internal/.python/` junction once the `python.exe` it leads to is gone, and settings files the
   person said yes to changing. A settings change is shown as a diff first, waits for a typed
   yes, saves a dated backup, and is never offered for a file the script can't fully parse.
-  sync.ps1 never stages, commits, or discards a file it wasn't given, and runs no destructive git
+  sync.py never stages, commits, or discards a file it wasn't given, and runs no destructive git
   command: no `add -A`, stash, `reset`, `checkout`, `clean`, or rebase.
 - Never remove links with `Remove-Item -Recurse`; it follows junctions. Use `cmd /c rmdir`.
 - Agents run setup.ps1 only with `-Quiet`, which never prompts: no elevation, no settings
-  changes, and no creating repos. sync.ps1 runs it that way after every sync that doesn't commit,
+  changes, and no creating repos. sync.py runs it that way after every sync that doesn't commit,
   and after one that commits when it brought in commits from GitHub. Only a person runs it
   without `-Quiet`.
-- update.ps1 pulls exactly the commit it showed the user, so nothing new can slip in between their
+- update.py pulls exactly the commit it showed the user, so nothing new can slip in between their
   yes and the pull.
-- Everything about dev-home-tools updates happens in update.ps1, so what the user is told and
-  what gets installed come from the same code. Every sync that doesn't commit runs
-  `update.ps1 -Quiet`, which checks GitHub, never asks, and installs waiting commits only when
-  `autoUpdate` is on. Keep update.ps1 small and apart from setup.ps1: it's how fixes arrive, so
-  even a broken setup can be fixed by an update.
-- sync.ps1 runs `update.ps1 -Quiet` inside its own PowerShell process, so no second one has to
-  start. So update.ps1 and `internal/shared/` follow two rules, which tests check. They change
-  nothing the whole process shares, such as environment variables, the current folder, or a
-  static property like `[Console]::OutputEncoding`, because that would carry over into the rest
-  of the sync. And they set every variable they read: pwsh -File keeps sync.ps1's
-  top-level variables in the global scope, so a variable left unset would quietly pick up
-  sync's. The `exit` in update.ps1 ends only update.ps1, and every `-Quiet` path ends with one,
-  because sync reads its exit code.
-- setup.ps1 runs in a process of its own, so it starts clean. It shares many variable names with
-  sync.ps1, so running it inside sync's process would need the same checks first.
+- Everything about dev-home-tools updates happens in update's code, so what the user is told and
+  what gets installed come from the same code. Every sync that doesn't commit runs it with
+  `--quiet`, which checks GitHub, never asks, and installs waiting commits only when
+  `autoUpdate` is on. Keep it small and apart from setup.ps1: it's how fixes arrive, so even a
+  broken setup can be fixed by an update. For the same reason, the sync loads it only when it
+  reaches the check, and an update.py that can't load or stops is a `PROBLEM` line, after which
+  the sync still runs setup; each of the sync's other steps runs in a guard too, so an error in
+  one is a `PROBLEM` line and the update check and setup still run; and when the code can't
+  load at all, the entry points and `prepare.py` print a `PROBLEM` line with the commands that
+  install a fix by hand (tests check all three).
+- `prepare.py` runs the sync inside its own process, and the sync runs update's code there too.
+  So nothing in `internal/shared/` changes what the whole process shares, such as environment
+  variables, the current folder, the import path, or sys's streams, outside an
+  `if __name__ == "__main__":` block (a test checks). Their `main` functions return a number
+  and never call `sys.exit`. And keep the name and arguments of what `prepare.py` calls,
+  `main(argv)` in `sync.py`: the `prepare.py` running may be a generated copy older than the
+  code on disk.
+- setup.ps1 runs in a PowerShell process of its own, so it starts clean.
 
 ## Docs (README.md and docs/)
 
@@ -245,17 +258,17 @@ Never leave it to the reader to guess which: name the repo whenever both could f
 
   ```text
   uv run --directory internal/development pytest
-  uv run --directory internal/development ruff check --config pyproject.toml . ../../templates/shared-skill-scripts
-  uv run --directory internal/development ruff format --check --config pyproject.toml . ../../templates/shared-skill-scripts
+  uv run --directory internal/development ruff check --config pyproject.toml ../..
+  uv run --directory internal/development ruff format --check --config pyproject.toml ../..
   uv run --directory internal/development mypy
   ```
 
   uv installs the tools pinned in `internal/development/pyproject.toml` and `uv.lock`, for
   development only: people who use dev-home-tools never need them. The tools run from that
   folder, so their settings, `.venv`, and caches stay out of the root. Ruff looks for settings
-  only in each file's own folder and the ones above it, so the ruff commands name them for the
-  skill scripts. The tests check the working tree, uncommitted changes included, and need no
-  network or GitHub.
+  only in each file's own folder and the ones above it, so the ruff commands name them, and
+  check the whole repo from its root, skipping what git ignores. The tests check the working
+  tree, uncommitted changes included, and need no network or GitHub.
 - pytest is the one entry point. It runs the Python tests in `internal/development/tests/`,
   which share `helpers.py`, and runs `Invoke-Tests.ps1` one group at a time for the PowerShell
   scripts that haven't moved to Python yet. Each phase of the move takes its scripts' groups to

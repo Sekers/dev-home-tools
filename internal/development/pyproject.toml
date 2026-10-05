@@ -19,17 +19,19 @@ pythonpath = ["tests"]
 addopts = ["-n", "auto", "--dist", "loadgroup"]
 
 [tool.coverage.run]
-# The tests run the scripts as separate processes, from the generated copies in each sandbox.
+# The tests run the scripts as separate processes, from each sandbox's copy of this repo.
 patch = ["subprocess"]
 branch = true
-include = ["*/shared-skill-scripts/*.py"]
+include = ["*/shared-skill-scripts/*.py", "*/internal/shared/*.py"]
 parallel = true
 # The test processes themselves never run the scripts, so they collect nothing of their own.
 disable_warnings = ["no-data-collected"]
 
 [tool.coverage.paths]
-# Each sandbox's generated copy has the same lines as its template.
+# Each sandbox's generated copy has the same lines as its template, and its copy of
+# internal/shared/ the same lines as this repo's.
 source = ["../../templates/shared-skill-scripts/", "*/.generated/shared-skill-scripts/"]
+shared = ["../../internal/shared/", "*/tools/internal/shared/"]
 
 [tool.ruff]
 line-length = 100
@@ -46,7 +48,13 @@ ignore = ["PTH100"]
 [tool.mypy]
 strict = true
 python_version = "3.12"
-files = ["tests", "../../templates/shared-skill-scripts"]
+files = [
+    "tests",
+    "../../templates/shared-skill-scripts",
+    "../../internal/shared",
+    "../../sync.py",
+    "../../update.py",
+]
 mypy_path = "tests"
 explicit_package_bases = true
 

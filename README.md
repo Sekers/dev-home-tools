@@ -42,8 +42,8 @@ Works with Claude Code, Codex, or both. Windows only, for now. To start, see
 
 | What | Why | Install |
 | --- | --- | --- |
-| PowerShell 7.2 or later | Runs the scripts. Windows PowerShell 5.1 can't. | `winget install --id Microsoft.PowerShell --source winget` |
-| Python 3.12 or later | Runs the scripts the skills use. Only Python itself: nothing else to install. | The Python install manager: `winget install 9NQ7512CXL7T -e --accept-package-agreements --disable-interactivity`, then `py install 3.14` (or the latest version). |
+| PowerShell 7.2 or later | Runs setup. Windows PowerShell 5.1 can't. | `winget install --id Microsoft.PowerShell --source winget` |
+| Python 3.12 or later | Runs the sync, updates, and the scripts the skills use. Only Python itself: nothing else to install. | The Python install manager: `winget install 9NQ7512CXL7T -e --accept-package-agreements --disable-interactivity`, then `py install 3.14` (or the latest version). |
 | Git 2.31 or later | Every sync with GitHub. | `winget install --id Git.Git --source winget` |
 | GitHub CLI (`gh`) | Creates or clones your dev-home on GitHub, and files issues for `/handoff issue`. | `winget install --id GitHub.cli --source winget` |
 | Claude Code, Codex, or both | The agents the skills and rules are for. | Each tool's own installer. |
@@ -213,7 +213,7 @@ Everything beyond getting started is in the `docs/` folder:
 | --- | --- | --- |
 | Skills | [Handoffs](docs/skills/handoff.md) | Every `/handoff` command, with examples: when a change is committed and pushed, how issues are filed, and where handoffs are kept. |
 | Skills | [Knowledge base](docs/skills/knowledge.md) | Every `/knowledge` command, and when agents check the knowledge base or offer to add to it. |
-| Reference | [The scripts](docs/reference/scripts.md) | `setup.ps1`, `sync.ps1`, and `update.ps1`: when each one runs, what their status words mean, and how updates are installed. |
+| Reference | [The scripts](docs/reference/scripts.md) | `setup.ps1`, `sync.py`, and `update.py`: when each one runs, what their status words mean, and how updates are installed. |
 | Reference | [What setup changes on your PC](docs/reference/setup-changes.md) | Every link, file, and setting that setup adds, why, and how to remove it all. |
 | Development | [Design decisions](docs/development/decisions.md) | For people changing dev-home-tools: decisions made and options set aside, with the reasons. |
 
@@ -224,7 +224,7 @@ Everything beyond getting started is in the `docs/` folder:
   or issues. The one way handoff content reaches a project is an issue you approve word for word.
 - **No secrets in dev-home:** no credentials, tenant or account IDs, or personal information
   about anyone else. Note where a secret is kept, never its value.
-- **`sync.ps1` commits only what it's given.** Several sessions and PCs share dev-home, so any
+- **`sync.py` commits only what it's given.** Several sessions and PCs share dev-home, so any
   other changed file may be someone's work in progress. It never stages, commits, stashes,
   resets, or discards those. It runs one sync at a time, undoes a merge that conflicts, and never
   deletes a git lock file.
@@ -251,6 +251,9 @@ Everything beyond getting started is in the `docs/` folder:
 - **A skill seems to be missing.** Run setup with `-Quiet`, then restart the agent.
 - **A skill says dev-home-tools needs Python.** Install Python 3.12 or later (see
   [Requirements](#requirements)), then run setup again.
+- **A sync says it stopped, with `git -C ... pull --ff-only` in the line.** dev-home-tools'
+  own code couldn't load or run, so it can't check for updates, and a fix can't arrive by
+  itself. Run the two commands the line gives: they install any update by hand, then run setup.
 - **A skill says it has changed since the session loaded it.** An update changed the skill's
   steps. Type its command again, such as `/handoff`, to load the new ones; you don't need a new
   session.
@@ -262,14 +265,14 @@ Everything beyond getting started is in the `docs/` folder:
 
 | Path | What it is |
 | --- | --- |
-| `setup.ps1`, `sync.ps1`, `update.ps1` | The scripts (see [The scripts](docs/reference/scripts.md)). |
+| `setup.ps1`, `sync.py`, `update.py` | The scripts (see [The scripts](docs/reference/scripts.md)). The two Python ones are short entry points that load their code from `internal/shared/`. |
 | `templates/` | Everything setup fills in with each PC's paths. |
 | `templates/operating-rules/` | The operating rules every session loads, along with your global rules. Filled in on every setup run, into `internal/.generated/`. |
 | `templates/skills/` | The skills, one folder each. Filled in on every setup run, into `internal/.generated/`. |
 | `templates/shared-skill-scripts/` | Python scripts that the skills share and only agents run. Filled in on every setup run, into `internal/.generated/`. |
 | `templates/dev-home-starter/` | The files a brand-new dev-home starts with. Filled in once, when setup creates it. |
 | `internal/` | dev-home-tools' own machinery, which nobody runs directly. |
-| `internal/shared/` | What the three scripts share, one file per job: `git.ps1` runs git, and `output.ps1` prints status lines. |
+| `internal/shared/` | The code the scripts load, one file per job: `sync.py` and `update.py`, with `git.py`, `output.py`, `programs.py`, and `settings.py` for them, which the skills' `prepare.py` loads too; and `git.ps1` and `output.ps1` for setup, until it moves to Python. |
 | `internal/development/` | Only for changing dev-home-tools: the development tools' settings (`pyproject.toml`, `uv.lock`) and the tests (`tests/`: pytest files, and `Invoke-Tests.ps1` for the PowerShell scripts that haven't moved to Python yet). People who only use dev-home-tools never need it. |
 | `docs/` | Everything this README leaves out (see [Documentation](#documentation)). |
 
@@ -282,8 +285,8 @@ these from this folder:
 
 ```powershell
 uv run --directory internal/development pytest
-uv run --directory internal/development ruff check --config pyproject.toml . ../../templates/shared-skill-scripts
-uv run --directory internal/development ruff format --check --config pyproject.toml . ../../templates/shared-skill-scripts
+uv run --directory internal/development ruff check --config pyproject.toml ../..
+uv run --directory internal/development ruff format --check --config pyproject.toml ../..
 uv run --directory internal/development mypy
 ```
 

@@ -1,7 +1,7 @@
 """prepare.py, run as the skills run it in Claude Code, from a sandbox's generated copy.
 
 Its sync is real: the sandbox's copy of this repo is a git clone with a remote, as a person's is,
-so the sync's update check and setup run too.
+so the sync's update check and setup run too. test_sync.py covers the sync itself.
 """
 
 import os
@@ -94,7 +94,7 @@ def test_when_facts_stops_says_why_prints_no_fact_and_exits_0(box: Sandbox, proj
 def test_when_the_sync_reports_a_problem_still_prints_the_facts(
     box: Sandbox, project: Path
 ) -> None:
-    # sync.ps1 stops and exits 1 without local-settings.json, before it could run setup.
+    # The sync stops and returns 1 without local-settings.json, before it could run setup.
     settings = box.tools / "local-settings.json"
     hidden = settings.with_name("local-settings.json.off")
     settings.rename(hidden)
@@ -107,13 +107,36 @@ def test_when_the_sync_reports_a_problem_still_prints_the_facts(
     assert result.keys == FACT_KEYS, str(result)
 
 
-def test_without_powershell_says_so_and_still_prints_the_facts(box: Sandbox, project: Path) -> None:
+def test_without_powershell_still_syncs_says_setup_did_not_run_and_prints_the_facts(
+    box: Sandbox, project: Path
+) -> None:
     folders = os.environ["PATH"].split(os.pathsep)
     path = os.pathsep.join(f for f in folders if not shutil.which("pwsh", path=f))
     command = skill_command(box, "handoff", "prepare.py")
     result = run_command(box, command, cwd=project, env={"PATH": path})
     assert result.code == 0, str(result)
-    assert result.has_line(r"^PROBLEM\s+PowerShell 7 \(pwsh\) was not found"), str(result)
+    assert result.has_line(r"^OK\s+dev-home is up to date"), str(result)
+    pattern = r"^PROBLEM\s+PowerShell 7 \(pwsh\) was not found, so setup did not run"
+    assert result.has_line(pattern), str(result)
+    assert result.keys == FACT_KEYS, str(result)
+
+
+def test_when_the_sync_cant_load_says_so_and_still_prints_the_facts(
+    box: Sandbox, project: Path
+) -> None:
+    sync = box.tools / "internal" / "shared" / "sync.py"
+    before = sync.read_bytes()
+    write_text(sync, "this is not Python\n")
+    try:
+        result = run_command(box, skill_command(box, "handoff", "prepare.py"), cwd=project)
+    finally:
+        sync.write_bytes(before)
+    assert result.code == 0, str(result)
+    assert result.has_line(r"^PROBLEM\s+The sync stopped, so dev-home may be behind"), str(result)
+    tools = box.tools.as_posix()
+    assert result.has_line(re.escape(f"installs it by hand: git -C {tools} pull --ff-only")), str(
+        result
+    )
     assert result.keys == FACT_KEYS, str(result)
 
 

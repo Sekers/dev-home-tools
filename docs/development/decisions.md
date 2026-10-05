@@ -20,7 +20,7 @@ Claude Code 2.1.284. Claude Code's mods docs were read on 2026-10-03, for 2.1.28
 
 - **Claude Code.** `${CLAUDE_PLUGIN_ROOT}` and `${CLAUDE_SKILL_DIR}` are filled in inside
   `Bash(...)` pre-approvals (tested). The dev-home path could be a `userConfig` option, but that
-  is filled in only in the skill's text. `sync.ps1` has to run from the clone, so the plugin
+  is filled in only in the skill's text. `sync.py` has to run from the clone, so the plugin
   would have to load in place, from the clone added as a local-directory marketplace; a plugin
   installed from GitHub is copied into a versioned cache. Commands become
   `/dev-home-tools:handoff`, though a bare `/handoff` still works while nothing else uses the
@@ -44,7 +44,7 @@ Claude Code 2.1.284. Claude Code's mods docs were read on 2026-10-03, for 2.1.28
   Claude Code and about 2,500 tokens by default in Codex, which also asks the user to trust the
   hook again after every change.
 - **What setup would still do.** Nearly everything, plus registering the plugin in each Claude
-  config folder, and `update.ps1` would still pull the clone. Hooks don't need a plugin: setup
+  config folder, and `update.py` would still pull the clone. Hooks don't need a plugin: setup
   could add them to `settings.json`, with the same consent as its other settings changes.
 
 **Look again if:** Codex plugins work in its IDE extension and can load in place, or hooks
@@ -121,10 +121,10 @@ skill command that syncs starts with one script anyway (see the next entry).
 
 ## Every skill command that syncs starts with one call: prepare.py
 
-**Decision:** `templates/shared-skill-scripts/prepare.py` runs `sync.ps1`, then loads `facts.py`
-into its own process, checks the skill's stamp, and prints the facts for the topics a skill
-names. It's the first command of every skill command that syncs. Skills still commit through
-`sync.ps1 -Message`.
+**Decision:** `templates/shared-skill-scripts/prepare.py` runs the sync inside its own process
+(the code of `sync.py`, from `internal/shared/`), then loads `facts.py` into the same process,
+checks the skill's stamp, and prints the facts for the topics a skill names. It's the first
+command of every skill command that syncs. Skills still commit through `sync.py --message`.
 
 **The problem:** each command an agent runs costs a turn of the model, and turns cost more time
 than the scripts do. A plain `/handoff` took five: `facts.ps1`, `sync.ps1`, reading the handoff,
@@ -145,7 +145,7 @@ what would otherwise be copied into each skill, such as handling a tool that can
 
 - Each skill joining `sync.ps1; facts.ps1` in one line: it rests on each tool approving joined
   commands, and gives other skills nothing to build on.
-- A switch on `sync.ps1` that also prints the facts: `sync.ps1` is for people too, while this is
+- A switch on the sync that also prints the facts: `sync.py` is for people too, while this is
   only for agents.
 - Printing the handoff from the script as well, to save reading it: a long handoff passes the
   30,000 characters Claude Code shows of a command's output, and editing a file needs a real read
@@ -238,9 +238,13 @@ a build for each platform, and room in every clone's history. On Windows, people
 with the Python install manager, since the traditional installer stops with Python 3.16. The
 floor is 3.12, which the tests need too (`os.path.isjunction`, and `shutil.rmtree`'s `onexc`).
 
+**Phase 2, measured:** on the faster PC, a plain `/knowledge`'s `prepare.py` took 1.7 to 1.8 s
+in place of 2.2 to 2.5 s, most of it the two GitHub fetches and setup's 0.6 s, which still starts
+PowerShell. A commit no longer starts PowerShell at all.
+
 **Phase 3 must keep setup from ever waiting for input nobody can give,** as `setup.ps1` never
 does. In Python, `sys.stdin.isatty()` is the wrong check on Windows: it's true for the `NUL`
-input that agents' commands get. So: `-Quiet` never asks; it asks only when input is a real
+input that agents' commands get. So: `--quiet` never asks; it asks only when input is a real
 console (`GetConsoleMode` on Windows, `isatty()` elsewhere); `EOFError` counts as no; and the
 tests run setup with input from `NUL` and from an open, silent pipe.
 
@@ -270,8 +274,8 @@ script's request for a version, so a project's environment can't change which Py
 
 **Why `internal/`:** it's machinery nobody runs directly, which is what `internal/` is for, and
 the root is kept to what must be there (see "What the root holds"). It isn't generated content,
-so not `internal/.generated/`; and sync's and setup's agent commands will run through it too in
-phases 2 and 3, so not `shared-skill-scripts/`. The dot keeps it apart from Python code that
+so not `internal/.generated/`; and sync's agent commands run through it too, as setup's will in
+phase 3, so not `shared-skill-scripts/`. The dot keeps it apart from Python code that
 phase 2 may put in `internal/`. Setup's cleanup of the generated files never looks inside a link,
 so a junction nearby can't lead it into the Python install.
 
@@ -314,7 +318,8 @@ setup will paste into each `SKILL.md` and never install, once that's built.
 **Why sibling folders, not one folder with `scripts/` and `text/` inside:** setup installs the
 scripts but only reads the text, so each folder keeps one job, with no extra layer and shorter
 command paths. "shared" is in both names because `skill-scripts` read as every skill's scripts,
-and "skill" keeps them apart from `internal/shared/`, which only the scripts at the root load.
+and "skill" keeps them apart from `internal/shared/`, the code behind the scripts in the root,
+which `prepare.py` loads the sync from too.
 
 **Look again if:** a third kind of shared file comes along that doesn't fit either.
 
@@ -411,11 +416,15 @@ settings, the tests, and what the tools write: `.venv`, caches, and the test san
 - `LICENSE`: GitHub's docs put it in the root.
 - `README.md`: GitHub's front page, and where people look first. GitHub would also show one from
   `docs/` or `.github/`, so this one is convention.
-- `setup.ps1`, `sync.ps1`, and `update.ps1`: people run them by hand. They stay the real scripts,
-  with no shortcuts: after phase 3 they run as `py <path>\setup.py`, since the Python install
-  manager's `py` is an app execution alias in `%LocalAppData%\Microsoft\WindowsApps`, which
-  Windows puts on every user's PATH by default (aliases arrived in Windows 10 version 1709), and
-  as `python3` on macOS and Linux.
+- `setup.ps1`, `sync.py`, and `update.py`: people run them by hand. The Python ones are short
+  entry points that load their code from `internal/shared/`, and setup will be one too after
+  phase 3. Python writes a `__pycache__` folder beside any file another script loads, and
+  `prepare.py` loads the sync's code into its own process, so that code in the root would put
+  that folder there. People run them as `py <path>\sync.py`, since the Python install manager's
+  `py` is an app execution alias in `%LocalAppData%\Microsoft\WindowsApps`, which Windows puts
+  on every user's PATH by default (aliases arrived in Windows 10 version 1709), and as `python3`
+  on macOS and Linux. An entry point checks the Python version before anything else, so an older
+  Python gets a message instead of a syntax error.
 - `templates/`: the repo's main content, what setup fills in and links into the tools.
 - `internal/`: there to keep everything else out of the root.
 - `docs/`: GitHub Pages, without a build workflow, publishes only from the root or `docs/`.
@@ -443,9 +452,80 @@ decision.
 - `pyproject.toml` and `uv.lock` in the root, where Python projects usually keep them: the tools
   would find them without flags, but they and what the tools write would add seven entries to
   the root, and dev-home-tools isn't a package.
-- Shortcuts in the root for setup, sync, and update, with the real scripts elsewhere: running
-  the real ones is just as easy.
+- The whole of sync's and update's code in the root, with `prepare.py` loading it without
+  writing a cache: it would be compiled again on every skill command, and the code they share
+  would still need a folder elsewhere.
+- `prepare.py` starting `sync.py` as a process of its own: one more Python start, about 0.03 to
+  0.1 s, on every skill command.
+- The Python code in a folder of its own, such as `internal/lib/`, with `internal/shared/` left
+  to setup's PowerShell files until phase 3: two folders doing one job until then.
 - The tests staying in `internal/tests/`: ruff wouldn't find its settings for them.
 
 **Look again if:** dev-home-tools becomes a Python package, an editor's settings become worth a
-root folder, or a `-Configure` switch means nobody edits `local-settings.json` by hand.
+root folder, or a `--configure` switch means nobody edits `local-settings.json` by hand.
+
+## Options take Python's usual form
+
+**Decision:** the Python scripts take long options with two dashes, such as `sync.py --message`
+and `update.py --quiet`, each with exactly one spelling: no short forms such as `-m`, and no
+shortened names such as `--mess`. Setup's will follow in phase 3: `--quiet`, `--content-dir`,
+`--what-if`, and `--configure` once it's built.
+
+**Why:** a skill's pre-approval matches a command's text literally, so a second spelling of an
+option could make a command ask first. Every command's text changed in phase 2 anyway, since
+`pwsh -NoProfile -File .../sync.ps1` became `<python> -I .../sync.py`.
+
+**Option set aside:** PowerShell's form, `-Message` and `-Quiet`. Python can take it, and it
+would look familiar, but it's unusual for Python and out of place on macOS and Linux.
+
+**Look again if:** a tool the skills run in can't pass an option that starts with two dashes.
+
+## One sync at a time, through a lock the operating system holds
+
+**Decision:** `sync.py` locks the file `dev-home-sync.lock` in dev-home's `.git` folder through
+the operating system (`msvcrt.locking` on Windows, `fcntl.flock` elsewhere), and waits up to 2
+minutes for another run on the same dev-home to let go.
+
+**Why:** the operating system lets go of the lock when the process ends, even one that stops
+partway, so no lock is ever left behind for someone to delete. It's in Python's standard
+library on every platform, and the file sits inside `.git`, where git ignores it.
+
+**Options set aside:**
+
+- A named mutex, as `sync.ps1` used: Windows only, and Python would need `ctypes` calls to
+  reach it.
+- A file that exists only while a run holds it: one left by a run that stopped partway would
+  stop every sync until someone deleted it.
+
+**Look again if:** dev-home moves somewhere a file lock doesn't hold, such as a network drive.
+
+## A broken step can't stop the update that would fix it
+
+**Decision:**
+
+- `sync.py` loads `internal/shared/update.py` only when it reaches the update check, and reports
+  anything that stops it, even an error that keeps it from loading, as a `PROBLEM` line, then
+  goes on to setup.
+- Each of the sync's other steps (the commit, syncing with GitHub, listing the uncommitted
+  files, and setup) runs in a guard: an error in one, such as a bug on a path no test covers,
+  is a `PROBLEM` line, and the steps after it still run. A commit that stops still ends the
+  sync, so nothing half done is pushed.
+- When the code can't load or run at all, the entry points and `prepare.py` print a `PROBLEM`
+  line with the commands that install a fix by hand (`git -C <tools> pull --ff-only`, then
+  setup), and the README's troubleshooting says the same. `prepare.py` still prints the facts.
+
+**Why:** an update is how fixes arrive, so a bug in the sync must not stop the check that would
+install the fix, and a broken sync must never keep an agent from the facts it needs. A guard
+costs about 36 ns per sync when nothing fails (measured), against a sync's 1.7 s. Tests break
+each part on purpose.
+
+**Options set aside:**
+
+- Only documenting the way out: the likelier failure, an error partway through a sync, would
+  still skip the update check every time it happened.
+- update's code standing alone, with its own copy of a git runner, status lines, and the
+  settings reader, so even a broken `git.py` couldn't stop it: about 40 copied lines, to guard
+  against a module that won't load, which the tests catch before any commit.
+
+**Look again if:** the update check moves out of the sync, or a broken shared module ever
+reaches a user.

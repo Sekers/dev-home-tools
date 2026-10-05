@@ -1,16 +1,12 @@
 #Requires -Version 7.2
 <#
 .SYNOPSIS
-    Runs git for setup.ps1, sync.ps1, and update.ps1, which each load this file.
+    Runs git for setup.ps1, which loads this file. git.py, beside it, does the same for the
+    Python scripts.
 
 .DESCRIPTION
-    Each script loads this file with a dot-source when it starts, so each gets the copy on disk
-    at that moment. After an update, the next script to start uses the new copy, and one that is
-    already running keeps the copy it loaded.
-
-    It only defines functions. Nothing here keeps state or changes anything the whole process
-    shares, such as environment variables or the current folder, because sync.ps1 runs
-    update.ps1 inside its own process.
+    Setup loads this file with a dot-source when it starts, so it gets the copy on disk at that
+    moment. It only defines functions, and setup defines none with the same name (a test checks).
 #>
 
 function Invoke-Git {

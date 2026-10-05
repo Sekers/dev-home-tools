@@ -3,8 +3,8 @@
 - `{{CONTENT_DIR}}` is my private repo, dev-home. It holds project handoffs and my general
   knowledge base. Use the `handoff` and `knowledge` skills for them.
 - Other sessions share dev-home. Run git there only through
-  `pwsh -NoProfile -File {{TOOLS_DIR}}/sync.ps1`, and never stage, commit, stash, or discard a
-  file you didn't change.
+  `{{PYTHON}} -I {{TOOLS_DIR}}/sync.py`, and never stage, commit, stash, or discard a file you
+  didn't change.
 - Project status belongs in the handoff, and lasting decisions in the project's own files, never
   in auto memory.
 - Create new personal skills in `{{CONTENT_DIR}}/skills/`, never in a tool's own skills folder,

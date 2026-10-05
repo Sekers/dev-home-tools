@@ -1,4 +1,6 @@
-"""templates/shared-skill-scripts/ and the skills that run them, read without running anything."""
+"""The Python scripts and the skills that run them, read without running anything: the skills'
+shared scripts in templates/shared-skill-scripts/, the entry points in the root, and the code
+they load from internal/shared/."""
 
 import ast
 import re
@@ -16,10 +18,25 @@ from helpers import (
 
 SCRIPTS = REPO_ROOT / "templates" / "shared-skill-scripts"
 SKILLS = REPO_ROOT / "templates" / "skills"
+SHARED = REPO_ROOT / "internal" / "shared"
+ENTRY_POINTS = [REPO_ROOT / "sync.py", REPO_ROOT / "update.py"]
 
 
 def scripts() -> list[Path]:
     return sorted(SCRIPTS.glob("*.py"))
+
+
+def shared_modules() -> list[Path]:
+    return sorted(SHARED.glob("*.py"))
+
+
+def python_files() -> list[Path]:
+    """Every Python file that people or skills run."""
+    return scripts() + shared_modules() + ENTRY_POINTS
+
+
+def repo_path(path: Path) -> str:
+    return path.relative_to(REPO_ROOT).as_posix()
 
 
 def skills() -> list[Path]:
@@ -149,13 +166,39 @@ def test_facts_changes_nothing_the_whole_process_shares() -> None:
     assert lines_of(find_process_wide_changes(parse(facts)), facts) == []
 
 
-@pytest.mark.parametrize("script", scripts(), ids=lambda p: p.name)
+@pytest.mark.parametrize("module", shared_modules(), ids=repo_path)
+def test_internal_shared_changes_nothing_the_whole_process_shares(module: Path) -> None:
+    # prepare.py runs the sync inside its own process, and the sync runs update there too.
+    assert lines_of(find_process_wide_changes(parse(module)), module) == []
+
+
+@pytest.mark.parametrize("entry", ENTRY_POINTS, ids=repo_path)
+def test_each_entry_point_runs_the_module_of_its_own_name(entry: Path) -> None:
+    text = entry.read_text(encoding="utf-8")
+    assert f'load("{entry.stem}").main(sys.argv[1:])' in text
+    assert (SHARED / entry.name).is_file()
+
+
+@pytest.mark.parametrize("skill", skills(), ids=lambda p: p.name)
+def test_each_skill_pre_approves_its_sync_commands_for_both_tools(skill: Path) -> None:
+    # A commit message differs every time, so these end in a wildcard.
+    text = (skill / "SKILL.md").read_text(encoding="utf-8")
+    allowed = re.search(r'^allowed-tools:\s*"(.*)"\s*$', text, re.MULTILINE)
+    approvals = allowed.group(1) if allowed else ""
+    prefix = "{{PYTHON}} -I {{TOOLS_DIR}}/sync.py"
+    assert re.search(rf"`{re.escape(prefix)} --message ", text), f"{skill.name} never commits"
+    for tool in ("Bash", "PowerShell"):
+        assert f"{tool}({prefix})" in approvals, f"{tool} plain sync"
+        assert f"{tool}({prefix} *)" in approvals, f"{tool} sync that commits"
+
+
+@pytest.mark.parametrize("script", python_files(), ids=repo_path)
 def test_each_script_uses_only_the_standard_library(script: Path) -> None:
     # People install only Python, and the test tools are importable when the tests run them.
     assert non_standard_imports(parse(script)) == []
 
 
-@pytest.mark.parametrize("script", scripts(), ids=lambda p: p.name)
+@pytest.mark.parametrize("script", python_files(), ids=repo_path)
 def test_each_script_is_ascii(script: Path) -> None:
     text = script.read_bytes()
     assert text.isascii(), [n for n, line in enumerate(text.splitlines(), 1) if not line.isascii()]

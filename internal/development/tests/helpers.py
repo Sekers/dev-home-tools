@@ -5,7 +5,7 @@ internal/development/.test-sandbox/, which git ignores: a copy of this repo's wo
 (uncommitted changes included, development tools left out), a scratch profile, a
 dev-home with some content, and local bare repos standing in for GitHub. The copy's
 local-settings.json sets testHomeDir before anything in the copy runs, so every setup run from
-it, including the ones sync.ps1 and update.ps1 start, uses the scratch profile instead of the
+it, including the ones sync.py and update.py start, uses the scratch profile instead of the
 real one. run refuses a script outside a sandbox. Nothing here uses the network or GitHub.
 
 The skills' commands are taken word for word from the sandbox's generated skills. They start
@@ -73,6 +73,11 @@ class Sandbox:
     @property
     def tools_remote(self) -> Path:
         return self.root / "tools-remote.git"
+
+    @property
+    def upstream(self) -> Path:
+        """A second clone of tools_remote, standing in for the maintainer pushing updates."""
+        return self.root / "tools-upstream"
 
     @property
     def generated(self) -> Path:
@@ -179,8 +184,9 @@ def write_text(path: Path, text: str) -> None:
 def new_sandbox(name: str, *, tools_repo: bool = False) -> Sandbox:
     """Builds a sandbox. The copy's local-settings.json, with testHomeDir, is written before
     anything in the copy can run. With tools_repo, the copy is also a git repo with a remote,
-    as a clone of dev-home-tools is. The profile's Python install manager folder is a junction
-    to this environment's base Python, which setup links the copy's internal/.python to."""
+    as a clone of dev-home-tools is, and upstream is a second clone of that remote. The
+    profile's Python install manager folder is a junction to this environment's base Python,
+    which setup links the copy's internal/.python to."""
     box = Sandbox(SANDBOX_ROOT / f"py-{name}-{uuid.uuid4().hex[:8]}")
     box.root.mkdir(parents=True)
 
@@ -230,6 +236,7 @@ def new_sandbox(name: str, *, tools_repo: bool = False) -> Sandbox:
         git("init", "--quiet", "--bare", "-b", "main", str(box.tools_remote))
         git("-C", str(box.tools), "remote", "add", "origin", str(box.tools_remote))
         git("-C", str(box.tools), "push", "--quiet", "-u", "origin", "main")
+        git("clone", "--quiet", str(box.tools_remote), str(box.upstream))
     return box
 
 
@@ -293,15 +300,18 @@ def run(
     *,
     cwd: Path,
     env: Mapping[str, str | None] | None = None,
+    answer: str | None = None,
 ) -> Run:
     """Runs a command as an agent's shell tool does: input from nowhere, so a script can never
-    wait for an answer, and its output and errors together, read as UTF-8."""
+    wait for an answer, and its output and errors together, read as UTF-8. With answer, that's
+    its input instead, as a person typing it."""
     check_in_sandbox(argv)
     done = subprocess.run(
         argv,
         cwd=cwd,
         env=script_env(box, env),
-        stdin=subprocess.DEVNULL,
+        input=None if answer is None else (answer + "\n").encode("utf-8"),
+        stdin=subprocess.DEVNULL if answer is None else None,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         check=False,
@@ -314,6 +324,77 @@ def run_pwsh(box: Sandbox, script: str, *args: str, cwd: Path | None = None) -> 
     pwsh = shutil.which("pwsh") or "pwsh"
     path = str(box.tools / script)
     return run(box, [pwsh, "-NoProfile", "-File", path, *args], cwd=cwd or box.root)
+
+
+def run_python(
+    box: Sandbox,
+    script: str,
+    *args: str,
+    cwd: Path | None = None,
+    env: Mapping[str, str | None] | None = None,
+    answer: str | None = None,
+) -> Run:
+    """Runs one of the sandbox copy's Python scripts in its root, such as sync.py, as the skills
+    do, with this environment's Python (see the description above)."""
+    argv = [sys.executable, "-I", str(box.tools / script), *args]
+    return run(box, argv, cwd=cwd or box.root, env=env, answer=answer)
+
+
+def start_python(box: Sandbox, script: str, *args: str) -> subprocess.Popen[bytes]:
+    """Starts one of the sandbox copy's Python scripts in its root without waiting for it, as
+    run_python runs it, with its output and errors together."""
+    argv = [sys.executable, "-I", str(box.tools / script), *args]
+    check_in_sandbox(argv)
+    return subprocess.Popen(
+        argv,
+        cwd=box.root,
+        env=script_env(box),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+
+
+def finish(process: subprocess.Popen[bytes]) -> Run:
+    """Waits for a process start_python started, and returns how it ended."""
+    out, _ = process.communicate(timeout=120)
+    return Run(process.returncode, out.decode("utf-8", errors="replace").splitlines())
+
+
+def run_while_asking(
+    box: Sandbox, script: str, *, prompt: str, answer: str, meanwhile: Callable[[], None]
+) -> Run:
+    """Runs one of the sandbox copy's Python scripts, waits for the output line that matches
+    prompt, which comes just before its question, calls meanwhile, then answers."""
+    argv = [sys.executable, "-I", str(box.tools / script)]
+    check_in_sandbox(argv)
+    process = subprocess.Popen(
+        argv,
+        cwd=box.root,
+        env=script_env(box),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    assert process.stdin is not None and process.stdout is not None
+    lines: list[str] = []
+    try:
+        while True:
+            raw = process.stdout.readline()
+            if not raw:
+                raise AssertionError(
+                    f"never reached a line matching {prompt}:\n" + "\n".join(lines)
+                )
+            lines.append(raw.decode("utf-8", errors="replace").rstrip("\r\n"))
+            if re.search(prompt, lines[-1]):
+                break
+        meanwhile()
+        rest, _ = process.communicate((answer + "\n").encode("utf-8"), timeout=120)
+    finally:
+        if process.poll() is None:
+            process.kill()
+    lines.extend(rest.decode("utf-8", errors="replace").splitlines())
+    return Run(process.returncode, lines)
 
 
 def skill_command(box: Sandbox, skill: str, script: str) -> str:
