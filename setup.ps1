@@ -43,7 +43,8 @@
 
     For testing, the tests in internal/development/tests/ run a throwaway copy of this repo whose
     local-settings.json sets testHomeDir. Setup then uses that folder instead of your profile, and
-    says so on every run. Setup never writes testHomeDir itself.
+    says so on every run. It ignores a CLAUDE_CONFIG_DIR outside that folder. Setup never writes
+    testHomeDir itself.
 
 .PARAMETER Quiet
     Print only changes and problems. Prints nothing when everything is already in place. Never
@@ -938,14 +939,15 @@ function Get-LineDiff {
 function Repair-Setting {
     # Offers a planned settings change: shows the changed lines, asks, then writes the file with a
     # backup. When the change can't be made safely, the answer is no, or setup runs with -Quiet, it
-    # reports a problem and leaves the file alone.
+    # reports a problem and leaves the file alone. With -Quiet, the problem ends with QuietAdvice.
     param(
         [Parameter(Mandatory)][string]$Subject,
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][string]$Need,
         [Parameter(Mandatory)][pscustomobject]$Plan,
         [Parameter(Mandatory)][string]$HowTo,
-        [Parameter(Mandatory)][string]$Snippet
+        [Parameter(Mandatory)][string]$Snippet,
+        [string]$QuietAdvice = 'Run setup.ps1 without -Quiet, and it offers to make the change.'
     )
     $problem = '{0}: {1} needs {2}.' -f $Subject, $Path, $Need
     if ($Plan.Reason) {
@@ -958,7 +960,7 @@ function Repair-Setting {
         return
     }
     if ($Quiet) {
-        Write-Status -State PROBLEM -Message ($problem + ' Run setup.ps1 without -Quiet, and it offers to make the change.')
+        Write-Status -State PROBLEM -Message ($problem + ' ' + $QuietAdvice)
         return
     }
 
@@ -1577,7 +1579,19 @@ $usingRealHome = (ConvertTo-ComparablePath -Path $HomeDir) -eq (ConvertTo-Compar
 
 $defaultClaudeDir = ConvertTo-ComparablePath -Path (Join-Path $HomeDir '.claude')
 $claudeCandidates = @($defaultClaudeDir) + @($settings.claudeConfigDirs)
-if ($usingRealHome -and $env:CLAUDE_CONFIG_DIR) { $claudeCandidates += $env:CLAUDE_CONFIG_DIR }
+# The Claude folder of the session running setup, which may be in no list. A test profile takes
+# it only from inside itself, so the real one is never touched.
+$sessionClaudeDir = $null
+if ($env:CLAUDE_CONFIG_DIR) {
+    $sessionClaudeDir = ConvertTo-ComparablePath -Path (Resolve-HomePath -Path $env:CLAUDE_CONFIG_DIR)
+    $homePrefix = (ConvertTo-ComparablePath -Path $HomeDir) + [System.IO.Path]::DirectorySeparatorChar
+    if (-not ($usingRealHome -or $sessionClaudeDir.StartsWith($homePrefix, [System.StringComparison]::OrdinalIgnoreCase))) { $sessionClaudeDir = $null }
+}
+if ($sessionClaudeDir) { $claudeCandidates += $sessionClaudeDir }
+# A run without -Quiet usually has no CLAUDE_CONFIG_DIR, so it sees that folder only once it's listed.
+$listedClaudeDirs = @($settings.claudeConfigDirs | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { ConvertTo-ComparablePath -Path (Resolve-HomePath -Path $_) })
+$unlistedClaudeDir = $null
+if ($sessionClaudeDir -and ($sessionClaudeDir -ne $defaultClaudeDir) -and ($listedClaudeDirs -notcontains $sessionClaudeDir)) { $unlistedClaudeDir = $sessionClaudeDir }
 $claudeDirs = [System.Collections.Generic.List[string]]::new()
 foreach ($candidate in $claudeCandidates) {
     if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
@@ -1688,7 +1702,12 @@ foreach ($claudeDir in $claudeDirs) {
     elseif ($claudeReadable) {
         $plan = $(try { Get-ClaudeSettingsPlan -Path $claudeSettingsPath -Entries $missing } catch { [pscustomobject]@{ Reason = 'planning the change failed ({0})' -f $_.Exception.Message } })
         $entries = ($missing | ForEach-Object { ConvertTo-Json -InputObject $_ }) -join ', '
-        Repair-Setting -Subject ('Claude Code settings in {0}' -f $claudeName) -Path $claudeSettingsPath -Plan $plan `
+        $advice = @{}
+        if ($claudeDir -eq $unlistedClaudeDir) {
+            $listEntry = if ((Split-Path -Parent $claudeDir) -eq (ConvertTo-ComparablePath -Path $HomeDir)) { '~/' + $claudeName } else { ConvertTo-ForwardPath -Path $claudeDir }
+            $advice.QuietAdvice = 'This folder comes only from CLAUDE_CONFIG_DIR, which a run without -Quiet usually doesn''t have. Add "{0}" to claudeConfigDirs in {1}, then run setup.ps1 without -Quiet, and it offers to make the change.' -f $listEntry, $SettingsPath
+        }
+        Repair-Setting @advice -Subject ('Claude Code settings in {0}' -f $claudeName) -Path $claudeSettingsPath -Plan $plan `
             -Need ('{0} in permissions.additionalDirectories' -f ($missing -join ' and ')) `
             -HowTo 'Merge this into the file. If it already has "permissions", put additionalDirectories inside that block:' `
             -Snippet @"

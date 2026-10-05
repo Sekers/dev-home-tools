@@ -519,6 +519,32 @@ function Test-Setup {
     Copy-Item -LiteralPath (Join-Path $box.Root 'claude-settings.json') -Destination (Join-Path $box.Profile '.claude/settings.json') -Force
     Copy-Item -LiteralPath (Join-Path $box.Root 'config.toml') -Destination (Join-Path $box.Profile '.codex/config.toml') -Force
 
+    # The Claude folder in CLAUDE_CONFIG_DIR: a test profile takes it only from inside itself. One
+    # in no list gets advice that works from a terminal, where that variable usually isn't set.
+    $sessionClaude = Join-Path $box.Profile '.claude-second'
+    $outsideClaude = Join-Path $box.Root 'outside-claude'
+    foreach ($folder in @($sessionClaude, $outsideClaude)) { Write-TextFile -Path (Join-Path $folder 'settings.json') -Text "{}`n" }
+    $settingsText = Get-Content -LiteralPath $settingsPath -Raw
+    $realClaudeDir = $env:CLAUDE_CONFIG_DIR
+    try {
+        $env:CLAUDE_CONFIG_DIR = $outsideClaude
+        $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
+        Test-Check 'a test profile ignores a CLAUDE_CONFIG_DIR outside it' (($run.ExitCode -eq 0) -and (-not (Test-Path -LiteralPath (Join-Path $outsideClaude 'skills')))) $run.Lines
+        $env:CLAUDE_CONFIG_DIR = $sessionClaude
+        $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
+        Test-Link 'links the skills in the CLAUDE_CONFIG_DIR folder' (Join-Path $sessionClaude 'skills/handoff') (Join-Path $generated 'skills/handoff')
+        Test-Check 'tells how to list a CLAUDE_CONFIG_DIR folder that is in no list' (($run.ExitCode -eq 1) -and (Test-HasLine $run.Lines '^PROBLEM\s+Claude Code settings in \.claude-second: .* Add "~/\.claude-second" to claudeConfigDirs in .*local-settings\.json, then run setup\.ps1 without -Quiet, and it offers')) $run.Lines
+        $listed = $settingsText | ConvertFrom-Json
+        $listed.claudeConfigDirs = @('~/.claude-second')
+        Write-TextFile -Path $settingsPath -Text ($listed | ConvertTo-Json)
+        $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
+        Test-Check 'a listed folder gets the advice to run setup without -Quiet' (($run.ExitCode -eq 1) -and (Test-HasLine $run.Lines '^PROBLEM\s+Claude Code settings in \.claude-second: .* Run setup\.ps1 without -Quiet, and it offers') -and (-not (Test-HasLine $run.Lines 'claudeConfigDirs'))) $run.Lines
+    }
+    finally {
+        $env:CLAUDE_CONFIG_DIR = $realClaudeDir
+        Write-TextFile -Path $settingsPath -Text $settingsText
+    }
+
     $operatingTemplate = Join-Path $box.Tools 'templates/operating-rules/operating-rules.md'
     Add-Content -LiteralPath $operatingTemplate -Value '- A line added to the operating rules.'
     $run = Invoke-Script -Path $setup -Arguments @('-Quiet')
