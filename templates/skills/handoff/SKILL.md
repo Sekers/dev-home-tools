@@ -149,8 +149,8 @@ about this project doesn't belong here either.
    - `draft`: where a GitHub issue draft goes.
    - `link`: the handoff, as the target for links to it in your replies.
    - `project`: the project's folder, as the start of the target for links to its files.
-   - `environment`: the name of the computer you're on, which says which subsection of
-     Environments is yours (see rule 6).
+   - `environment`: the name of the computer you're on. It names the current environment's
+     subsection unless rule 6 calls for a stable cloud service name instead.
    - `checked`: the commit the handoff's State line names, as a short hash; `none` when it names
      none; or `missing` and a hash, when this checkout doesn't have that commit.
    - `newer`: how many commits this checkout has that `checked` doesn't, or `unknown`.
@@ -385,8 +385,11 @@ candidates too. On Windows, Codex runs even approved commands inside its sandbox
    machine, a container, WSL, a remote server, or a cloud service such as Claude Code on the web
    or GitHub Codespaces. Name the subsection so it stays the same from session to session:
    `environment` from the facts, which is the computer's name, or the service's name for a
-   cloud environment whose computer name changes each time. Only edit the subsection for the
-   environment you're in.
+   cloud environment whose computer name changes each time. A session may edit any environment's
+   subsection only when it has reliable evidence about that environment: it inspected it
+   directly, the user gave the fact, it has output from there, or a project-wide change makes an
+   item plainly obsolete. Never infer one environment's state from another. The current
+   environment is the default for facts learned locally, not an ownership boundary.
 7. No secrets, credentials, tenant or account IDs, or personal information about anyone other
    than the user, such as customer or colleague data. Say where a secret is kept, never its
    value.

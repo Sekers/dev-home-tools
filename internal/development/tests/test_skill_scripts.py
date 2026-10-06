@@ -192,6 +192,21 @@ def test_each_skill_pre_approves_its_sync_commands_for_both_tools(skill: Path) -
         assert f"{tool}({prefix} *)" in approvals, f"{tool} sync that commits"
 
 
+def test_handoff_environment_edits_follow_evidence_not_session_location() -> None:
+    # The current computer names the default subsection, but doesn't own it: reliable evidence
+    # about another environment must be usable without permitting guesses across environments.
+    text = (SKILLS / "handoff" / "SKILL.md").read_text(encoding="utf-8")
+    words = " ".join(text.split())
+    assert "Only edit the subsection for the environment you're in." not in words
+    assert (
+        "A session may edit any environment's subsection only when it has reliable evidence"
+        in words
+    )
+    assert "Never infer one environment's state from another." in words
+    assert "not an ownership boundary" in words
+    assert "current environment's subsection" in words
+
+
 @pytest.mark.parametrize("script", python_files(), ids=repo_path)
 def test_each_script_uses_only_the_standard_library(script: Path) -> None:
     # People install only Python, and the test tools are importable when the tests run them.

@@ -43,6 +43,11 @@ is your go-ahead. Some examples:
 - **Every handoff has the same sections,** from `templates/skills/handoff/template.md`; the
   handoff skill says what goes in each. `/handoff update` brings an older handoff in line, and
   asks before it moves anything out.
+- **Environment notes follow the evidence.** An environment can be a computer, VM, container,
+  remote server, or cloud service. An agent normally updates the environment it's working in,
+  but it can update another environment when it has reliable evidence about it, such as your
+  report, output from there, direct inspection, or a project-wide change. It never infers one
+  environment's state from another.
 - **Issues.** After an update, the agent may suggest up to three items as issues, only when
   filing one really makes sense, and asks whether to file each, decide later, or not. Later marks
   the item so the next update asks again; no marks it so it's never suggested again. Either mark
