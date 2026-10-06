@@ -64,19 +64,21 @@ def person(box: Sandbox, monkeypatch: pytest.MonkeyPatch) -> Iterator[Person]:
 
 class FakeGh:
     """gh, signed in, recording each call. A clone copies the sandbox's own dev-home remote, as
-    if from GitHub. failing names a command, such as ("repo", "create"), that fails instead."""
+    if from GitHub, or clone_from when a test sets it. failing names a command, such as
+    ("repo", "create"), that fails instead."""
 
     def __init__(self, box: Sandbox) -> None:
         self.box = box
         self.calls: list[tuple[str, ...]] = []
         self.failing: tuple[str, ...] = ()
+        self.clone_from = box.remote
 
     def __call__(self, program: str, *args: str) -> tuple[int, list[str]]:
         self.calls.append(args)
         if self.failing and args[: len(self.failing)] == self.failing:
             return 1, [f"gh: {' '.join(self.failing)} failed on purpose"]
         if args[:2] == ("repo", "clone"):
-            git("clone", "--quiet", str(self.box.remote), args[3])
+            git("clone", "--quiet", str(self.clone_from), args[3])
         return 0, []
 
 
@@ -172,12 +174,12 @@ def test_a_first_run_asks_about_updates_and_each_claude_folder(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    # A first run has no local-settings.json yet. Here it must keep testHomeDir, so the run is
-    # told the file is new instead.
+    # A first run has no local-settings.json yet. Here it must keep testHomeDir, so the run gets
+    # settings with no answers instead.
     code = shared_module(box, "setup")
     saved = json.loads(settings.read_text(encoding="utf-8"))
     first_run = shared_module(box, "settings").LocalSettings(
-        content_dir=saved["contentDir"], test_home_dir=saved["testHomeDir"], is_new=True
+        content_dir=saved["contentDir"], test_home_dir=saved["testHomeDir"]
     )
     monkeypatch.setattr(code, "load_local_settings", lambda: first_run)
     second = box.profile / ".claude-second"
@@ -209,12 +211,77 @@ def test_a_first_run_asks_about_updates_and_each_claude_folder(
     assert any(".claude-third, for another Claude account?" in asked for asked in person.asked)
     assert written["autoUpdate"] is True
     assert written["claudeConfigDirs"] == ["~/.claude-second"]
+    # The no is kept, so the folder isn't asked about again.
+    assert written["declinedClaudeConfigDirs"] == ["~/.claude-third"]
     assert written["testHomeDir"] == saved["testHomeDir"]
     assert linked == box.generated / "skills" / "handoff"
     assert len(allowed["permissions"]["additionalDirectories"]) == 2
     assert re.search(
         r"^SET\s+Claude Code settings in \.claude-second: changed .* \(new file\)", out, re.M
     ), out
+
+
+def test_asks_each_question_whose_answer_isnt_saved_yet_then_never_again(
+    box: Sandbox, settings: Path, person: Person, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Not a first run: the file is there, but autoUpdate has no answer yet, and a Claude folder
+    # was made after the first run.
+    saved = json.loads(settings.read_text(encoding="utf-8"))
+    del saved["autoUpdate"]
+    write_text(settings, json.dumps(saved, indent=2) + "\n")
+    later = box.profile / ".claude-later"
+    later.mkdir()
+    person.answers.update(
+        {
+            r"^Pull updates automatically\? \[y/N\]: $": "n",
+            r"\.claude-later, for another Claude account\? \[y/N\]: $": "n",
+        }
+    )
+    try:
+        returned = setup_here(box)
+        written = json.loads(settings.read_text(encoding="utf-8"))
+        asked = list(person.asked)
+        again = setup_here(box)
+        out = capsys.readouterr().out
+    finally:
+        shutil.rmtree(later)
+    assert returned == 0 and again == 0, out
+    assert len(asked) == 2, asked
+    assert person.asked == asked, person.asked
+    assert written["autoUpdate"] is False
+    assert written["declinedClaudeConfigDirs"] == ["~/.claude-later"]
+
+
+NOT_A_DEV_HOME = r"^Your dev-home folder, or Enter to stop: $"
+
+
+def test_at_a_console_asks_again_for_a_folder_that_isnt_a_dev_home(
+    box: Sandbox, settings: Path, person: Person, capsys: pytest.CaptureFixture[str]
+) -> None:
+    project = box.root / "console-project"
+    write_text(project / "README.md", "# a project\n")
+    content = json.loads(settings.read_text(encoding="utf-8"))["contentDir"]
+    person.answers[NOT_A_DEV_HOME] = content
+    returned = setup_here(box, "--content-dir", str(project))
+    out = capsys.readouterr().out
+    assert returned == 0, out
+    assert re.search(r"console-project doesn't look like a dev-home: it has no ", out), out
+    assert json.loads(settings.read_text(encoding="utf-8"))["contentDir"] == content
+
+
+def test_at_a_console_enter_stops_at_a_folder_that_isnt_a_dev_home(
+    box: Sandbox, settings: Path, person: Person, capsys: pytest.CaptureFixture[str]
+) -> None:
+    project = box.root / "console-project-too"
+    write_text(project / "README.md", "# a project\n")
+    before = settings.read_text(encoding="utf-8")
+    person.answers[NOT_A_DEV_HOME] = ""
+    returned = setup_here(box, "--content-dir", str(project))
+    out = capsys.readouterr().out
+    assert returned == 1, out
+    pattern = r"^PROBLEM\s+Stopped: .*console-project-too doesn't look like a dev-home\."
+    assert re.search(pattern, out, re.M), out
+    assert settings.read_text(encoding="utf-8") == before
 
 
 def test_a_yes_to_a_settings_change_writes_it_and_keeps_a_backup(
@@ -394,6 +461,32 @@ def test_says_what_stopped_a_clone(
     assert returned == 1, out
     assert re.search(rf"^PROBLEM\s+.*{problem}", out, re.M), out
     assert not (missing / ".git").exists()
+
+
+def test_a_clone_that_isnt_a_dev_home_gets_no_git_config(
+    box: Sandbox,
+    settings: Path,
+    person: Person,
+    fake_gh: FakeGh,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Such as a project's repo, named by mistake at the clone question.
+    source = box.root / "a-project.git"
+    git("init", "--quiet", "--bare", "-b", "main", str(source))
+    work = box.root / "a-project-work"
+    git("clone", "--quiet", str(source), str(work))
+    write_text(work / "README.md", "# a project\n")
+    git("-C", str(work), "add", "--all")
+    git("-C", str(work), "commit", "--quiet", "-m", "test: project")
+    git("-C", str(work), "push", "--quiet", "origin", "main")
+    fake_gh.clone_from = source
+    person.answers.update({CHOICE: "c", REPO_NAME: "a-project"})
+    cloned = box.root / "wrong-clone"
+    returned = setup_here(box, "--content-dir", str(cloned))
+    out = capsys.readouterr().out
+    assert returned == 1, out
+    assert re.search(r"^PROBLEM\s+.*wrong-clone doesn't look like a dev-home", out, re.M), out
+    assert "gpgsign" not in (cloned / ".git" / "config").read_text(encoding="utf-8")
 
 
 def test_a_git_step_that_fails_while_creating_says_which(

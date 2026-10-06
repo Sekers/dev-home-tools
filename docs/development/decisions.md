@@ -769,9 +769,45 @@ value that isn't a whole number of 0 or more means the default, and setup says s
 
 **Look again if:** git changes what a failed fetch does to `FETCH_HEAD`.
 
+## Setup asks each question whose answer isn't saved yet
+
+**Decision:** setup asks each of its questions whenever the answer isn't saved, not only on a
+PC's first run, and only when a person can answer (see "Setup never waits for input nobody can
+give" above).
+
+- Whether to pull updates automatically: asked until answered. A quiet run leaves `autoUpdate`
+  out of `local-settings.json`, and a sync treats a missing answer as no.
+- Each `~/.claude-*` folder: asked once. A yes adds it to `claudeConfigDirs`, as before, and a no
+  adds it to `declinedClaudeConfigDirs`, so it isn't asked again.
+- A quiet run never asks, so it names each `~/.claude-*` folder with no answer, in a line the
+  agent passes on. A folder with no answer that the session runs in (`CLAUDE_CONFIG_DIR`) is
+  still set up, so that account keeps working, and its settings line says that setup without
+  `--quiet` asks about it. A folder with a no is left alone, even from a session there.
+- A save keeps every key in `local-settings.json` that setup doesn't know.
+
+**Why:** questions asked only on a first run missed what came later. A Claude folder made after a
+PC's first run was never offered, and a first run with `--quiet --content-dir` saved the file
+without asking anything, so it looked answered. Naming the folders on every quiet run means an
+agent in any account passes the question on: listing them took 0.38 ms at the median, and 5.6 ms
+at worst, in 50 runs on one PC, against about 500 ms for a quiet setup.
+
+**Options set aside:**
+
+- For Claude folders: offering every unlisted folder on every run (a no would be asked again
+  each time), and asking only on the first run.
+- For `autoUpdate`: asking on every run, with the current answer as the default (changing an
+  answer later is `--configure`'s job, below), and asking only on the first run.
+- For quiet runs: naming only the session's own folder (a new account has no skills linked yet,
+  so it would almost never come up), and naming none.
+- One map of every folder to its answer, in place of a second list: it would change a format
+  already in use, by hand on each PC.
+
+**Look again if:** setup gains a question that shouldn't wait for an answer.
+
 ## setup.py --configure changes every setting
 
-**Status:** decided, not built yet. This line goes once it's built.
+**Status:** decided. The check that the dev-home folder looks like a dev-home is built; the rest
+isn't yet. This line goes once it's all built.
 
 **Decision:** `setup.py --configure` is how people and agents change a setting after the first
 run: `contentDir`, `autoUpdate`, `updateCheckHours`, `contentCheckHours`, the answer for each
@@ -795,7 +831,9 @@ run: `contentDir`, `autoUpdate`, `updateCheckHours`, `contentCheckHours`, the an
   `sync.py *` for commits: the person's yes in chat to the exact preview is the approval.
 - Before it sets dev-home's git config, setup checks that the folder looks like a dev-home: it
   has the files the starter makes, `global-rules/global-rules.md` and `knowledge/README.md`.
-  With `--quiet`, it stops when they're missing, and at a console it asks.
+  With `--quiet`, it stops when they're missing, before saving or setting anything, and at a
+  console it asks for the folder again, where Enter stops. A clone gets the same check before
+  setup sets its git config.
 
 **Why:**
 

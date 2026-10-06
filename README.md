@@ -97,16 +97,16 @@ gh repo clone Sekers/dev-home-tools C:\Programming\dev-home-tools
 py C:\Programming\dev-home-tools\setup.py
 ```
 
-To see what it would change first, add `--what-if`. It still asks its first-run questions, but
-changes nothing.
+To see what it would change first, add `--what-if`. It still asks its questions, but changes
+nothing.
 
-The first run asks:
+The first run asks these, and a later run asks any whose answer isn't saved yet:
 
 | Question | What to answer |
 | --- | --- |
-| Your dev-home folder | Where your dev-home is, or should go. Press Enter for the suggestion: a `dev-home` folder next to this one, such as `C:\Programming\dev-home`. The same rules for the path apply. |
+| Your dev-home folder | Where your dev-home is, or should go. Press Enter for the suggestion: a `dev-home` folder next to this one, such as `C:\Programming\dev-home`. The same rules for the path apply. A folder that already has files in it must be a dev-home: setup checks for the files every dev-home starts with (`global-rules\global-rules.md` and `knowledge\README.md`), and asks again if they're missing, so it never changes a project's repo by mistake. |
 | Pull updates automatically? | `y` to install new versions of this repo as soon as a sync finds them, or Enter for no: you're told about them and install them yourself. See [Updates](docs/reference/scripts.md#updates). |
-| Also set up `~\.claude-<name>`? | Asked for each extra Claude Code folder it finds, one per Claude account you run with `CLAUDE_CONFIG_DIR`. `y` sets that account up too. |
+| Also set up `~\.claude-<name>`? | Asked once for each extra Claude Code folder it finds, one per Claude account you run with `CLAUDE_CONFIG_DIR`, including one made after your first run. `y` sets that account up too, and `n` is kept, so it isn't asked again. When a quiet run finds a folder it hasn't asked about, the agent tells you: run setup in a terminal to answer. |
 | Clone your existing dev-home (c), create a new private one (n), or stop (s)? | Only when the dev-home folder doesn't exist yet. On your first PC, `n` creates a private repo on GitHub from the files in `templates/dev-home-starter/`. On every later PC, `c` clones it. Either way, it then asks for the repo's name; Enter accepts `dev-home`. |
 
 Setup can create or clone dev-home only on GitHub for now; automated setup for GitLab,
@@ -135,10 +135,12 @@ skills, and skills you add on another PC, reach this one. The one exception is a
 just created on this PC: it's linked at the next `/handoff`, or right away when you run setup
 with `--quiet` (see [Your own rules and skills](#your-own-rules-and-skills)).
 
-Your answers are saved in `local-settings.json` in this folder. To change one later, edit that
-file and run setup again: `autoUpdate` is `true` or `false`, and `claudeConfigDirs` lists extra
-Claude Code folders, such as `"~/.claude-second"`. To use a different dev-home folder, run setup
-with `--content-dir <folder>`.
+Your answers are saved in `local-settings.json` in your dev-home-tools folder, next to
+`setup.py`. To change one later, edit that file and run setup again: `autoUpdate` is `true` or
+`false`; `claudeConfigDirs` lists the extra Claude Code folders to set up, such as
+`"~/.claude-second"`; and `declinedClaudeConfigDirs` lists the ones you said no to. Take a
+folder out of that last list, and setup asks about it again. To use a different dev-home folder,
+run setup with `--content-dir <folder>`.
 
 ## Day to day
 

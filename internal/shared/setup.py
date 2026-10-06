@@ -9,7 +9,14 @@ reports anything else without changing it.
 On the first run it asks where your dev-home is (the private repo that holds your handoffs and
 knowledge base), and saves the answer in local-settings.json in dev-home-tools' folder. If that
 folder doesn't exist yet, it offers to clone your dev-home from GitHub, or to create a new
-private one from the files in templates/dev-home-starter/.
+private one from the files in templates/dev-home-starter/. A folder that exists must look like a
+dev-home: it has the files the starter makes, global-rules/global-rules.md and
+knowledge/README.md. Setup sets that repo's own git config, so it never works on a folder
+without them, such as a project's repo named by mistake.
+
+Each of its other questions, whether to pull updates automatically and whether to set up each
+~/.claude-* folder, is asked whenever its answer isn't saved yet, not only on the first run. A
+no to a Claude folder is saved too, so it's asked about once.
 
 The templates in this repo hold placeholders where paths go. Setup writes copies of the skills,
 the scripts they share, and the operating rules, with this PC's paths filled in, to
@@ -26,10 +33,10 @@ Run it by hand once per PC. After that, each sync runs it with --quiet, so chang
 skills, and skills added on another PC, reach this one.
 
 Claude Code gets the links in ~/.claude, in each folder listed under claudeConfigDirs in
-local-settings.json (one per extra Claude account; the first run offers each ~/.claude-* folder
-it finds), and in the folder in CLAUDE_CONFIG_DIR when that's set. Codex gets them when it's
-installed. Each link to a folder is a junction on Windows, which needs no Developer Mode, and a
-symbolic link elsewhere.
+local-settings.json (one per extra Claude account; setup offers each ~/.claude-* folder it
+finds, and lists a no under declinedClaudeConfigDirs), and in the folder in CLAUDE_CONFIG_DIR
+when that's set, unless it's one with a no. Codex gets them when it's installed. Each link to a
+folder is a junction on Windows, which needs no Developer Mode, and a symbolic link elsewhere.
 
 The skills run their scripts with Python 3.12 or later, as internal/.python/python.exe in
 dev-home-tools' folder: a junction setup makes to the folder of a Python it finds, so the
@@ -62,6 +69,7 @@ The sync runs main(["--quiet"]) inside its own process, so keep main's name and 
 """
 
 import contextlib
+import json
 import os
 import re
 import stat
@@ -74,11 +82,13 @@ from .git import run_git
 from .links import is_link, link_info, make_folder_link, remove_folder_link
 from .output import GREEN, RED, YELLOW, color, describe, first_line, status_line
 from .paths import comparable, forward, is_inside, resolve_home, same_path, unsafe_reason
-from .programs import find_program
+from .programs import by_hand, find_program
 from .settings import (
+    DEFAULT_HOURS,
     SETTINGS_PATH,
     TOOLS_ROOT,
     LocalSettings,
+    hours_setting,
     load_local_settings,
     save_local_settings,
 )
@@ -106,6 +116,8 @@ FOLDER_NOTE = (
     "folders when the scripts run, to start them\nfaster, and setup leaves those alone.\n"
 )
 QUIET_ADVICE = "Run setup.py without --quiet, and it offers to make the change."
+# Files every dev-home starts with, from templates/dev-home-starter/.
+DEV_HOME_FILES = ("global-rules/global-rules.md", "knowledge/README.md")
 
 
 class CannotGoOnError(Exception):
@@ -167,6 +179,32 @@ class Setup:
             self.line()
             self.line(f"{len(self.problems)} problem(s) to fix. Run setup.py again afterward.", RED)
         return 1
+
+    def not_a_dev_home_problem(self, folder: Path, missing_files: str) -> None:
+        self.status(
+            "PROBLEM",
+            f"{folder} doesn't look like a dev-home: it has no {missing_files}, which every "
+            "dev-home starts with, so setup stopped before setting anything in it. If it is your "
+            "dev-home, put the missing files back; if not, point setup at your dev-home with "
+            "--content-dir.",
+        )
+
+    # Claude folders
+
+    def claude_folders(self) -> list[Path]:
+        """Each ~/.claude-<name> folder: another Claude account, run with CLAUDE_CONFIG_DIR. None
+        when the profile folder can't be listed, which then has nothing to offer."""
+        try:
+            entries = list(self.home.iterdir())
+        except OSError:
+            return []
+        return sorted(f for f in entries if f.is_dir() and f.name.lower().startswith(".claude-"))
+
+    def listed(self, folder: str | Path, entries: list[str]) -> bool:
+        """Whether a folder is one of the entries, which may start with ~."""
+        return any(
+            same_path(resolve_home(entry, self.home), folder) for entry in entries if entry.strip()
+        )
 
     # Generated files
 
@@ -606,8 +644,8 @@ class Setup:
         if loaded is None:
             self.status(
                 "PROBLEM",
-                f"{SETTINGS_PATH} could not be read as JSON. Fix it, or delete it and answer the "
-                "questions again, then run setup.py again.",
+                f"{SETTINGS_PATH} could not be read as a JSON object of settings. Fix it, or "
+                "delete it and answer the questions again, then run setup.py again.",
             )
             raise CannotGoOnError
         settings: LocalSettings = loaded
@@ -624,6 +662,13 @@ class Setup:
                 f"Using the test profile {self.home} instead of {Path.home()}, because "
                 "local-settings.json sets testHomeDir.",
             )
+        for key, hours in DEFAULT_HOURS.items():
+            if not hours_setting(settings.data, key)[1]:
+                self.status(
+                    "PROBLEM",
+                    f"{key} in {SETTINGS_PATH} is {json.dumps(settings.data[key])}, which isn't a "
+                    f"whole number of hours, 0 or more, so it counts as {hours}. Fix it there.",
+                )
         save = False
         if content_dir_option:
             wanted = forward(content_dir_option)
@@ -652,42 +697,83 @@ class Setup:
             settings.content_dir = forward(answer)
             save = True
 
-        # Checked as setup will use it, so a hand-edited C:/dev-home/.. counts as the drive root
-        # it leads to.
-        content_problem = unsafe_reason(forward(settings.content_dir))
-        if content_problem:
-            self.status(
-                "PROBLEM",
-                f"The dev-home folder {settings.content_dir} {content_problem}. Setup writes this "
-                "path into commands as it is. Choose another folder with --content-dir.",
+        while True:
+            # Checked as setup will use it, so a hand-edited C:/dev-home/.. counts as the drive
+            # root it leads to.
+            content_problem = unsafe_reason(forward(settings.content_dir))
+            if content_problem:
+                self.status(
+                    "PROBLEM",
+                    f"The dev-home folder {settings.content_dir} {content_problem}. Setup writes "
+                    "this path into commands as it is. Choose another folder with --content-dir.",
+                )
+                raise CannotGoOnError
+            if is_inside(settings.content_dir, TOOLS_ROOT):
+                self.status(
+                    "PROBLEM",
+                    f"The dev-home folder {settings.content_dir} is dev-home-tools' own folder, or "
+                    "inside it. Choose your dev-home's folder with --content-dir.",
+                )
+                raise CannotGoOnError
+            # An empty or missing folder gets a dev-home below. One with files must already be
+            # one, before anything is saved or set in it.
+            folder = Path(comparable(settings.content_dir))
+            missing_files = missing_dev_home_files(folder)
+            if not missing_files or not is_in_use(folder):
+                break
+            if not self.can_ask:
+                self.not_a_dev_home_problem(folder, missing_files)
+                raise CannotGoOnError
+            self.line(
+                f"{folder} doesn't look like a dev-home: it has no {missing_files}, which every "
+                "dev-home starts with."
             )
-            raise CannotGoOnError
-        if is_inside(settings.content_dir, TOOLS_ROOT):
-            self.status(
-                "PROBLEM",
-                f"The dev-home folder {settings.content_dir} is dev-home-tools' own folder, or "
-                "inside it. Choose your dev-home's folder with --content-dir.",
-            )
-            raise CannotGoOnError
+            answer = self.ask("Your dev-home folder, or Enter to stop")
+            if not answer:
+                self.status("PROBLEM", f"Stopped: {folder} doesn't look like a dev-home.")
+                raise CannotGoOnError
+            settings.content_dir = forward(answer)
+            save = True
 
-        if settings.is_new and self.can_ask:
+        if self.can_ask and settings.auto_update is None:
             self.line(
                 "sync.py can pull dev-home-tools updates on every sync, or only tell you when "
                 "there are some,"
             )
             self.line("so you can look at them first and pull them with update.py.")
             settings.auto_update = self.confirm("Pull updates automatically?")
-            # Another Claude account run with CLAUDE_CONFIG_DIR has its own folder, usually
-            # ~/.claude-<name>.
-            for folder in sorted(self.home.iterdir()):
-                is_claude = folder.is_dir() and folder.name.lower().startswith(".claude-")
-                if is_claude and self.confirm(f"Also set up {folder}, for another Claude account?"):
-                    settings.claude_config_dirs.append("~/" + folder.name)
             save = True
+        # Each ~/.claude-<name> folder is another Claude account, run with CLAUDE_CONFIG_DIR.
+        # Setup asks about each one once, and keeps the answer, a no included.
+        answered = settings.claude_config_dirs + settings.declined_claude_config_dirs
+        unanswered = [f for f in self.claude_folders() if not self.listed(f, answered)]
+        if self.can_ask:
+            for folder in unanswered:
+                if self.confirm(f"Also set up {folder}, for another Claude account?"):
+                    settings.claude_config_dirs.append("~/" + folder.name)
+                else:
+                    settings.declined_claude_config_dirs.append("~/" + folder.name)
+                save = True
+        elif unanswered:
+            which = (
+                f"the Claude Code folder {unanswered[0]}"
+                if len(unanswered) == 1
+                else "these Claude Code folders: " + ", ".join(str(f) for f in unanswered)
+            )
+            self.status(
+                "PROBLEM",
+                f"Setup hasn't asked yet whether to set up {which}. Run {by_hand('setup.py')} in "
+                "a terminal, and it asks.",
+            )
 
         if save and self.should(SETTINGS_PATH, "Save this PC's settings"):
-            save_local_settings(settings)
-            self.status("SET", f"This PC's settings: {SETTINGS_PATH}")
+            try:
+                save_local_settings(settings)
+                self.status("SET", f"This PC's settings: {SETTINGS_PATH}")
+            except OSError as error:
+                self.status(
+                    "PROBLEM", f"Could not save this PC's settings in {SETTINGS_PATH}. {error}"
+                )
 
         content_root = Path(comparable(settings.content_dir))
         values = {
@@ -703,7 +789,7 @@ class Setup:
 
         # 2. dev-home itself: clone or create it when it's missing, then set its repo-local git
         # config.
-        missing = not content_root.is_dir() or not any(content_root.iterdir())
+        missing = not is_in_use(content_root)
         if missing:
             self.initialize_content_repo(content_root, values)
             if not (content_root / ".git").exists():
@@ -739,6 +825,12 @@ class Setup:
                 f"git could not read {content_root}, so setup stopped. "
                 f"git: {first_line(head.err + head.out)}",
             )
+            raise CannotGoOnError
+
+        # A clone of the wrong repo gets no further than a wrong folder would.
+        missing_files = missing_dev_home_files(content_root)
+        if missing_files:
+            self.not_a_dev_home_problem(content_root, missing_files)
             raise CannotGoOnError
 
         # No signing prompts for agent commits, and pulls that merge rather than rebase, as
@@ -865,6 +957,11 @@ class Setup:
             )
             if not (using_real_home or inside_home):
                 session_claude_dir = None
+        # A no stands even in a session that runs there.
+        if session_claude_dir and self.listed(
+            session_claude_dir, settings.declined_claude_config_dirs
+        ):
+            session_claude_dir = None
         if session_claude_dir:
             candidates.append(session_claude_dir)
         # A run without --quiet usually has no CLAUDE_CONFIG_DIR, so it sees that folder only
@@ -1021,16 +1118,22 @@ class Setup:
         entries = ", ".join(claude_settings.dump(entry) for entry in missing)
         advice = QUIET_ADVICE
         if unlisted_claude_dir is not None and same_path(claude_dir, unlisted_claude_dir):
-            if same_path(claude_dir.parent, self.home):
-                list_entry = "~/" + claude_name
+            in_home = same_path(claude_dir.parent, self.home)
+            if in_home and claude_name.lower().startswith(".claude-"):
+                # Setup offers every ~/.claude-* folder, so a run without --quiet asks.
+                advice = (
+                    "This folder comes only from CLAUDE_CONFIG_DIR, and setup hasn't asked yet "
+                    "whether to set it up. Run setup.py without --quiet: it asks about the folder, "
+                    "then offers to make the change."
+                )
             else:
-                list_entry = forward(claude_dir)
-            advice = (
-                "This folder comes only from CLAUDE_CONFIG_DIR, which a run without --quiet "
-                f'usually doesn\'t have. Add "{list_entry}" to claudeConfigDirs in '
-                f"{SETTINGS_PATH}, then run setup.py without --quiet, and it offers to make the "
-                "change."
-            )
+                list_entry = "~/" + claude_name if in_home else forward(claude_dir)
+                advice = (
+                    "This folder comes only from CLAUDE_CONFIG_DIR, which a run without --quiet "
+                    f'usually doesn\'t have. Add "{list_entry}" to claudeConfigDirs in '
+                    f"{SETTINGS_PATH}, then run setup.py without --quiet, and it offers to make "
+                    "the change."
+                )
         snippet = (
             "          {\n"
             '            "permissions": {\n'
@@ -1081,6 +1184,21 @@ class Setup:
             "under it:",
             snippet,
         )
+
+
+def is_in_use(folder: Path) -> bool:
+    """Whether a folder exists with anything in it, so setup won't clone or create a dev-home
+    there. One that can't be read counts as in use."""
+    try:
+        return folder.is_dir() and any(folder.iterdir())
+    except OSError:
+        return True
+
+
+def missing_dev_home_files(folder: Path) -> str:
+    """The files every dev-home starts with that a folder lacks, joined with "or", or "" when it
+    has them all."""
+    return " or ".join(name for name in DEV_HOME_FILES if not (folder / name).is_file())
 
 
 def make_writable(path: Path) -> None:

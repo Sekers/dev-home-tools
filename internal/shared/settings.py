@@ -9,6 +9,11 @@ from typing import Any
 TOOLS_ROOT = Path(__file__).parent.parent.parent
 SETTINGS_PATH = TOOLS_ROOT / "local-settings.json"
 
+# How long, in whole hours, a sync goes without checking GitHub, when this PC's settings don't
+# say: updateCheckHours for dev-home-tools' updates, and contentCheckHours for dev-home itself.
+# 0 means every time.
+DEFAULT_HOURS = {"updateCheckHours": 24, "contentCheckHours": 12}
+
 
 def read_settings() -> dict[str, Any] | None:
     """The settings, or None when the file is missing or isn't a JSON object."""
@@ -19,17 +24,43 @@ def read_settings() -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
+def hours_setting(data: dict[str, Any], key: str) -> tuple[int, bool]:
+    """A check interval from the settings, and whether the file's value could be used. A missing
+    key, or a value that isn't a whole number of 0 or more, means the default."""
+    default = DEFAULT_HOURS[key]
+    if key not in data:
+        return default, True
+    value = data[key]
+    # In Python, true and false are numbers too.
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value, True
+    return default, False
+
+
+def folder_list(value: object) -> list[str]:
+    """A list of folders from the settings: one folder on its own counts as a list of one."""
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list):
+        return []
+    return [folder for folder in value if isinstance(folder, str) and folder]
+
+
 @dataclass
 class LocalSettings:
-    """The settings setup asks for, with defaults for anything missing. is_new is True when
-    there is no file yet, or an empty one. test_home_dir is only ever in a test sandbox's file,
-    which the tests write; setup never adds it."""
+    """The settings setup asks for, with defaults for anything missing. auto_update is None until
+    a person answers its question, and a sync treats that as off. A Claude folder goes in
+    claude_config_dirs on a yes, and in declined_claude_config_dirs on a no, so setup asks about
+    it only once. data holds everything the file had, so a save keeps the keys setup doesn't
+    know. test_home_dir is only ever in a test sandbox's file, which the tests write; setup never
+    adds it."""
 
     content_dir: str = ""
-    auto_update: bool = False
+    auto_update: bool | None = None
     claude_config_dirs: list[str] = field(default_factory=list)
+    declined_claude_config_dirs: list[str] = field(default_factory=list)
     test_home_dir: str = ""
-    is_new: bool = True
+    data: dict[str, Any] = field(default_factory=dict)
 
 
 def load_local_settings() -> LocalSettings | None:
@@ -45,29 +76,31 @@ def load_local_settings() -> LocalSettings | None:
         data = json.loads(text)
     except (OSError, ValueError):
         return None
-    settings.is_new = False
     if not isinstance(data, dict):
-        return settings
+        return None
+    settings.data = data
     if isinstance(data.get("contentDir"), str):
         settings.content_dir = data["contentDir"]
-    settings.auto_update = data.get("autoUpdate") is True
-    dirs = data.get("claudeConfigDirs")
-    if isinstance(dirs, str):
-        dirs = [dirs]
-    if isinstance(dirs, list):
-        settings.claude_config_dirs = [d for d in dirs if isinstance(d, str) and d]
+    if isinstance(data.get("autoUpdate"), bool):
+        settings.auto_update = data["autoUpdate"]
+    settings.claude_config_dirs = folder_list(data.get("claudeConfigDirs"))
+    settings.declined_claude_config_dirs = folder_list(data.get("declinedClaudeConfigDirs"))
     if isinstance(data.get("testHomeDir"), str):
         settings.test_home_dir = data["testHomeDir"]
     return settings
 
 
 def save_local_settings(settings: LocalSettings) -> None:
-    """Writes the settings back. testHomeDir is kept when the file has it, and never added."""
-    data: dict[str, Any] = {
-        "contentDir": settings.content_dir,
-        "autoUpdate": settings.auto_update,
-        "claudeConfigDirs": list(settings.claude_config_dirs),
-    }
+    """Writes the settings back, keeping every other key the file had where it was. autoUpdate
+    is written only once it's answered, and the declined Claude folders only once there are
+    some. testHomeDir is kept when the file has it, and never added."""
+    data = dict(settings.data)
+    data["contentDir"] = settings.content_dir
+    if settings.auto_update is not None:
+        data["autoUpdate"] = settings.auto_update
+    data["claudeConfigDirs"] = list(settings.claude_config_dirs)
+    if settings.declined_claude_config_dirs or "declinedClaudeConfigDirs" in data:
+        data["declinedClaudeConfigDirs"] = list(settings.declined_claude_config_dirs)
     if settings.test_home_dir:
         data["testHomeDir"] = settings.test_home_dir
     with SETTINGS_PATH.open("w", encoding="utf-8", newline="\n") as file:

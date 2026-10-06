@@ -24,7 +24,7 @@ Nothing runs on a schedule. Each script runs only when you or an agent starts it
 | --- | --- |
 | `sync.py` | In Claude Code, agents run it at the start of every `/handoff` command, for a plain `/knowledge`, and before adding to the knowledge base, through the skills' `prepare.py`; that sync also checks for updates and runs setup. Then they run it again to commit and push each change they make. That second sync skips the update check, and runs setup only if it brought in commits from GitHub, because the sync just before it did both. A lookup, `/knowledge <question>`, never syncs, and Codex never runs it. You can run it any time. |
 | `update.py` | Each sync that isn't committing runs its check, quietly. You run it yourself to look at an update and install it, when `autoUpdate` is off (see [Updates](#updates)). |
-| `setup.py` | You run it once per PC, and again to change a setting or to say yes to a settings change. After that, syncs run it quietly, as above, and so does `update.py` after you install an update. That quiet run never asks anything, and never changes Claude Code's or Codex's settings. |
+| `setup.py` | You run it once per PC, and again to change a setting, to answer a question it hasn't asked yet, or to say yes to a settings change. After that, syncs run it quietly, as above, and so does `update.py` after you install an update. That quiet run never asks anything, and never changes Claude Code's or Codex's settings. |
 
 ## What they report
 
@@ -50,12 +50,12 @@ Setup's lines, such as `LINKED` or `WROTE`, say what it changed on this PC.
 
 Your copy of dev-home-tools never changes by itself. Instead, each sync that isn't committing a
 change, such as the one every `/handoff` starts with, checks GitHub for new commits to
-dev-home-tools. What happens when some are waiting depends on the `autoUpdate` setting you chose
-the first time you ran setup:
+dev-home-tools. What happens when some are waiting depends on your answer to setup's question
+about `autoUpdate`:
 
 | `autoUpdate` | When new commits are waiting | What you do |
 | --- | --- | --- |
-| Off (the default) | Nothing is installed, and the agent tells you an update is waiting. | When you're ready, run `update.py` (below). It lists the commits and the files they change, and installs them only if you answer `y`. |
+| Off (the default, and until you answer) | Nothing is installed, and the agent tells you an update is waiting. | When you're ready, run `update.py` (below). It lists the commits and the files they change, and installs them only if you answer `y`. |
 | On | The sync installs them, and the agent tells you it did. | Nothing. |
 
 ```powershell

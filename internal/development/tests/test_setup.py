@@ -399,22 +399,46 @@ def test_a_settings_file_it_cant_read_is_reported_and_setup_goes_on(box: Sandbox
     assert not result.has_line("setup.py stopped"), str(result)
 
 
+def remove_claude_folder(folder: Path) -> None:
+    """A Claude folder setup linked into: each link first, then the folder."""
+    for links in (folder / "skills", folder / "rules"):
+        for link in links.iterdir() if links.is_dir() else []:
+            remove_link(link)
+    shutil.rmtree(folder)
+
+
 def test_the_claude_folder_in_claude_config_dir(box: Sandbox) -> None:
-    # A test profile takes it only from inside itself. One in no list gets advice that works
-    # from a terminal, where that variable usually isn't set.
+    # A test profile takes it only from inside itself. One with no answer is set up anyway, so
+    # the session's account keeps working, with advice that works from a terminal, where that
+    # variable usually isn't set.
     session = box.profile / ".claude-second"
+    other = box.profile / "claude-alt"
     outside = box.root / "outside-claude"
-    for folder in (session, outside):
+    for folder in (session, other, outside):
         write_text(folder / "settings.json", "{}\n")
     settings_path = box.tools / "local-settings.json"
     settings_text = read(settings_path)
+    unasked = (
+        r"^PROBLEM\s+Setup hasn't asked yet whether to set up the Claude Code folder "
+        r".*\.claude-second\. Run "
+    )
     try:
         result = setup(box, env={"CLAUDE_CONFIG_DIR": str(outside)})
-        assert result.code == 0 and not (outside / "skills").exists(), str(result)
+        assert not (outside / "skills").exists(), str(result)
+        # Every quiet run names a ~/.claude-* folder nobody has answered for.
+        assert result.code == 1 and result.has_line(unasked), str(result)
         result = setup(box, env={"CLAUDE_CONFIG_DIR": str(session)})
         assert link_target(session / "skills" / "handoff") == box.generated / "skills" / "handoff"
         pattern = (
-            r'^PROBLEM\s+Claude Code settings in \.claude-second: .* Add "~/\.claude-second" to '
+            r"^PROBLEM\s+Claude Code settings in \.claude-second: .* setup hasn't asked yet "
+            r"whether to set it up\. Run setup\.py without --quiet: it asks about the folder"
+        )
+        assert result.code == 1 and result.has_line(pattern), str(result)
+        assert not result.has_line("claudeConfigDirs"), str(result)
+        # A folder setup doesn't offer is added to the list by hand.
+        result = setup(box, env={"CLAUDE_CONFIG_DIR": str(other)})
+        pattern = (
+            r'^PROBLEM\s+Claude Code settings in claude-alt: .* Add "~/claude-alt" to '
             r"claudeConfigDirs in .*local-settings\.json, then run setup\.py without --quiet, "
             "and it offers"
         )
@@ -429,12 +453,29 @@ def test_the_claude_folder_in_claude_config_dir(box: Sandbox) -> None:
         )
         assert result.code == 1 and result.has_line(pattern), str(result)
         assert not result.has_line("claudeConfigDirs"), str(result)
+        assert not result.has_line("hasn't asked"), str(result)
     finally:
         write_text(settings_path, settings_text)
-        for folder in (session / "skills", session / "rules"):
-            for link in folder.iterdir() if folder.is_dir() else []:
-                remove_link(link)
-        shutil.rmtree(session)
+        for folder in (session, other):
+            remove_claude_folder(folder)
+        shutil.rmtree(outside)
+
+
+def test_a_claude_folder_with_a_no_is_left_alone_even_from_a_session_there(box: Sandbox) -> None:
+    session = box.profile / ".claude-declined"
+    write_text(session / "settings.json", "{}\n")
+    settings_path = box.tools / "local-settings.json"
+    settings_text = read(settings_path)
+    declined = json.loads(settings_text)
+    declined["declinedClaudeConfigDirs"] = ["~/.claude-declined"]
+    write_text(settings_path, json.dumps(declined, indent=2) + "\n")
+    try:
+        result = setup(box, env={"CLAUDE_CONFIG_DIR": str(session)})
+    finally:
+        write_text(settings_path, settings_text)
+        remove_claude_folder(session)
+    assert result.code == 0, str(result)
+    assert not result.has_line("claude-declined"), str(result)
 
 
 def test_a_changed_template_reaches_the_generated_copy_and_codexs_rules(box: Sandbox) -> None:
@@ -614,11 +655,120 @@ def test_a_new_dev_home_folder_is_saved_with_test_home_dir_kept(box: Sandbox) ->
     assert result.code == 1 and result.has_line("There is no dev-home"), str(result)
 
 
+def write_starter_files(folder: Path) -> None:
+    """The files every dev-home starts with, which setup checks for."""
+    write_text(folder / "global-rules" / "global-rules.md", "# My rules\n")
+    write_text(folder / "knowledge" / "README.md", "# Knowledge base\n")
+
+
+def test_stops_at_a_folder_that_doesnt_look_like_a_dev_home(box: Sandbox) -> None:
+    # Such as a project's repo, named by mistake: setup must not turn its signing off.
+    project = box.root / "a-project"
+    git("init", "--quiet", "-b", "main", str(project))
+    write_text(project / "README.md", "# a project\n")
+    git("-C", str(project), "add", "--all")
+    git("-C", str(project), "commit", "--quiet", "-m", "test: project")
+    settings = box.tools / "local-settings.json"
+    before = read(settings)
+    try:
+        result = setup(box, "--content-dir", str(project))
+    finally:
+        write_text(settings, before)
+    pattern = (
+        r"^PROBLEM\s+.*a-project doesn't look like a dev-home: it has no "
+        r"global-rules/global-rules\.md or knowledge/README\.md, which every dev-home starts with"
+    )
+    assert result.code == 1 and result.has_line(pattern), str(result)
+    assert read(settings) == before
+    assert "gpgsign" not in read(project / ".git" / "config")
+
+
+def test_keeps_settings_it_doesnt_know_and_leaves_auto_update_out_until_answered(
+    box: Sandbox,
+) -> None:
+    # A quiet run asks nothing, so a save must not look like an answer.
+    settings = box.tools / "local-settings.json"
+    before = read(settings)
+    edited = json.loads(before)
+    del edited["autoUpdate"]
+    edited["somethingNewer"] = {"kept": True}
+    write_text(settings, json.dumps(edited, indent=2) + "\n")
+    try:
+        setup(box, "--content-dir", str(box.root / "yet-another-dev-home"))
+        saved = json.loads(read(settings))
+    finally:
+        write_text(settings, before)
+    assert saved["contentDir"].endswith("yet-another-dev-home")
+    assert saved["somethingNewer"] == {"kept": True}
+    assert "autoUpdate" not in saved
+    assert "declinedClaudeConfigDirs" not in saved
+
+
+def test_reports_a_check_interval_that_isnt_whole_hours(box: Sandbox) -> None:
+    settings = box.tools / "local-settings.json"
+    before = read(settings)
+    edited = json.loads(before)
+    edited.update({"updateCheckHours": "6", "contentCheckHours": -1})
+    write_text(settings, json.dumps(edited, indent=2) + "\n")
+    try:
+        result = setup(box)
+    finally:
+        write_text(settings, before)
+    assert result.code == 1, str(result)
+    for key, value, default in (("updateCheckHours", '"6"', 24), ("contentCheckHours", "-1", 12)):
+        pattern = (
+            rf"^PROBLEM\s+{key} in .* is {value}, which isn't a whole number of hours, 0 or "
+            rf"more, so it counts as {default}\."
+        )
+        assert result.has_line(pattern), str(result)
+
+
+@pytest.mark.parametrize(
+    ("value", "hours", "usable"),
+    [(None, 12, True), (0, 0, True), (6, 6, True), (True, 12, False), (1.5, 12, False)],
+)
+def test_reads_a_check_interval(box: Sandbox, value: object, hours: int, usable: bool) -> None:
+    data = {} if value is None else {"contentCheckHours": value}
+    found = shared_module(box, "settings").hours_setting(data, "contentCheckHours")
+    assert found == (hours, usable)
+
+
+def test_stops_at_a_settings_file_that_isnt_an_object(box: Sandbox) -> None:
+    settings = box.tools / "local-settings.json"
+    before = read(settings)
+    write_text(settings, "[]\n")
+    try:
+        result = setup(box)
+        kept = read(settings)
+    finally:
+        write_text(settings, before)
+    assert result.code == 1, str(result)
+    assert result.has_line(r"^PROBLEM\s+.* could not be read as a JSON object of settings"), str(
+        result
+    )
+    assert kept == "[]\n"
+
+
+def test_says_so_when_it_cant_save_its_settings(box: Sandbox) -> None:
+    settings = box.tools / "local-settings.json"
+    before = read(settings)
+    settings.chmod(stat.S_IREAD)
+    try:
+        result = setup(box, "--content-dir", str(box.root / "unsaved-dev-home"))
+    finally:
+        settings.chmod(stat.S_IREAD | stat.S_IWRITE)
+        write_text(settings, before)
+    assert result.has_line(r"^PROBLEM\s+Could not save this PC's settings in "), str(result)
+    # The rest of the run still goes on.
+    assert result.has_line("There is no dev-home"), str(result)
+
+
 def test_reports_a_dev_home_repo_with_no_commits(box: Sandbox) -> None:
-    # What a first run leaves when git init worked but the commit didn't.
+    # What a first run leaves when git init worked but the commit didn't: the starter's files,
+    # with no commit.
     unfinished = box.root / "unfinished-dev-home"
     git("init", "--quiet", "-b", "main", str(unfinished))
-    write_text(unfinished / "README.md", "# dev-home\n")
+    write_starter_files(unfinished)
     settings = box.tools / "local-settings.json"
     before = read(settings)
     try:
@@ -632,7 +782,9 @@ def test_reports_a_dev_home_git_cant_read_without_advice_to_delete_it(box: Sandb
     # A repo git refuses to read says nothing about what's in it.
     unreadable = box.root / "unreadable-dev-home"
     git("init", "--quiet", "-b", "main", str(unreadable))
-    git("-C", str(unreadable), "commit", "--quiet", "--allow-empty", "-m", "test: content")
+    write_starter_files(unreadable)
+    git("-C", str(unreadable), "add", "--all")
+    git("-C", str(unreadable), "commit", "--quiet", "-m", "test: content")
     append(unreadable / ".git" / "config", "[broken")
     settings = box.tools / "local-settings.json"
     before = read(settings)
@@ -760,8 +912,9 @@ def test_an_empty_local_settings_file_holds_no_answers(
     write_text(empty, "")
     monkeypatch.setattr(settings, "SETTINGS_PATH", empty)
     loaded = settings.load_local_settings()
-    # It counts as no file, so a first run's questions still come.
-    assert loaded is not None and loaded.is_new and loaded.content_dir == ""
+    # It counts as no file, so the questions still come.
+    assert loaded is not None and loaded.data == {} and loaded.content_dir == ""
+    assert loaded.auto_update is None
 
 
 # Settings changes, planned without writing anything.
