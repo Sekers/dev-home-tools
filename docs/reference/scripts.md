@@ -3,7 +3,7 @@
 | Script | What it's for |
 | --- | --- |
 | `setup.py` | Sets up this PC. Safe to run any number of times. `--what-if` previews; `--quiet` prints only changes and problems, and never asks (agents run it this way); `--content-dir <folder>` points it at a different dev-home. |
-| `sync.py` | Syncs your dev-home with GitHub, and commits only the files it's given. Agents run all their git in dev-home through it. Then it checks for updates as `update.py` does, and runs setup quietly (see [When they run](#when-they-run)). You can run it too; `--help` says how to commit with it. |
+| `sync.py` | Syncs your dev-home with GitHub, and commits only the files it's given. Agents run all their git in dev-home through it. Then it checks for updates as `update.py` does, and runs setup quietly (see [When they run](#when-they-run)). You can run it too; `--help` says how to commit with it, and how `--fetch` chooses when to check GitHub for dev-home's changes. |
 | `update.py` | Shows the dev-home-tools commits waiting on GitHub, and installs them after a yes. With `--quiet`, as a sync runs it, it never asks: it reports what's waiting, and installs it only when `autoUpdate` is on. |
 
 All three are Python. Run them with the Python install manager's `py`, such as
@@ -22,8 +22,8 @@ Nothing runs on a schedule. Each script runs only when you or an agent starts it
 
 | Script | When it runs |
 | --- | --- |
-| `sync.py` | In Claude Code, agents run it at the start of every `/handoff` command, for a plain `/knowledge`, and before adding to the knowledge base, through the skills' `prepare.py`; that sync also checks for updates and runs setup. Then they run it again to commit and push each change they make. That second sync skips the update check, and runs setup only if it brought in commits from GitHub, because the sync just before it did both. A lookup, `/knowledge <question>`, never syncs, and Codex never runs it. You can run it any time. |
-| `update.py` | Each sync that isn't committing runs its check, quietly. You run it yourself to look at an update and install it, when `autoUpdate` is off (see [Updates](#updates)). |
+| `sync.py` | In Claude Code, agents run it at the start of every `/handoff` command, for a plain `/knowledge`, and before adding to the knowledge base, through the skills' `prepare.py`; that sync also checks for updates and runs setup. Then they run it again to commit and push each change they make. That second sync pushes without fetching first, and fetches and merges only if GitHub rejects the push because it has commits this PC lacks. It skips the update check, and runs setup only if it brought in commits from GitHub, because the sync just before it did both. A lookup, `/knowledge <question>`, never syncs, and Codex never runs it. You can run it any time. |
+| `update.py` | Each sync that isn't committing runs its check, quietly, and that check asks GitHub only once `updateCheckHours` have passed (see [Updates](#updates)). You run it yourself to look at an update and install it, when `autoUpdate` is off. |
 | `setup.py` | You run it once per PC, and again to change a setting, to answer a question it hasn't asked yet, or to say yes to a settings change. After that, syncs run it quietly, as above, and so does `update.py` after you install an update. That quiet run never asks anything, and never changes Claude Code's or Codex's settings. |
 
 ## What they report
@@ -36,8 +36,9 @@ Agents pass on what `sync.py` reports, and `prepare.py` with it:
 | `COMMITTED` | Committed the files it was given. |
 | `PULLED`, `MERGED` | Brought in commits from GitHub. `MERGED` means two PCs both had new commits. |
 | `PUSHED` | Sent this PC's commits to GitHub. |
-| `PENDING` | Commits not pushed yet. The next sync pushes them. |
-| `OFFLINE` | GitHub couldn't be reached. The line says for which repo: your dev-home may be behind, or dev-home-tools wasn't checked for updates. |
+| `PENDING` | Commits saved on this PC, not synced to GitHub yet. The next sync sends them. |
+| `OFFLINE` | GitHub couldn't be reached. The line says for which repo: your dev-home may be behind, or dev-home-tools wasn't checked for updates. When dev-home is set to one active copy, it says nothing should be missing, since no other copy writes to it. |
+| `SETTING` | dev-home is set to one active copy, but a sync brought in commits from another copy. If another copy is in use, switch the setting with `/dev-home configure`. |
 | `LEFT` | A file changed recently and isn't committed. Another session may be working on it. |
 | `STALE` | An uncommitted file nobody has touched for 15 minutes. The agent asks whether to commit and push it. |
 | `UPDATE` | New dev-home-tools commits are waiting. |
@@ -49,9 +50,11 @@ Setup's lines, such as `LINKED` or `WROTE`, say what it changed on this PC.
 ## Updates
 
 Your copy of dev-home-tools never changes by itself. Instead, each sync that isn't committing a
-change, such as the one every `/handoff` starts with, checks GitHub for new commits to
-dev-home-tools. What happens when some are waiting depends on your answer to setup's question
-about `autoUpdate`:
+change, such as the one every `/handoff` starts with, checks for new commits to dev-home-tools.
+It asks GitHub once `updateCheckHours` have passed since it last did, 24 by default, and in
+between uses what it found then; set it in `local-settings.json`, where 0 means every sync.
+`update.py` run by hand always asks GitHub. What happens when commits are waiting depends on your
+answer to setup's question about `autoUpdate`:
 
 | `autoUpdate` | When new commits are waiting | What you do |
 | --- | --- | --- |

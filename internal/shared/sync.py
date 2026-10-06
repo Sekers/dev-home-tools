@@ -14,12 +14,26 @@ one that stops partway. The file itself stays.
 
 Without --message, it syncs: fetch, then fast-forward, or merge when two PCs both have new
 commits, then push. Git refuses a merge that would change an uncommitted file, and a merge that
-conflicts is undone at once, so nothing is lost either way. With --message and paths, it first
-commits exactly those paths.
+conflicts is undone at once, so nothing is lost either way. --fetch says when to fetch:
+
+    always     Every time. Without --fetch, this is what it does.
+    auto       As dev-home.json in dev-home says: with several active copies, or no answer,
+               every time; with one, only when dev-home's last check of GitHub is
+               contentCheckHours old (local-settings.json; 12 by default).
+    when-due   Only when that check is due, however many copies there are.
+
+A sync that skips the fetch still merges what an earlier fetch brought in, pushes commits waiting
+here, and lists the uncommitted files: it skips only the network call. With one active copy, any
+commits a fetch brings in came from another copy, so it says to check the setting.
+
+With --message and paths, it commits exactly those paths, then pushes without fetching first.
+Only when GitHub rejects the push, because it has commits this copy lacks, does it fetch, merge,
+and push again. A push that fails for any other reason, such as offline, waits for the next sync.
 
 Then it runs update's quiet check (internal/shared/update.py, the same as its --quiet), which
 checks dev-home-tools for new commits and makes every decision about them: it pulls them when
-autoUpdate is on in local-settings.json, and otherwise says they're waiting.
+autoUpdate is on in local-settings.json, and otherwise says they're waiting. It checks GitHub
+only once updateCheckHours (24 by default) have passed since it last did.
 
 Last, it runs setup's code with --quiet, inside this process, so updated skills, and skills
 added on another PC, are set up on this one. Setup runs as a process of its own instead when
@@ -37,6 +51,7 @@ Exits 0 when done, including when GitHub can't be reached, and 1 when the user n
 
 Options:
 
+    --fetch always|auto|when-due When to fetch, for a sync without --message (see above).
     --message "<area>: <what>"   The commit message for the paths.
     <path> ...                   The files to commit, relative to dev-home. Name both paths of a
                                  renamed file.
@@ -46,6 +61,10 @@ Examples, in dev-home-tools' folder, with Python 3.12 or later:
     py sync.py
 
 Syncs with GitHub, and lists the files left uncommitted.
+
+    py sync.py --fetch when-due
+
+The same, but checks GitHub for dev-home's changes only when that check is due.
 
     py sync.py --message "handoff: you/tool" "handoffs/github/you/tool/HANDOFF.md"
 
@@ -57,6 +76,7 @@ prepare.py runs main([]) inside its own process, so keep main's name and argumen
 import contextlib
 import errno
 import importlib
+import json
 import os
 import re
 import sys
@@ -65,10 +85,10 @@ from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import IO
 
-from .git import GIT_MISSING, GitResult, run_git
+from .git import GIT_MISSING, GitResult, last_fetch_age, run_git
 from .output import commit_count, describe, first_line, status_line
 from .programs import by_hand, find_program, run_setup
-from .settings import SETTINGS_PATH, read_settings
+from .settings import DEFAULT_HOURS, SETTINGS_PATH, hours_setting, read_settings
 
 if sys.platform == "win32":
     import msvcrt
@@ -95,6 +115,24 @@ IN_PROGRESS = {
 }
 # Anything else reported about the commit or the sync means "up to date" isn't printed.
 QUIET_STATES = {"OK", "LEFT", "STALE", "UPDATE"}
+# The values --fetch takes, the first being what a sync does without it.
+FETCH_WHEN = ("always", "auto", "when-due")
+# dev-home's own settings, shared by every copy of it.
+DEV_HOME_SETTINGS = "dev-home.json"
+
+
+def one_active_copy(root: Path) -> bool:
+    """Whether dev-home.json says dev-home has one active copy. A missing or unreadable file, or
+    no answer in it, counts as several, so a sync fetches rather than risk being behind."""
+    try:
+        data = json.loads((root / DEV_HOME_SETTINGS).read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(data, dict) and data.get("multiMachine") is False
+
+
+def hours_text(hours: int) -> str:
+    return "1 hour" if hours == 1 else f"{hours} hours"
 
 
 def format_age(seconds: float) -> str:
@@ -157,11 +195,22 @@ def one_run_at_a_time(git_dir: Path) -> Iterator[bool]:
 
 
 class Sync:
-    """One run, on the dev-home at root."""
+    """One run, on the dev-home at root. fetch_when is one of FETCH_WHEN, and check_hours is
+    contentCheckHours, how long dev-home goes without checking GitHub when it can (0: never)."""
 
-    def __init__(self, root: Path, git_dir: Path) -> None:
+    def __init__(
+        self,
+        root: Path,
+        git_dir: Path,
+        fetch_when: str = FETCH_WHEN[0],
+        check_hours: int = DEFAULT_HOURS["contentCheckHours"],
+    ) -> None:
         self.root = root
         self.git_dir = git_dir
+        self.fetch_when = fetch_when
+        self.check_hours = check_hours
+        # Read once this run holds the lock, and again after a merge, which can change it.
+        self.one_copy = False
         self.problems = 0
         # Set once anything about the commit or the sync is reported, so "up to date" is printed
         # only when nothing else was.
@@ -299,25 +348,54 @@ class Sync:
                 f"git: {first_line(merge.err + merge.out)}",
             )
 
-    def sync_remote(self) -> None:
-        # A push rejected because GitHub moved on gets one more round of fetch, merge, and push.
+    def pending(self, ahead: int, err: list[str] | None = None) -> None:
+        """Commits made here that GitHub doesn't have yet. "Synced" fits both uses: GitHub's copy
+        is the backup, and how other copies get the changes."""
+        them = "it" if ahead == 1 else "them"
+        detail = f" git: {first_line(err)}" if err else ""
+        self.status(
+            "PENDING",
+            f"{commit_count(ahead)} saved on this PC, not synced to GitHub yet. The next sync "
+            f"sends {them}.{detail}",
+        )
+
+    def fetch_is_due(self, age: float | None) -> bool:
+        """Whether a sync without --message fetches, given how long ago the last fetch was."""
+        if self.fetch_when == "always" or (self.fetch_when == "auto" and not self.one_copy):
+            return True
+        return age is None or self.check_hours == 0 or age >= self.check_hours * 60 * 60
+
+    def fetch(self) -> bool:
+        """Fetches from GitHub, and says so when it can't."""
+        fetch = self.git("fetch", "--quiet")
+        if fetch.code == 0:
+            return True
+        if fetch.locked:
+            self.busy(fetch)
+            return False
+        if self.one_copy:
+            self.status(
+                "OFFLINE",
+                "Could not reach GitHub for dev-home's check. It's set to one active copy, so "
+                f"nothing should be missing here. git: {first_line(fetch.err)}",
+            )
+        else:
+            self.status(
+                "OFFLINE",
+                f"Could not reach GitHub, so dev-home may be behind. git: {first_line(fetch.err)}",
+            )
+        counts = self.ahead_behind()
+        if counts is not None and counts[0] > 0:
+            self.pending(counts[0])
+        return False
+
+    def sync_remote(self, fetch_first: bool) -> None:
+        """Fetches when fetch_first, brings in what GitHub has, and pushes what's waiting here. A
+        push GitHub rejects because it has commits this copy lacks gets one more round of fetch,
+        merge, and push; any other failure leaves the commits waiting, with no second try."""
+        fetch = fetch_first
         for round_number in (1, 2):
-            fetch = self.git("fetch", "--quiet")
-            if fetch.code != 0:
-                if fetch.locked:
-                    self.busy(fetch)
-                    return
-                self.status(
-                    "OFFLINE",
-                    "Could not reach GitHub, so dev-home may be behind. "
-                    f"git: {first_line(fetch.err)}",
-                )
-                counts = self.ahead_behind()
-                if counts is not None and counts[0] > 0:
-                    self.status(
-                        "PENDING",
-                        f"{commit_count(counts[0])} not pushed yet. The next sync pushes it.",
-                    )
+            if fetch and not self.fetch():
                 return
             counts = self.ahead_behind()
             if counts is None:
@@ -331,8 +409,17 @@ class Sync:
                 self.merge_upstream(ahead, behind)
                 if self.stopped:
                     if ahead > 0:
-                        self.status("PENDING", f"{commit_count(ahead)} not pushed yet.")
+                        self.pending(ahead)
                     return
+                # Another copy may have just switched dev-home to several copies, as it should.
+                self.one_copy = one_active_copy(self.root)
+                if self.one_copy:
+                    self.status(
+                        "SETTING",
+                        f"dev-home brought in {commit_count(behind)} from another copy, but it's "
+                        "set to one active copy. If another copy is in use, run /dev-home "
+                        "configure.",
+                    )
                 counts = self.ahead_behind()
                 if counts is None:
                     return
@@ -345,12 +432,9 @@ class Sync:
                 return
             rejected = re.search(r"rejected|fetch first|non-fast-forward", "\n".join(push.err))
             if round_number == 1 and rejected:
+                fetch = True
                 continue
-            self.status(
-                "PENDING",
-                f"{commit_count(ahead)} not pushed yet. The next sync pushes it. "
-                f"git: {first_line(push.err)}",
-            )
+            self.pending(ahead, push.err)
             return
 
     def age_of(self, file: str) -> float | None:
@@ -443,13 +527,31 @@ class Sync:
                     "stopped partway. Nothing was changed. Ask the user to finish or abort it.",
                 )
                 return
+        self.one_copy = one_active_copy(self.root)
+        # A commit pushes first. Without one, the fetch waits for its time when it can.
+        age = last_fetch_age(self.git_dir)
+        fetch_first = not paths and self.fetch_is_due(age)
         if paths:
             self.step("The commit", lambda: self.commit(paths, message))
             if self.stopped:
                 return
-        self.step("Syncing with GitHub", self.sync_remote)
-        if not self.reported:
-            self.status("OK", "dev-home is up to date with GitHub.")
+        self.step("Syncing with GitHub", lambda: self.sync_remote(fetch_first))
+        # A commit with nothing to commit has said so, and reached no GitHub to compare with.
+        if not self.reported and not paths:
+            if fetch_first or age is None:
+                self.status("OK", "dev-home is up to date with GitHub.")
+            elif self.one_copy:
+                self.status(
+                    "OK",
+                    "dev-home is up to date: it's the only active copy, and it last checked "
+                    f"GitHub {format_age(age)}.",
+                )
+            else:
+                self.status(
+                    "OK",
+                    f"dev-home wasn't checked with GitHub this time: it last checked "
+                    f"{format_age(age)}, and checks every {hours_text(self.check_hours)}.",
+                )
         self.step("Listing the uncommitted files", self.write_uncommitted)
         # A sync that commits usually comes right after a plain one, which just checked for
         # updates and ran setup. So it skips the check, and runs setup only for commits it
@@ -466,10 +568,11 @@ def problem(text: str) -> int:
     return 1
 
 
-def parse_arguments(argv: Sequence[str]) -> tuple[str, list[str]] | str:
-    """The commit message and the paths, or why the arguments can't be used."""
+def parse_arguments(argv: Sequence[str]) -> tuple[str, list[str], str] | str:
+    """The commit message, the paths, and when to fetch, or why the arguments can't be used."""
     message = ""
     paths: list[str] = []
+    fetch_when = ""
     rest = list(argv)
     while rest:
         word = rest.pop(0)
@@ -477,14 +580,20 @@ def parse_arguments(argv: Sequence[str]) -> tuple[str, list[str]] | str:
             if not rest:
                 return "--message needs the commit message after it."
             message = rest.pop(0)
+        elif word == "--fetch":
+            if not rest or rest[0] not in FETCH_WHEN:
+                return f"--fetch needs one of these after it: {', '.join(FETCH_WHEN)}."
+            fetch_when = rest.pop(0)
         elif word == "--":
             paths.extend(rest)
             rest = []
         elif word.startswith("-"):
-            return f"No such option: {word}. The only option is --message."
+            return f"No such option: {word}. The options are --message and --fetch."
         else:
             paths.append(word)
-    return message, paths
+    if fetch_when and (message or paths):
+        return "--fetch is for a sync without --message: a commit pushes without fetching first."
+    return message, paths, fetch_when or FETCH_WHEN[0]
 
 
 def main(argv: Sequence[str]) -> int:
@@ -501,7 +610,7 @@ def sync(argv: Sequence[str]) -> int:
     parsed = parse_arguments(argv)
     if isinstance(parsed, str):
         return problem(parsed)
-    message, values = parsed
+    message, values, fetch_when = parsed
 
     setup = by_hand("setup.py")
     if not SETTINGS_PATH.exists():
@@ -556,7 +665,7 @@ def sync(argv: Sequence[str]) -> int:
         return problem(f"{root} is not a git repo. git: {first_line(found.err)}")
     git_dir = Path(first_line(found.out))
 
-    run = Sync(root, git_dir)
+    run = Sync(root, git_dir, fetch_when, hours_setting(settings or {}, "contentCheckHours")[0])
     try:
         with one_run_at_a_time(git_dir) as owned:
             if owned:

@@ -219,8 +219,9 @@ Never leave it to the reader to guess which: name the repo whenever both could f
   yes and the pull.
 - Everything about dev-home-tools updates happens in update's code, so what the user is told and
   what gets installed come from the same code. Every sync that doesn't commit runs it with
-  `--quiet`, which checks GitHub, never asks, and installs waiting commits only when
-  `autoUpdate` is on. Keep it small and apart from setup: it's how fixes arrive, so even a
+  `--quiet`, which checks GitHub only once `updateCheckHours` have passed since its last fetch
+  (and otherwise uses what that fetch found), never asks, and installs waiting commits only when
+  `autoUpdate` is on. Run by hand, it always checks GitHub. Keep it small and apart from setup: it's how fixes arrive, so even a
   broken setup can be fixed by an update. For the same reason, the sync loads it only when it
   reaches the check, and an update.py that can't load or stops is a `PROBLEM` line, after which
   the sync still runs setup; each of the sync's other steps runs in a guard too, so an error in

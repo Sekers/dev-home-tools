@@ -36,6 +36,19 @@ class GitResult:
         return self.text.splitlines()
 
 
+def last_fetch_age(git_dir: Path) -> float | None:
+    """Seconds since a repo's last successful fetch, from the time on its FETCH_HEAD, or None
+    when it has none. A fetch that fails, such as offline, empties the file and still sets its
+    time, so an empty file counts as none. Reads one file's details, and starts no process."""
+    try:
+        info = (git_dir / "FETCH_HEAD").stat()
+    except OSError:
+        return None
+    if info.st_size == 0:
+        return None
+    return max(0.0, time.time() - info.st_mtime)
+
+
 def run_git(repo: Path, *args: str) -> GitResult:
     """Runs git in a repo, reading its output as UTF-8. Git's messages are in English, so a
     rejected push or a lock can be told apart from other failures. Only git's own environment

@@ -63,6 +63,18 @@ def test_syncs_first_then_prints_the_facts_in_order_and_exits_0(
     assert result.keys == FACT_KEYS, str(result)
 
 
+def test_passes_fetch_to_the_sync_and_the_rest_to_facts(box: Sandbox, project: Path) -> None:
+    command = skill_command(box, "handoff", "prepare.py")
+    run_command(box, command, cwd=project)
+    result = run_command(box, command + " --fetch when-due", cwd=project)
+    assert result.code == 0, str(result)
+    assert result.has_line(r"^OK\s+dev-home wasn't checked with GitHub this time"), str(result)
+    assert result.keys == FACT_KEYS, str(result)
+    result = run_command(box, command + " --fetch sometimes", cwd=project)
+    assert result.has_line(r"^PROBLEM\s+--fetch needs one of these after it"), str(result)
+    assert result.keys == FACT_KEYS, str(result)
+
+
 def test_the_knowledge_skills_command_only_syncs(box: Sandbox, project: Path) -> None:
     result = run_command(box, skill_command(box, "knowledge", "prepare.py"), cwd=project)
     assert result.code == 0, str(result)

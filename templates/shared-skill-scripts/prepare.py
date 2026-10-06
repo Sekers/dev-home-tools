@@ -4,8 +4,10 @@ Called by: handoff, knowledge
 
 Every skill command that syncs dev-home starts with this script, so the agent gets what it needs
 before its own work from one call. First it runs sync, which syncs dev-home with GitHub, checks
-dev-home-tools for updates, and runs setup. Then it loads facts.py, the copy beside this one,
-which that setup run has just brought up to date, and with it:
+dev-home-tools for updates, and runs setup. --fetch always, auto, or when-due goes to the sync,
+and says when it fetches dev-home (see sync.py); without it, the sync fetches every time. Then it
+loads facts.py, the copy beside this one, which that setup run has just brought up to date, and
+with it:
 
 - checks the skill's stamp, given as --skill and --stamp as facts.py takes them. When the skill
   has changed since the agent loaded it, it prints a RELOAD line saying so, and no facts, because
@@ -33,9 +35,10 @@ internal/.python/python.exe in dev-home-tools' folder, and of this script.
 Syncs dev-home, checks that the handoff skill hasn't changed, then prints where this project's
 handoff is, the computer's name, and the project's commits since the handoff's last check.
 
-    python.exe -I prepare.py --skill knowledge --stamp 3f9c2ab1d0e4
+    python.exe -I prepare.py --skill knowledge --stamp 3f9c2ab1d0e4 --fetch when-due
 
-Syncs dev-home, then checks that the knowledge skill hasn't changed.
+Syncs dev-home, fetching only when its check of GitHub is due, then checks that the knowledge
+skill hasn't changed.
 """
 
 import importlib
@@ -67,14 +70,24 @@ def load_from_path(name: str, path: Path, folder: Path | None = None) -> ModuleT
     return module
 
 
-def run_sync() -> None:
+def without_fetch(argv: list[str]) -> tuple[list[str], list[str]]:
+    """Splits --fetch and its value off the arguments: the sync takes them, and facts.py takes
+    the rest."""
+    rest = list(argv)
+    if "--fetch" not in rest:
+        return [], rest
+    at = rest.index("--fetch")
+    return rest[at : at + 2], rest[:at] + rest[at + 2 :]
+
+
+def run_sync(sync_args: list[str]) -> None:
     """Runs the sync, which prints its own lines, PROBLEM lines included. It returns 1 when the
     user needs to act, and its lines already say why, so the number itself is ignored. When it
     can't be loaded, or stops, a PROBLEM line says so, and the facts still follow."""
     try:
         shared = Path(TOOLS_DIR) / "internal" / "shared"
         package = load_from_path("dev_home_tools_shared", shared / "__init__.py", shared)
-        importlib.import_module(f"{package.__name__}.sync").main([])
+        importlib.import_module(f"{package.__name__}.sync").main(sync_args)
     except Exception as error:
         write_status(
             "PROBLEM",
@@ -87,10 +100,11 @@ def run_sync() -> None:
 def main(argv: list[str]) -> int:
     """Syncs, then checks the skill's stamp and prints the facts. Always returns 0."""
     try:
-        run_sync()
+        sync_args, facts_args = without_fetch(argv)
+        run_sync(sync_args)
         facts = load_from_path("dev_home_facts", Path(__file__).with_name("facts.py"))
         try:
-            request = facts.parse_request(argv)
+            request = facts.parse_request(facts_args)
             changed = facts.skill_changed(request)
             if changed is not None:
                 write_status("RELOAD", changed)

@@ -14,7 +14,7 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import IO
 
@@ -48,7 +48,11 @@ FRESH_SETUP_LINE = "Setup ran with the new code."
 
 @pytest.fixture(scope="module")
 def box(request: pytest.FixtureRequest) -> Iterator[Sandbox]:
-    yield from sandbox_for(request, "sync", tools_repo=True)
+    for sandbox in sandbox_for(request, "sync", tools_repo=True):
+        # Most tests here push an update and expect the next sync to find it, so the update check
+        # fetches every time. The tests of its interval set their own.
+        set_setting(sandbox, "updateCheckHours", 0)
+        yield sandbox
 
 
 def sync(box: Sandbox, *args: str) -> Run:
@@ -83,11 +87,19 @@ def make_setup_require_fresh_output(shared: Path) -> None:
     write_text(setup, text)
 
 
-def set_auto_update(box: Sandbox, on: bool) -> None:
+def set_setting(box: Sandbox, key: str, value: object) -> None:
+    """Sets one key in the sandbox's local-settings.json, or removes it when value is None."""
     path = box.tools / "local-settings.json"
     settings = json.loads(path.read_text(encoding="utf-8"))
-    settings["autoUpdate"] = on
+    if value is None:
+        settings.pop(key, None)
+    else:
+        settings[key] = value
     write_text(path, json.dumps(settings, indent=2) + "\n")
+
+
+def set_auto_update(box: Sandbox, on: bool) -> None:
+    set_setting(box, "autoUpdate", on)
 
 
 def count(result: Run, pattern: str) -> int:
@@ -552,6 +564,9 @@ def test_a_tooling_clone_with_no_upstream_is_skipped_quietly(box: Sandbox) -> No
         ([DEMO], r'Give a commit message with --message "<area>: <what>"'),
         (["--message"], r"--message needs the commit message after it"),
         (["--mess", "handoff: demo", DEMO], r"No such option: --mess"),
+        (["--fetch"], r"--fetch needs one of these after it: always, auto, when-due"),
+        (["--fetch", "sometimes"], r"--fetch needs one of these after it"),
+        (["--fetch", "auto", "--message", "handoff: demo", DEMO], r"--fetch is for a sync"),
     ],
 )
 def test_refuses_arguments_it_cant_use(box: Sandbox, args: list[str], says: str) -> None:
@@ -610,7 +625,8 @@ def test_when_two_pcs_change_the_same_lines_the_merge_is_undone(box: Sandbox) ->
     assert result.has_line(r"^COMMITTED\s"), str(result)
     pattern = r"^PROBLEM\s+Two PCs changed notes/shared\.md\. The merge was undone"
     assert result.has_line(pattern), str(result)
-    assert result.has_line(r"^PENDING\s+1 commit not pushed yet\.$"), str(result)
+    pending = r"^PENDING\s+1 commit saved on this PC, not synced to GitHub yet\. The next sync "
+    assert result.has_line(pending + r"sends it\.$"), str(result)
     assert not merging, "a merge is still in progress"
     assert mine == "from this PC\n"
 
@@ -675,8 +691,12 @@ def test_offline_a_commit_waits_and_the_next_sync_pushes_it(box: Sandbox) -> Non
         git("-C", str(box.content), "remote", "set-url", "origin", url)
     assert result.code == 0, str(result)
     assert result.has_line(r"^COMMITTED\s"), str(result)
-    assert result.has_line(r"^OFFLINE\s"), str(result)
-    pattern = r"^PENDING\s+1 commit not pushed yet\. The next sync pushes it\.$"
+    # A commit pushes first, and a push that fails without being rejected isn't tried again.
+    assert not result.has_line(r"^OFFLINE\s"), str(result)
+    pattern = (
+        r"^PENDING\s+1 commit saved on this PC, not synced to GitHub yet\. The next sync sends "
+        r"it\. git: \S"
+    )
     assert result.has_line(pattern), str(result)
     result = sync(box)
     assert result.has_line(r"^PUSHED\s+1 commit to GitHub\."), str(result)
@@ -815,3 +835,167 @@ def test_code_that_cant_load_says_how_to_install_a_fix_by_hand(box: Sandbox, scr
     assert result.has_line(rf"^PROBLEM\s+{re.escape(script)} stopped: SyntaxError: "), str(result)
     assert result.has_line(re.escape(f"git -C {tools} pull --ff-only, then py")), str(result)
     assert not result.has_line("Traceback"), str(result)
+
+
+# When a sync checks GitHub. Last in this file: these leave updates waiting.
+
+
+@pytest.fixture
+def copies(box: Sandbox) -> Iterator[Callable[[bool | None], None]]:
+    """Sets dev-home.json's answer for this test, or removes the file for None."""
+    path = box.content / "dev-home.json"
+
+    def set_copies(several: bool | None) -> None:
+        path.unlink(missing_ok=True)
+        if several is not None:
+            write_text(path, json.dumps({"multiMachine": several}) + "\n")
+
+    yield set_copies
+    path.unlink(missing_ok=True)
+
+
+def age_last_fetch(repo: Path, hours: float) -> None:
+    """Moves the time of a repo's last fetch back."""
+    then = time.time() - hours * 60 * 60
+    os.utime(repo / ".git" / "FETCH_HEAD", (then, then))
+
+
+def push_from_another_copy(box: Sandbox, line: str) -> None:
+    other = other_pc(box)
+    append(other / DEMO, line)
+    push_from(other, DEMO, "handoff: demo from another copy")
+
+
+def test_with_one_copy_the_fetch_waits_for_the_check_then_says_to_look_at_the_setting(
+    box: Sandbox, copies: Callable[[bool | None], None]
+) -> None:
+    copies(False)
+    sync(box)
+    push_from_another_copy(box, "While this copy wasn't looking.")
+    result = sync(box, "--fetch", "auto")
+    pattern = (
+        r"^OK\s+dev-home is up to date: it's the only active copy, and it last checked GitHub "
+        r"under a minute ago\.$"
+    )
+    assert result.code == 0 and result.has_line(pattern), str(result)
+    assert not result.has_line(r"^(PULLED|MERGED|SETTING)\s"), str(result)
+    age_last_fetch(box.content, 13)
+    result = sync(box, "--fetch", "auto")
+    assert result.has_line(r"^PULLED\s+1 commit from GitHub\."), str(result)
+    pattern = (
+        r"^SETTING\s+dev-home brought in 1 commit from another copy, but it's set to one active "
+        r"copy\. If another copy is in use, run /dev-home configure\.$"
+    )
+    assert result.has_line(pattern), str(result)
+
+
+def test_a_last_fetch_that_failed_counts_as_none(
+    box: Sandbox, copies: Callable[[bool | None], None]
+) -> None:
+    # A fetch that fails empties FETCH_HEAD and still sets its time.
+    copies(False)
+    write_text(box.content / ".git" / "FETCH_HEAD", "")
+    result = sync(box, "--fetch", "auto")
+    assert result.has_line(r"^OK\s+dev-home is up to date with GitHub\.$"), str(result)
+    assert shared_module(box, "git").last_fetch_age(box.content / ".git") is not None
+
+
+@pytest.mark.parametrize("several", [True, None], ids=["several copies", "no answer"])
+def test_with_several_copies_or_no_answer_it_fetches_every_time(
+    box: Sandbox, copies: Callable[[bool | None], None], several: bool | None
+) -> None:
+    copies(several)
+    sync(box)
+    push_from_another_copy(box, f"Pushed for {several}.")
+    result = sync(box, "--fetch", "auto")
+    assert result.has_line(r"^PULLED\s+1 commit from GitHub\."), str(result)
+    assert not result.has_line(r"^SETTING\s"), str(result)
+
+
+def test_when_due_waits_for_the_check_even_with_several_copies(
+    box: Sandbox, copies: Callable[[bool | None], None]
+) -> None:
+    copies(True)
+    sync(box)
+    result = sync(box, "--fetch", "when-due")
+    pattern = (
+        r"^OK\s+dev-home wasn't checked with GitHub this time: it last checked under a minute "
+        r"ago, and checks every 12 hours\.$"
+    )
+    assert result.has_line(pattern), str(result)
+    set_setting(box, "contentCheckHours", 0)
+    try:
+        result = sync(box, "--fetch", "when-due")
+    finally:
+        set_setting(box, "contentCheckHours", None)
+    assert result.has_line(r"^OK\s+dev-home is up to date with GitHub\.$"), str(result)
+
+
+def test_a_skipped_fetch_still_merges_what_came_in_and_pushes_what_waits(
+    box: Sandbox, copies: Callable[[bool | None], None]
+) -> None:
+    copies(False)
+    push_from_another_copy(box, "Fetched earlier, not merged yet.")
+    git("-C", str(box.content), "fetch", "--quiet")
+    write_text(box.content / "notes" / "made-here.md", "made here\n")
+    git("-C", str(box.content), "add", "--", "notes/made-here.md")
+    git("-C", str(box.content), "commit", "--quiet", "-m", "notes: made here")
+    result = sync(box, "--fetch", "auto")
+    assert result.has_line(r"^MERGED\s+1 commit from GitHub"), str(result)
+    assert result.has_line(r"^SETTING\s+dev-home brought in 1 commit"), str(result)
+    assert result.has_line(r"^PUSHED\s+2 commits to GitHub\."), str(result)
+
+
+def test_with_one_copy_a_failed_check_says_nothing_should_be_missing(
+    box: Sandbox, copies: Callable[[bool | None], None]
+) -> None:
+    copies(False)
+    age_last_fetch(box.content, 13)
+    url = git("-C", str(box.content), "remote", "get-url", "origin")[0]
+    git("-C", str(box.content), "remote", "set-url", "origin", str(box.root / "missing.git"))
+    try:
+        result = sync(box, "--fetch", "auto")
+    finally:
+        git("-C", str(box.content), "remote", "set-url", "origin", url)
+    pattern = (
+        r"^OFFLINE\s+Could not reach GitHub for dev-home's check\. It's set to one active copy, "
+        r"so nothing should be missing here\. git: "
+    )
+    assert result.has_line(pattern), str(result)
+
+
+def test_a_commit_pushes_without_fetching_first(box: Sandbox) -> None:
+    # Fetching from a missing repo would fail with an OFFLINE line, while pushes go to the real
+    # one.
+    content = str(box.content)
+    url = git("-C", content, "remote", "get-url", "origin")[0]
+    git("-C", content, "config", "remote.origin.pushurl", url)
+    git("-C", content, "remote", "set-url", "origin", str(box.root / "missing.git"))
+    append(box.content / DEMO, "Pushed without a fetch.")
+    try:
+        result = sync(box, "--message", "handoff: demo", DEMO)
+    finally:
+        git("-C", content, "remote", "set-url", "origin", url)
+        git("-C", content, "config", "--unset", "remote.origin.pushurl")
+    assert result.code == 0, str(result)
+    assert result.has_line(r"^PUSHED\s+1 commit to GitHub\."), str(result)
+    assert not result.has_line(r"^OFFLINE\s"), str(result)
+
+
+def test_the_update_check_waits_its_interval_and_uses_what_it_knows(box: Sandbox) -> None:
+    # An update fetched earlier is still waiting: the maintainer's change four.
+    set_setting(box, "updateCheckHours", 24)
+    try:
+        sync(box)
+        push_update(box, "Upstream change five.")
+        between = sync(box)
+        age_last_fetch(box.tools, 25)
+        due = sync(box)
+        push_update(box, "Upstream change six.")
+        by_hand = run_python(box, "update.py", answer="n")
+    finally:
+        set_setting(box, "updateCheckHours", 0)
+    assert between.has_line(r"^UPDATE\s+1 commit waiting"), str(between)
+    assert due.has_line(r"^UPDATE\s+2 commits waiting"), str(due)
+    # update.py run by hand always checks GitHub.
+    assert by_hand.has_line(r"handoff: Upstream change six\."), str(by_hand)

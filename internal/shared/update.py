@@ -11,10 +11,14 @@ from the same code.
 Options:
 
     --quiet   What a sync runs, as quiet_check() inside its own process. Never asks. Checks
-              GitHub, then prints at most one line, in the sync's format: OFFLINE when GitHub
+              GitHub once updateCheckHours (in local-settings.json; 24 by default, and 0 for
+              every time) have passed since the last fetch, and otherwise uses what that fetch
+              found. Then prints at most one line, in the sync's format: OFFLINE when GitHub
               can't be reached, UPDATE while commits are waiting, or PULLED once it has pulled
               them, which it does only when autoUpdate is on in local-settings.json. Leaves setup
               to the sync, which runs it next.
+
+Run without --quiet, it always checks GitHub.
 
 Example, with Python 3.12 or later:
 
@@ -26,10 +30,10 @@ and can't stop the rest of the sync: an update is how fixes arrive.
 
 from collections.abc import Sequence
 
-from .git import GIT_MISSING, run_git
+from .git import GIT_MISSING, last_fetch_age, run_git
 from .output import CYAN, GREEN, RED, color, commit_count, first_line, status_line
 from .programs import by_hand, find_program, run_setup
-from .settings import TOOLS_ROOT, read_settings
+from .settings import TOOLS_ROOT, hours_setting, read_settings
 
 
 def stop(quiet: bool, text: str) -> int:
@@ -66,6 +70,17 @@ def ask_and_install() -> int:
     return check(quiet=False)[0]
 
 
+def check_is_due() -> bool:
+    """Whether a quiet check fetches: once updateCheckHours have passed since the last successful
+    fetch. A clone whose .git isn't a folder, such as a worktree, fetches every time."""
+    hours = hours_setting(read_settings() or {}, "updateCheckHours")[0]
+    git_dir = TOOLS_ROOT / ".git"
+    if hours == 0 or not git_dir.is_dir():
+        return True
+    age = last_fetch_age(git_dir)
+    return age is None or age >= hours * 60 * 60
+
+
 def check(*, quiet: bool) -> tuple[int, bool]:
     # Git would otherwise use any repo this folder sits in, such as a zip download unpacked inside
     # another project, and offer to update that repo instead.
@@ -87,8 +102,9 @@ def check(*, quiet: bool) -> tuple[int, bool]:
             return 0, False
         return stop(quiet, "This clone has no upstream branch to update from."), False
 
-    fetch = run_git(TOOLS_ROOT, "fetch", "--quiet")
-    if fetch.code != 0:
+    # Between checks, a quiet check uses what the last fetch found.
+    fetch = run_git(TOOLS_ROOT, "fetch", "--quiet") if not quiet or check_is_due() else None
+    if fetch is not None and fetch.code != 0:
         if quiet:
             status_line(
                 "OFFLINE",

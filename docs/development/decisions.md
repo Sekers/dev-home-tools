@@ -624,7 +624,9 @@ points, so a symbolic link made by an older setup keeps working.
 
 ## A dev-home has one active copy, or several
 
-**Status:** decided, not built yet. This line goes once it's built.
+**Status:** decided. The sync acts on `dev-home.json` (`sync.py --fetch auto`); the starter's
+file, setup's questions, and the skills' use of it aren't built yet. This line goes once they
+are.
 
 **Decision:** dev-home has two uses, and both are fully supported. With one active copy, it's
 private storage with a backup and full history on GitHub: nothing else writes to it, so the local
@@ -707,8 +709,6 @@ copies than one or several.
 
 ## Commits push first
 
-**Status:** decided, not built yet. This line goes once it's built.
-
 **Decision:** after a commit, the sync pushes without fetching first. When GitHub rejects the
 push because it has commits this copy lacks, the sync fetches, merges, and pushes again, once.
 When the push fails for any other reason, such as being offline or signed out, the commit waits,
@@ -730,7 +730,9 @@ first.
 
 ## How often the sync checks GitHub
 
-**Status:** decided, not built yet. This line goes once it's built.
+**Status:** decided. The sync and the update check use both settings; plain `/knowledge` starts
+waiting for `contentCheckHours` (`--fetch when-due`) with the skills' change. This line goes once
+that's built.
 
 **Decision:** two settings on each PC, in `local-settings.json`, each a whole number of hours,
 where 0 means every time:
