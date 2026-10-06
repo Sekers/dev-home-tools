@@ -621,3 +621,261 @@ points, so a symbolic link made by an older setup keeps working.
   arguments again.
 
 **Look again if:** someone keeps dev-home on a network share, which a junction can't point to.
+
+## A dev-home has one active copy, or several
+
+**Status:** decided, not built yet. This line goes once it's built.
+
+**Decision:** dev-home has two uses, and both are fully supported. With one active copy, it's
+private storage with a backup and full history on GitHub: nothing else writes to it, so the local
+copy is always the latest. With several, it's the same, plus sharing between the copies, so a
+copy can fall behind. A copy is any clone in active use on its own: a PC, a virtual machine, a
+container, a remote server, or a cloud environment. Two sessions sharing one clone are one copy,
+and a replacement PC whose old copy is retired still makes one. `dev-home.json`, in dev-home's
+root, says which, as `{ "multiMachine": false }` or `true`, and the commands act on it:
+
+| Command | One active copy | Several active copies |
+| --- | --- | --- |
+| `/handoff`, `/handoff <question>` | The local copy. GitHub only to push commits still waiting, and to check once `contentCheckHours` has passed | Fetch first, every time |
+| `/handoff update`, `next`, `issue` | Edit, commit, push | Fetch first, edit, commit, push |
+| `/knowledge <question>` | The local copy | The local copy |
+| Plain `/knowledge` | The local copy, unless `contentCheckHours` has passed: then sync first | The same |
+| `/knowledge add` | Add, commit, push | Fetch first, add, commit, push |
+| `/dev-home sync` | Fetch, merge, push | The same |
+
+- A new dev-home starts with `multiMachine: false`. When setup clones one set to false, it asks
+  whether another copy will stay in use, with no default: the person types y or n, and Enter
+  asks again. One set to true stays true, without a question. An older dev-home with no
+  `dev-home.json` needs an answer at a console, and `--quiet` says so and changes nothing.
+- A missing or unreadable `dev-home.json` means fetching every time.
+- With one active copy, a sync that brings in commits this PC didn't make says so in one line,
+  naming `/dev-home configure`. It never changes the setting itself: that's a commit every copy
+  shares.
+- When setup changes the setting, it shows the change, writes only `dev-home.json` (keeping any
+  key it doesn't know), and commits and pushes it through the sync's code, in its own process: a
+  function that commits the one file and syncs, but skips the update check and setup, since
+  setup is already running. It commits before it links skills, so whatever a merge brings in is
+  linked in the same run. After a switch to several copies, it tells the person to run
+  `/dev-home sync` on the others; before a switch back to one, it asks them to confirm the
+  others are retired.
+- The sync's lines say what's true for the mode: with one copy, a read never says that dev-home
+  may be behind.
+
+**Why:**
+
+- With one copy, a fetch finds nothing, and an offline PC shouldn't be told its own copy may be
+  out of date. With several, the start of a session is where a stale handoff costs the most.
+- The setting is shared because it describes the repo, and every copy has to agree on it. Kept
+  on each PC, every PC would repeat the choice, and one could disagree without anyone noticing.
+- Several copies fetch before every command that syncs, with no window of a few minutes in which
+  a fetch is skipped. On one PC, a dev-home fetch took about 1.2 s, about 1% of a `/handoff` from
+  the prompt to the finished reply, while a stale handoff costs a wrong Next up or work done
+  twice. On that PC, over ten days, about half the syncs came within 5 minutes of the one before,
+  so a window would have saved fetches, but none a person would notice.
+- The clone question has no default because both wrong answers cost something. A wrong "one
+  copy" leaves each copy up to `contentCheckHours` behind the other; the line above catches it
+  at the first fetch that brings in the other copy's commits. A wrong "several" costs a fetch per
+  command for good, and nothing points it out.
+- Setup commits through a function of the sync's, in its own process, because a sync that
+  commits runs setup when it brought in commits, as a rejected push followed by a merge does.
+  Through `sync.py`, setup would start again inside itself.
+- `dev-home.json` stands out in the root, says what it configures, and can hold another setting
+  for the whole repo later. `multiMachine` is the familiar idea, and defining it by copies in
+  active use makes it right for cloud environments and replacements too.
+
+**Options set aside:**
+
+- No setting, with every command that syncs fetching: simpler, but one copy is a first-class
+  use, where every fetch finds nothing and an offline read would warn for no reason.
+- The setting on each PC only; a shared default with each PC able to override it (rules for
+  which wins, with no need for them yet); and a list of the machines (identities to keep up to
+  date, when the sync only needs a yes or no).
+- Other names: `config.json` (too general), `shared-settings.json` (names how it's stored, not
+  what it's for), `multipleCopies` or `multipleClones` (exact, but less familiar), `syncMode`
+  (hides the fact that decides the mode), and `syncAcrossMachines` (sounds as if false might stop
+  pushes). And a schema version, which nothing needs until the format changes.
+- Changing the setting by itself when another copy's commits arrive: a shared commit needs a
+  yes.
+- A window of 5 or 15 minutes in which several copies skip the fetch.
+- A default for the clone question: No (the costlier mistake) or Yes (never pointed out).
+- Setup committing through `sync.py --message` in a process of its own with a `--no-setup`
+  option (a public option only setup would use, plus a process start), or by running git itself
+  (around the sync's lock, its staging of exact files, and its handling of conflicts).
+
+**Look again if:** fetches become slow enough to notice, or the sync needs to know more about the
+copies than one or several.
+
+## Commits push first
+
+**Status:** decided, not built yet. This line goes once it's built.
+
+**Decision:** after a commit, the sync pushes without fetching first. When GitHub rejects the
+push because it has commits this copy lacks, the sync fetches, merges, and pushes again, once.
+When the push fails for any other reason, such as being offline or signed out, the commit waits,
+with no second network call, and the line reads "1 commit saved on this PC, not synced to GitHub
+yet. The next sync sends it." A later sync pushes waiting commits even when it skips the fetch.
+As before, the sync commits only the files it's given, and never rebases, stashes, resets,
+checks out, or discards.
+
+**Why:** a rejected push is git's own sign that a fetch and a merge are needed, so a fetch before
+every push found nothing on the usual path. With several copies, a command that edits still
+fetches at its start, before the agent changes anything. The line says "synced", the word the
+project uses, because it's right in both modes: "backed up" fits only one copy, and "pushed" is
+git's word.
+
+**Option set aside:** fetching before every push, as before.
+
+**Look again if:** pushes are rejected often enough that the retries cost more than fetching
+first.
+
+## How often the sync checks GitHub
+
+**Status:** decided, not built yet. This line goes once it's built.
+
+**Decision:** two settings on each PC, in `local-settings.json`, each a whole number of hours,
+where 0 means every time:
+
+- `contentCheckHours`, 12 by default: how long a sync with one active copy goes without
+  fetching dev-home, and, in both modes, how long plain `/knowledge` reads the local copy before
+  syncing first.
+- `updateCheckHours`, 24 by default: how long the update check goes without fetching
+  dev-home-tools. Between checks, it still reports, or installs when `autoUpdate` is on, the
+  commits an earlier fetch found. `update.py` run by hand always fetches, and a sync someone asks
+  for, `/dev-home sync` included, keeps to this interval.
+
+Each is timed by its repo's `.git/FETCH_HEAD`, and an empty one counts as no fetch: a fetch that
+fails, such as offline, empties the file and still sets its time (tested with git 2.55.0). A
+value that isn't a whole number of 0 or more means the default, and setup says so.
+
+**Why:**
+
+- On each PC, because how often a PC reaches GitHub is that PC's choice, such as a laptop on a
+  metered connection. Nothing needs the copies to agree, and a change commits nothing.
+- With one copy, `contentCheckHours` limits how long a wrong setting, or an edit made on
+  GitHub's website, goes unseen. Its default is 12 hours, chosen over the 24 first planned.
+- `updateCheckHours` is apart from `autoUpdate`: one says when to check GitHub, the other
+  whether to install what a check found. A check on every command found nothing almost every
+  time, and fewer checks bring updates in fewer batches, so a session is stopped to reload a
+  changed skill less often.
+- `FETCH_HEAD` already holds the time, so there's no state file to add.
+
+**Options set aside:**
+
+- Fixed intervals in the code: nobody could change them.
+- `contentCheckHours` in `dev-home.json`, shared by every copy: each change would be a commit to
+  all of them, with no reason for them to agree.
+- A yes or no for the update check: one number covers the default, every time, and anything
+  between.
+
+**Look again if:** git changes what a failed fetch does to `FETCH_HEAD`.
+
+## setup.py --configure changes every setting
+
+**Status:** decided, not built yet. This line goes once it's built.
+
+**Decision:** `setup.py --configure` is how people and agents change a setting after the first
+run: `contentDir`, `autoUpdate`, `updateCheckHours`, `contentCheckHours`, the answer for each
+`~/.claude-*` folder, and the shared `multiMachine`.
+
+- At a console, it shows a menu: every setting with its current value, under "This PC" and
+  "Shared by every copy of dev-home", in aligned columns, with headings and setup's colors, in
+  ASCII like every script. A number changes one setting, `a` goes through all of them with the
+  current answers as defaults, and Enter finishes. Each entry asks the question the first run
+  asks, so the questions are one piece of code. The Claude folders entry asks about each folder,
+  one answered no included, so a no can be taken back.
+- An agent can't answer at a console, so it names one setting per run:
+  `--configure '<name>=<value>'`, with a plain value, always in single quotes: `true` or `false`,
+  a whole number of hours, a path, or `claudeConfigDirs+=<folder>` to set up a folder and
+  `claudeConfigDirs-=<folder>` to stop. `--what-if` shows the change first. With neither a
+  console nor a setting, it prints the current settings and how to change them.
+- A change to `local-settings.json` keeps a dated backup first, as setup's changes to Claude
+  Code's and Codex's settings do, and keeps any key it doesn't know. A new `contentDir` never
+  moves a folder.
+- The `dev-home` skill pre-approves `setup.py --configure *`, as the skills pre-approve
+  `sync.py *` for commits: the person's yes in chat to the exact preview is the approval.
+- Before it sets dev-home's git config, setup checks that the folder looks like a dev-home: it
+  has the files the starter makes, `global-rules/global-rules.md` and `knowledge/README.md`.
+  With `--quiet`, it stops when they're missing, and at a console it asks.
+
+**Why:**
+
+- One way to change a setting, so it's checked and written the same way whoever changes it.
+- A menu, because a person runs `--configure` to change one thing: it shows every value, and
+  changes only what they pick. A question for each setting suits the first run, which needs
+  every answer, and `a` keeps that for a full review.
+- Plain values, because they reached the script unchanged in every shell tried (2026-10-06:
+  PowerShell 7.6.6, Windows PowerShell 5.1, and Git Bash 5.3.9), while Windows PowerShell 5.1
+  dropped JSON's inner double quotes, so `["~/.claude-other"]` arrived as `[~/.claude-other]`.
+  Single quotes also stop Git Bash from turning a `~` after `=` into a full path. Adding or
+  removing one folder means an agent never repeats the whole list.
+- A pre-approval with a wildcard, because the value changes with each call. Without one, a
+  change would ask three times: the preview, the change, and the question in chat.
+- The dev-home check, because setup turns commit signing off in that repo, and an agent can now
+  change `contentDir`, so a mistake must not reach a project's repo.
+
+**Options set aside:**
+
+- At a console, every question again with the current answers as defaults: six or more
+  questions to change one setting, and a habitual "y" can change the wrong one.
+- JSON values (see above); one switch per setting, such as `--content-dir` (the list grows with
+  every setting, and a person has to know each one exists); and editing the file by hand only
+  (a JSON typo stops setup).
+- No pre-approval.
+
+**Look again if:** an agent's tool can answer setup's questions, or the settings outgrow a menu.
+
+## A dev-home skill syncs and configures
+
+**Status:** decided, not built yet. This line goes once it's built.
+
+**Decision:** a general `dev-home` skill. `/dev-home` alone lists its commands. `/dev-home sync`
+fetches, merges, and pushes in either mode, lists the files left uncommitted, and keeps to
+`updateCheckHours`. `/dev-home configure` runs `setup.py --configure`: it shows the current
+values, previews the exact change, and makes it after the person's yes. Typing `/dev-home sync`
+allows a sync, never a commit: it offers to commit a `STALE` file, and leaves a `LEFT` one alone
+unless the person says it's theirs. In Codex, both say which command to run in a terminal, and
+change nothing, while Codex can't use git's and gh's sign-ins.
+
+Plain `/knowledge` stops being the sync someone asks for. It reads the local copy, unless
+`contentCheckHours` has passed, when it syncs first, in both modes. `/knowledge <question>` still
+never syncs.
+
+**Why:** one place to sync and configure that's easy to find, with room for more dev-home
+commands without a skill for each. `/dev-home` alone lists rather than syncs, so typing the name
+never reaches the network unasked. Plain `/knowledge` is a lookup, so it follows the lookups'
+rule, with a check at the interval so its list of subjects is never far behind.
+
+**Options set aside:** a skill only for syncing; plain `/knowledge` syncing as before (a fetch
+when the person only wanted the list of subjects); and plain `/knowledge` never checking at all.
+
+**Look again if:** the skill gathers commands that don't belong together.
+
+## The handoff update checks issue links with one script
+
+**Status:** decided, not built yet. This line goes once it's built.
+
+**Decision:** `/handoff update` finds out whether linked GitHub issues have closed with one
+script in the handoff skill's folder, not a `gh issue view` for each link. The script finds the
+handoff from the folder it runs in, as `facts.py` does, reads every issue link in it, checks
+them all with one `gh` request, and prints a line for each: closed, with GitHub's reason; open;
+or not checked, and why, such as `gh` missing or signed out. The agent runs it in the same turn
+as its read of the handoff just before editing, so it costs no extra turn. It never runs for a
+read, `next`, or `issue`. It adds one Python start, about 0.04 s, and replaces a `gh` process
+for each link with one.
+
+**Why:** reading a link and checking its state takes no judgment, so it belongs in a script (see
+AGENTS.md). One call covers any number of links. When issues on GitLab, Bitbucket, or Azure
+DevOps come, it's the one place that learns each host's tool, so the skill's steps don't grow
+with each host. Its lines can be tested with a faked `gh`.
+
+**Options set aside:**
+
+- Keeping a `gh issue view` for each link: each new host would add steps to the skill.
+- Checking issues in the update's start-up call: about 0.04 s faster, and never a call of its
+  own, but the update would need a start-up command of its own, and `prepare.py`, which every
+  skill shares, would take on a network job for one skill.
+- Waiting for a second host before writing the script: one call, testable lines, and shorter
+  steps help with GitHub alone.
+
+**Look again if:** reads should show closed issues too, which would put a network call on every
+read.
