@@ -7,7 +7,7 @@ script isn't given may be another session's work in progress. It never stages, c
 resets, or discards such a file. It lists it instead, with how long ago it changed: LEFT, or
 STALE once nobody has touched it for 15 minutes.
 
-It finds dev-home through local-settings.json, which setup.ps1 writes. One run at a time: a run
+It finds dev-home through local-settings.json, which setup writes. One run at a time: a run
 waits for any other run on the same dev-home to finish. The lock is one the operating system
 holds on the file dev-home-sync.lock in dev-home's .git folder, so it goes when the run ends, even
 one that stops partway. The file itself stays.
@@ -17,12 +17,15 @@ commits, then push. Git refuses a merge that would change an uncommitted file, a
 conflicts is undone at once, so nothing is lost either way. With --message and paths, it first
 commits exactly those paths.
 
-Then it runs update's check (internal/shared/update.py, with --quiet), which checks
-dev-home-tools for new commits and makes every decision about them: it pulls them when autoUpdate
-is on in local-settings.json, and otherwise says they're waiting.
+Then it runs update's quiet check (internal/shared/update.py, the same as its --quiet), which
+checks dev-home-tools for new commits and makes every decision about them: it pulls them when
+autoUpdate is on in local-settings.json, and otherwise says they're waiting.
 
-Last, it runs setup.ps1 -Quiet, so updated skills, and skills added on another PC, are set up on
-this one.
+Last, it runs setup's code with --quiet, inside this process, so updated skills, and skills
+added on another PC, are set up on this one. Setup runs as a process of its own instead when
+the check has just pulled an update, or when another process changed the shared modules while
+this sync waited for its lock. That keeps setup from combining old loaded modules with new
+files.
 
 A sync that commits usually comes right after a plain one, which just did both of those. So it
 skips the update check, and runs setup only when it brought in commits from GitHub.
@@ -64,8 +67,8 @@ from typing import IO
 
 from .git import GIT_MISSING, GitResult, run_git
 from .output import commit_count, describe, first_line, status_line
-from .programs import find_program, run_setup
-from .settings import SETTINGS_PATH, TOOLS_ROOT, read_settings
+from .programs import by_hand, find_program, run_setup
+from .settings import SETTINGS_PATH, read_settings
 
 if sys.platform == "win32":
     import msvcrt
@@ -167,6 +170,9 @@ class Sync:
         # Set once commits from GitHub are merged in, since they may bring skills that setup must
         # link.
         self.brought_in = False
+        # Set once the update check installs new dev-home-tools commits, whose code setup must
+        # load fresh.
+        self.updated = False
 
     def status(self, state: str, message: str) -> None:
         if state == "PROBLEM":
@@ -408,13 +414,14 @@ class Sync:
         of this sync."""
         try:
             update = importlib.import_module(f"{__package__}.update")
-            if update.main(["--quiet"]) != 0:
+            code, self.updated = update.quiet_check()
+            if code != 0:
                 self.problems += 1
         except Exception as error:
             self.status("PROBLEM", f"update.py stopped: {describe(error)}")
 
     def setup(self) -> None:
-        if not run_setup():
+        if not run_setup(fresh=self.updated):
             self.problems += 1
 
     def step(self, what: str, action: Callable[[], None]) -> None:
@@ -496,7 +503,7 @@ def sync(argv: Sequence[str]) -> int:
         return problem(parsed)
     message, values = parsed
 
-    setup = TOOLS_ROOT / "setup.ps1"
+    setup = by_hand("setup.py")
     if not SETTINGS_PATH.exists():
         return problem(
             f"dev-home-tools is not set up on this PC yet. The user runs {setup} once in a "

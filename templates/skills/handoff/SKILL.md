@@ -182,8 +182,8 @@ about this project doesn't belong here either.
    It syncs dev-home with GitHub and runs setup, checks that this skill hasn't changed since you
    loaded it, then prints the facts that "Find this project's handoff" uses. If it can't start
    because `{{PYTHON}}` doesn't exist, tell the user that dev-home-tools needs Python 3.12 or
-   later, and that running its `setup.ps1` says what to do, then stop. Pass on anything it
-   prints beyond `OK` and the facts:
+   later: to install it if they have none, then run `py {{TOOLS_DIR}}/setup.py` in a terminal.
+   Then stop. Pass on anything it prints beyond `OK` and the facts:
    - `RELOAD`: this skill has changed since you loaded it, so these steps are out of date. Show
      the line, and stop: the user runs the command again to load the new steps.
    - `OFFLINE`: GitHub couldn't be reached. When the line is about dev-home, say the handoff may

@@ -6,18 +6,16 @@ share the sandbox, so each one starts from where the one before it left off.
 """
 
 import contextlib
-import importlib
-import importlib.util
 import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
-from types import ModuleType
 from typing import IO
 
 import pytest
@@ -27,10 +25,12 @@ from helpers import (
     Sandbox,
     finish,
     git,
+    link_target,
     run,
     run_python,
     run_while_asking,
     sandbox_for,
+    shared_module,
     start_python,
     write_text,
 )
@@ -43,6 +43,7 @@ else:
 pytestmark = pytest.mark.xdist_group("sync")
 
 DEMO = "handoffs/demo/HANDOFF.md"
+FRESH_SETUP_LINE = "Setup ran with the new code."
 
 
 @pytest.fixture(scope="module")
@@ -70,20 +71,23 @@ def push_update(box: Sandbox, line: str) -> None:
     git("-C", str(box.upstream), "push", "--quiet")
 
 
+def make_setup_require_fresh_output(shared: Path) -> None:
+    """Changes setup and output together so setup only loads when both modules are new."""
+    append(shared / "output.py", f'FRESH = "{FRESH_SETUP_LINE}"')
+    setup = shared / "setup.py"
+    text = setup.read_text(encoding="utf-8")
+    text = text.replace("from .output import GREEN,", "from .output import FRESH, GREEN,", 1)
+    main = "def main(argv: Sequence[str]) -> int:\n"
+    text = text.replace(main, main + "    print(FRESH)\n", 1)
+    assert text.count("FRESH") == 2
+    write_text(setup, text)
+
+
 def set_auto_update(box: Sandbox, on: bool) -> None:
     path = box.tools / "local-settings.json"
     settings = json.loads(path.read_text(encoding="utf-8"))
     settings["autoUpdate"] = on
     write_text(path, json.dumps(settings, indent=2) + "\n")
-
-
-def link_target(path: Path) -> Path | None:
-    """Where a link points, without the \\\\?\\ that Windows puts before a junction's target."""
-    try:
-        target = str(path.readlink())
-    except OSError:
-        return None
-    return Path(target.removeprefix("\\\\?\\"))
 
 
 def count(result: Run, pattern: str) -> int:
@@ -104,22 +108,6 @@ def push_from(repo: Path, relative: str, message: str) -> None:
     git("-C", str(repo), "add", "--", relative)
     git("-C", str(repo), "commit", "--quiet", "-m", message)
     git("-C", str(repo), "push", "--quiet")
-
-
-def shared_module(box: Sandbox, name: str) -> ModuleType:
-    """A module of the sandbox copy's internal/shared/, loaded into this process, under a
-    package name of the sandbox's own, for a test that has to change something inside it."""
-    folder = box.tools / "internal" / "shared"
-    package = "shared_" + box.root.name.replace("-", "_")
-    if package not in sys.modules:
-        spec = importlib.util.spec_from_file_location(
-            package, folder / "__init__.py", submodule_search_locations=[str(folder)]
-        )
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[package] = module
-        spec.loader.exec_module(module)
-    return importlib.import_module(f"{package}.{name}")
 
 
 @contextlib.contextmanager
@@ -363,6 +351,75 @@ def test_with_auto_update_on_never_overwrites_a_local_edit(box: Sandbox) -> None
     assert "A local edit." in edited
     assert after.has_line(r"^PULLED\s"), str(after)
     assert "Upstream change one-b." in generated_skill(box)
+
+
+def test_setup_after_an_update_runs_the_new_code(box: Sandbox) -> None:
+    # The update changes two modules, the second needing the first. The sync loaded the old
+    # output.py before it pulled, so setup must run as a process of its own to get the new pair.
+    shared = box.upstream / "internal" / "shared"
+    make_setup_require_fresh_output(shared)
+    git("-C", str(box.upstream), "commit", "--quiet", "-am", "setup: say it runs the new code")
+    git("-C", str(box.upstream), "push", "--quiet")
+    set_auto_update(box, True)
+    try:
+        result = sync(box)
+    finally:
+        git("-C", str(box.upstream), "revert", "--no-edit", "HEAD")
+        git("-C", str(box.upstream), "push", "--quiet")
+        sync(box)
+        set_auto_update(box, False)
+    assert result.code == 0, str(result)
+    assert result.has_line(r"^PULLED\s+1 commit to dev-home-tools\."), str(result)
+    assert result.has_line(rf"^{re.escape(FRESH_SETUP_LINE)}$"), str(result)
+
+
+def test_setup_after_waiting_for_an_update_in_another_sync_runs_fresh_code(
+    box: Sandbox,
+) -> None:
+    # This sync loads the shared modules, then waits for another sync. The other sync can update
+    # those files before it releases the lock, so setup must not combine the loaded old modules
+    # with new setup.py from disk.
+    shared = box.tools / "internal" / "shared"
+    programs = shared / "programs.py"
+    output = shared / "output.py"
+    setup = shared / "setup.py"
+    originals = {path: path.read_text(encoding="utf-8") for path in (programs, output, setup)}
+    loaded = box.root / "waiting-sync-loaded-programs"
+    marker = f'Path(r"{loaded}").write_text("loaded", encoding="utf-8")\n'
+    programs_text = originals[programs]
+    snapshot = "_LOADED_SHARED_FILE_TIMES = _shared_file_times()\n"
+    programs_text = programs_text.replace(snapshot, snapshot + marker, 1)
+    assert programs_text.count(marker) == 1
+    write_text(programs, programs_text)
+
+    process: subprocess.Popen[bytes] | None = None
+    try:
+        with (box.content / ".git" / "dev-home-sync.lock").open("a+b") as handle:
+            hold(handle)
+            process = start_python(box, "sync.py")
+            try:
+                deadline = time.monotonic() + 10
+                while (
+                    not loaded.exists() and process.poll() is None and time.monotonic() < deadline
+                ):
+                    time.sleep(0.01)
+                assert loaded.exists(), "the waiting sync did not finish loading its modules"
+                make_setup_require_fresh_output(shared)
+            finally:
+                let_go(handle)
+        result = finish(process)
+        process = None
+    finally:
+        if process is not None:
+            if process.poll() is None:
+                process.kill()
+            finish(process)
+        for path, text in originals.items():
+            write_text(path, text)
+        loaded.unlink(missing_ok=True)
+
+    assert result.code == 0, str(result)
+    assert result.has_line(rf"^{re.escape(FRESH_SETUP_LINE)}$"), str(result)
 
 
 def test_update_with_nothing_waiting_says_so(box: Sandbox) -> None:
@@ -744,7 +801,7 @@ def test_an_error_in_one_step_still_lets_the_update_check_and_setup_run(
     assert linked is not None, out
 
 
-@pytest.mark.parametrize("script", ["sync.py", "update.py"])
+@pytest.mark.parametrize("script", ["setup.py", "sync.py", "update.py"])
 def test_code_that_cant_load_says_how_to_install_a_fix_by_hand(box: Sandbox, script: str) -> None:
     code = box.tools / "internal" / "shared" / script
     before = code.read_bytes()
@@ -756,5 +813,5 @@ def test_code_that_cant_load_says_how_to_install_a_fix_by_hand(box: Sandbox, scr
     tools = box.tools.as_posix()
     assert result.code == 1, str(result)
     assert result.has_line(rf"^PROBLEM\s+{re.escape(script)} stopped: SyntaxError: "), str(result)
-    assert result.has_line(re.escape(f"git -C {tools} pull --ff-only, then pwsh")), str(result)
+    assert result.has_line(re.escape(f"git -C {tools} pull --ff-only, then py")), str(result)
     assert not result.has_line("Traceback"), str(result)

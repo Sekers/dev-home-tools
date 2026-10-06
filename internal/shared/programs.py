@@ -1,13 +1,40 @@
-"""Finds the programs the scripts start, and runs setup.ps1, which is still PowerShell."""
+"""Finds the programs the scripts start, and runs setup."""
 
+import importlib
 import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-from .output import status_line
 from .settings import TOOLS_ROOT
+
+SHARED_ROOT = Path(__file__).parent
+
+
+def _shared_file_times() -> dict[str, int] | None:
+    """Each shared Python file's modification time, or None when they can't all be read."""
+    try:
+        with os.scandir(SHARED_ROOT) as entries:
+            return {
+                entry.name: entry.stat().st_mtime_ns
+                for entry in entries
+                if entry.name.endswith(".py") and entry.is_file()
+            }
+    except OSError:
+        return None
+
+
+_LOADED_SHARED_FILE_TIMES = _shared_file_times()
+
+
+def _shared_code_changed() -> bool:
+    """Whether internal/shared changed since this module loaded. An unreadable scan counts as
+    changed, because a fresh process is the safe way to run setup then."""
+    current = _shared_file_times()
+    return (
+        _LOADED_SHARED_FILE_TIMES is None or current is None or current != _LOADED_SHARED_FILE_TIMES
+    )
 
 
 def find_program(name: str) -> str | None:
@@ -24,26 +51,22 @@ def find_program(name: str) -> str | None:
     return None
 
 
-def run_setup() -> bool:
-    """Runs setup.ps1 -Quiet in a PowerShell process of its own, which prints its own lines,
-    PROBLEM lines included, straight to this script's output. Returns whether it ran and had no
-    problem."""
-    pwsh = find_program("pwsh")
-    if pwsh is None:
-        status_line(
-            "PROBLEM",
-            "PowerShell 7 (pwsh) was not found, so setup did not run. "
-            "Install it (see dev-home-tools' README), then try again.",
+def run_setup(*, fresh: bool = False) -> bool:
+    """Runs setup with --quiet, which prints its own lines, PROBLEM lines included. Returns
+    whether it had no problem. It runs inside this process unless fresh, or another process
+    changed the shared modules since this one loaded them. Setup then runs as a Python process
+    of its own, which loads one consistent version of the code."""
+    if fresh or _shared_code_changed():
+        # Setup writes to the same output, so this process's lines go out first.
+        sys.stdout.flush()
+        done = subprocess.run(
+            [sys.executable, "-I", str(TOOLS_ROOT / "setup.py"), "--quiet"],
+            stdin=subprocess.DEVNULL,
+            check=False,
         )
-        return False
-    # Setup writes to the same output, so this script's lines go out first.
-    sys.stdout.flush()
-    done = subprocess.run(
-        [pwsh, "-NoProfile", "-File", str(TOOLS_ROOT / "setup.ps1"), "-Quiet"],
-        stdin=subprocess.DEVNULL,
-        check=False,
-    )
-    return done.returncode == 0
+        return done.returncode == 0
+    setup = importlib.import_module(f"{__package__}.setup")
+    return bool(setup.main(["--quiet"]) == 0)
 
 
 def by_hand(script: str) -> str:

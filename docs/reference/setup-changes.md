@@ -3,9 +3,8 @@
 Setup doesn't copy the skills and rules into Claude Code's and Codex's folders. It adds links
 there instead: a link is a folder entry that points to a folder somewhere else, and the tools
 read through it as if the files were right there. So when a sync or an update changes a skill
-or a rule, the tools see the change at once, with nothing to copy. Setup makes folder links as
-directory junctions, or as symbolic links when Windows Developer Mode is on; neither needs admin
-rights.
+or a rule, the tools see the change at once, with nothing to copy. On Windows, setup makes each
+folder link as a directory junction, which needs no admin rights and no Developer Mode.
 
 - **In your dev-home-tools folder,** three things that belong to this PC only. Git ignores them,
   so they never go to GitHub, and an update never overwrites them.
@@ -27,7 +26,7 @@ rights.
     Pythons as you install them, and then for the newest Python 3.12 or later in the registry,
     which is where the traditional installer records one. It looks only when it makes the
     junction, or when the `python.exe` the junction leads to is gone; other runs just check that
-    it's there. It always makes a junction here, even with Developer Mode on.
+    it's there.
   - `local-settings.json`: this PC's answers to setup's questions: where your dev-home is,
     whether to install updates automatically, and which extra Claude Code folders to set up.
     The scripts read it to find your dev-home.

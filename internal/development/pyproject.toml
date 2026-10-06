@@ -19,12 +19,13 @@ pythonpath = ["tests"]
 addopts = ["-n", "auto", "--dist", "loadgroup"]
 
 [tool.coverage.run]
-# The tests run the scripts as separate processes, from each sandbox's copy of this repo.
+# The tests run the scripts from each sandbox's copy of this repo: most as separate processes,
+# and some of their code inside the test process.
 patch = ["subprocess"]
 branch = true
 include = ["*/shared-skill-scripts/*.py", "*/internal/shared/*.py"]
 parallel = true
-# The test processes themselves never run the scripts, so they collect nothing of their own.
+# A test process that runs none of the scripts' code itself collects nothing of its own.
 disable_warnings = ["no-data-collected"]
 
 [tool.coverage.paths]
@@ -52,6 +53,7 @@ files = [
     "tests",
     "../../templates/shared-skill-scripts",
     "../../internal/shared",
+    "../../setup.py",
     "../../sync.py",
     "../../update.py",
 ]

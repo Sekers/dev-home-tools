@@ -19,9 +19,9 @@ call as failed, and an agent could stop or retry instead of doing what the skill
 line.
 
 The sync runs inside this process: it's the code of sync.py in dev-home-tools' root, which this
-script loads from internal/shared/ there, as sync.py does. Its setup run is PowerShell, in a
-process of its own, and writes its lines straight to this script's output. facts.py runs inside
-this process too. Everything this process prints is written as UTF-8.
+script loads from internal/shared/ there, as sync.py does, and the sync runs update's and
+setup's code there too. facts.py runs inside this process as well. Everything this process
+prints is written as UTF-8.
 
 Committing is never done here: a skill commits through sync.py --message.
 
@@ -80,7 +80,7 @@ def run_sync() -> None:
             "PROBLEM",
             f"The sync stopped, so dev-home may be behind: {type(error).__name__}: {error}. If an"
             f" update has a fix, the user installs it by hand: git -C {TOOLS_DIR} pull --ff-only,"
-            f" then pwsh -NoProfile -File {TOOLS_DIR}/setup.ps1",
+            f" then {'py' if sys.platform == 'win32' else 'python3'} {TOOLS_DIR}/setup.py",
         )
 
 

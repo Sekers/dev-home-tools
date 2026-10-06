@@ -1,9 +1,9 @@
-# Written by setup.ps1 on each PC: the skills, the scripts they share, and the rules, with this
+# Written by setup.py on each PC: the skills, the scripts they share, and the rules, with this
 # PC's paths filled in, and this PC's settings. Never commit either.
 /internal/.generated/
 /local-settings.json
 
-# This PC's link to the Python the skills run, which setup.ps1 makes.
+# This PC's link to the Python the skills run, which setup.py makes.
 /internal/.python/
 
 # Throwaway copies that the tests build and run.

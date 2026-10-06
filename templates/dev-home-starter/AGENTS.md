@@ -2,7 +2,7 @@
 
 This is my private repo for project handoffs and a general knowledge base, shared by my PCs
 through GitHub. The tooling that works with it (the skills, the always-on operating rules,
-setup.ps1, and sync.py) lives in my clone of dev-home-tools, at `{{TOOLS_DIR}}`.
+setup.py, and sync.py) lives in my clone of dev-home-tools, at `{{TOOLS_DIR}}`.
 
 ## Privacy
 
@@ -33,7 +33,7 @@ setup.ps1, and sync.py) lives in my clone of dev-home-tools, at `{{TOOLS_DIR}}`.
 - Frontmatter uses only standard fields: `name`, `description`, and `allowed-tools`. The name
   matches the folder name.
 - After adding, renaming, or removing one, run
-  `pwsh -NoProfile -File {{TOOLS_DIR}}/setup.ps1 -Quiet`.
+  `{{PYTHON}} -I {{TOOLS_DIR}}/setup.py --quiet`.
 
 ## Git
 

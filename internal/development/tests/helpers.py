@@ -17,6 +17,8 @@ command unchanged.
 
 import ast
 import contextlib
+import importlib
+import importlib.util
 import json
 import os
 import re
@@ -28,6 +30,7 @@ import uuid
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -38,7 +41,6 @@ SANDBOX_ROOT = REPO_ROOT / "internal" / "development" / ".test-sandbox"
 # What a sandbox's copy leaves out, by its path in the repo: what belongs to this PC (including
 # the Python link, which would copy the Python install), and everything for development, the
 # sandboxes among it. Python's __pycache__ folders are left out wherever they are.
-# Invoke-Tests.ps1 has the same list.
 NOT_COPIED = {
     ".git",
     "local-settings.json",
@@ -133,6 +135,33 @@ def make_junction(link: Path, target: Path) -> None:
         link.symlink_to(target, target_is_directory=True)
 
 
+def link_target(path: Path) -> Path | None:
+    """Where a link points, without the \\\\?\\ that Windows puts before a junction's target, or
+    None when path isn't a link."""
+    try:
+        target = str(path.readlink())
+    except OSError:
+        return None
+    return Path(target.removeprefix("\\\\?\\"))
+
+
+def shared_module(box: "Sandbox", name: str) -> ModuleType:
+    """A module of the sandbox copy's internal/shared/, loaded into this process, under a
+    package name of the sandbox's own, for a test that has to change something inside it, such
+    as a fake for the person at the console."""
+    folder = box.tools / "internal" / "shared"
+    package = "shared_" + box.root.name.replace("-", "_")
+    if package not in sys.modules:
+        spec = importlib.util.spec_from_file_location(
+            package, folder / "__init__.py", submodule_search_locations=[str(folder)]
+        )
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[package] = module
+        spec.loader.exec_module(module)
+    return importlib.import_module(f"{package}.{name}")
+
+
 def remove_link(link: Path) -> None:
     """Removes a link without touching what it points to."""
     if os.path.isjunction(link):
@@ -147,9 +176,14 @@ def remove_link(link: Path) -> None:
 
 def script_env(sandbox: Sandbox, changes: Mapping[str, str | None] | None = None) -> dict[str, str]:
     """The environment a sandbox's scripts run in. Git stops looking for a repo at the sandbox,
-    which is inside this one. CLAUDE_CODE_ENTRYPOINT, which the session running the tests may
-    have set, is left out, as are coverage's settings for a run that isn't this Python."""
-    env = {key: value for key, value in os.environ.items() if key != "CLAUDE_CODE_ENTRYPOINT"}
+    which is inside this one. CLAUDE_CODE_ENTRYPOINT and CLAUDE_CONFIG_DIR, which the session
+    running the tests may have set, are left out: a test that wants a Claude folder from
+    CLAUDE_CONFIG_DIR passes one in changes."""
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in ("CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CONFIG_DIR")
+    }
     env["GIT_CEILING_DIRECTORIES"] = sandbox.root.as_posix()
     for key, value in (changes or {}).items():
         if value is None:
@@ -247,7 +281,7 @@ def sandbox_for(
     afterwards when they all pass, and kept for a look when one fails."""
     box = new_sandbox(name, tools_repo=tools_repo)
     failed = request.session.testsfailed
-    setup = run_pwsh(box, "setup.ps1", "-Quiet")
+    setup = run_python(box, "setup.py", "--quiet")
     assert setup.code == 0, str(setup)
     yield box
     if request.session.testsfailed > failed:
@@ -288,7 +322,7 @@ def remove_sandbox(box: Sandbox) -> None:
 def check_in_sandbox(argv: list[str]) -> None:
     """Refuses to run a script outside a sandbox."""
     for word in argv:
-        if word.endswith((".py", ".ps1")):
+        if word.endswith(".py"):
             path = Path(word).resolve()
             if SANDBOX_ROOT.resolve() not in path.parents:
                 raise AssertionError(f"Refusing to run {path}, which is not in a sandbox.")
@@ -317,13 +351,6 @@ def run(
         check=False,
     )
     return Run(done.returncode, done.stdout.decode("utf-8", errors="replace").splitlines())
-
-
-def run_pwsh(box: Sandbox, script: str, *args: str, cwd: Path | None = None) -> Run:
-    """Runs one of the sandbox copy's PowerShell scripts, such as setup.ps1."""
-    pwsh = shutil.which("pwsh") or "pwsh"
-    path = str(box.tools / script)
-    return run(box, [pwsh, "-NoProfile", "-File", path, *args], cwd=cwd or box.root)
 
 
 def run_python(

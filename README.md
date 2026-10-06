@@ -7,7 +7,7 @@ you.
 
 **dev-home-tools**, this repo, is the public tooling that makes dev-home work:
 
-- **Setup.** Its `setup.ps1` creates your dev-home the first time you run it, and clones it on
+- **Setup.** Its `setup.py` creates your dev-home the first time you run it, and clones it on
   your other PCs. On each PC, it connects dev-home to Claude Code and Codex, so every session
   loads your rules and skills.
 - **Sync.** It keeps dev-home in sync with its online copy, so a change made on one PC reaches
@@ -42,20 +42,19 @@ Works with Claude Code, Codex, or both. Windows only, for now. To start, see
 
 | What | Why | Install |
 | --- | --- | --- |
-| PowerShell 7.2 or later | Runs setup. Windows PowerShell 5.1 can't. | `winget install --id Microsoft.PowerShell --source winget` |
-| Python 3.12 or later | Runs the sync, updates, and the scripts the skills use. Only Python itself: nothing else to install. | The Python install manager: `winget install 9NQ7512CXL7T -e --accept-package-agreements --disable-interactivity`, then `py install 3.14` (or the latest version). |
+| Python 3.12 or later | Runs setup, the sync, updates, and the scripts the skills use. Only Python itself: nothing else to install. | The Python install manager: `winget install 9NQ7512CXL7T -e --accept-package-agreements --disable-interactivity`, then `py install 3.14` (or the latest version). |
 | Git 2.31 or later | Every sync with GitHub. | `winget install --id Git.Git --source winget` |
 | GitHub CLI (`gh`) | Creates or clones your dev-home on GitHub, and files issues for `/handoff issue`. | `winget install --id GitHub.cli --source winget` |
 | Claude Code, Codex, or both | The agents the skills and rules are for. | Each tool's own installer. |
 
-Open a new PowerShell window after installing, so the tools are on the PATH. Nothing here needs
-admin rights. Python doesn't have to be on the PATH: setup finds it (see
-[What setup changes](docs/reference/setup-changes.md)).
+Open a new terminal window after installing, so the tools are on the PATH. Nothing here needs
+admin rights. You start setup with the install manager's `py`, and after that the skills find
+Python on their own (see [What setup changes](docs/reference/setup-changes.md)).
 
 ## Set up a PC
 
 You clone this repo yourself. Setup then creates your dev-home on your first PC, or clones it on
-later ones. Use a normal PowerShell 7 window (`pwsh`), not an administrator one.
+later ones. Use a normal terminal window, not an administrator one.
 
 ### 1. Before setup, once per PC
 
@@ -95,10 +94,10 @@ gh repo clone Sekers/dev-home-tools C:\Programming\dev-home-tools
 ### 3. Run setup
 
 ```powershell
-pwsh -NoProfile -File C:\Programming\dev-home-tools\setup.ps1
+py C:\Programming\dev-home-tools\setup.py
 ```
 
-To see what it would change first, add `-WhatIf`. It still asks its first-run questions, but
+To see what it would change first, add `--what-if`. It still asks its first-run questions, but
 changes nothing.
 
 The first run asks:
@@ -123,8 +122,8 @@ Then it links everything and checks Claude Code's and Codex's settings (see
 [What setup changes](docs/reference/setup-changes.md) for what and why). When a setting is
 missing, it shows the exact lines it would change and asks first. On a `y`, it saves a dated
 backup of the file, such as `settings.json.bak-20260926-101500`, before writing. It never edits a
-file it can't fully read, such as a `settings.json` with comments; it prints what to add by hand
-instead.
+file it can't fully read, such as a `settings.json` with comments, or a read-only one; it prints
+what to add by hand instead.
 
 ### 4. Restart, and check
 
@@ -134,12 +133,12 @@ until it ends with "All checks passed." Then you can delete the backups.
 After that, you rarely need to run setup yourself. Syncs run it quietly, so changes to the
 skills, and skills you add on another PC, reach this one. The one exception is a skill you've
 just created on this PC: it's linked at the next `/handoff`, or right away when you run setup
-with `-Quiet` (see [Your own rules and skills](#your-own-rules-and-skills)).
+with `--quiet` (see [Your own rules and skills](#your-own-rules-and-skills)).
 
 Your answers are saved in `local-settings.json` in this folder. To change one later, edit that
 file and run setup again: `autoUpdate` is `true` or `false`, and `claudeConfigDirs` lists extra
 Claude Code folders, such as `"~/.claude-second"`. To use a different dev-home folder, run setup
-with `-ContentDir <folder>`.
+with `--content-dir <folder>`.
 
 ## Day to day
 
@@ -186,9 +185,8 @@ A typical day with the included skills:
     delete the file, and run setup again.
 - **Skills.** Create `skills/<name>/SKILL.md` in your dev-home, with standard frontmatter only:
   `name` (the same as the folder), `description`, and optionally `allowed-tools`. Run
-  `pwsh -NoProfile -File C:\Programming\dev-home-tools\setup.ps1 -Quiet` to link it, and commit
-  it
-  (ask an agent, or wait for the next `/handoff` to offer). Your other PCs link it at their next
+  `py C:\Programming\dev-home-tools\setup.py --quiet` to link it, and commit it (ask an agent,
+  or wait for the next `/handoff` to offer). Your other PCs link it at their next
   sync. A skill can't share a name with one in this repo.
 
 ## What's in your dev-home
@@ -213,7 +211,7 @@ Everything beyond getting started is in the `docs/` folder:
 | --- | --- | --- |
 | Skills | [Handoffs](docs/skills/handoff.md) | Every `/handoff` command, with examples: when a change is committed and pushed, how issues are filed, and where handoffs are kept. |
 | Skills | [Knowledge base](docs/skills/knowledge.md) | Every `/knowledge` command, and when agents check the knowledge base or offer to add to it. |
-| Reference | [The scripts](docs/reference/scripts.md) | `setup.ps1`, `sync.py`, and `update.py`: when each one runs, what their status words mean, and how updates are installed. |
+| Reference | [The scripts](docs/reference/scripts.md) | `setup.py`, `sync.py`, and `update.py`: when each one runs, what their status words mean, and how updates are installed. |
 | Reference | [What setup changes on your PC](docs/reference/setup-changes.md) | Every link, file, and setting that setup adds, why, and how to remove it all. |
 | Development | [Design decisions](docs/development/decisions.md) | For people changing dev-home-tools: decisions made and options set aside, with the reasons. |
 
@@ -228,7 +226,7 @@ Everything beyond getting started is in the `docs/` folder:
   other changed file may be someone's work in progress. It never stages, commits, stashes,
   resets, or discards those. It runs one sync at a time, undoes a merge that conflicts, and never
   deletes a git lock file.
-- **`setup.ps1` replaces only its own work:** its generated files, links whose target is gone,
+- **`setup.py` replaces only its own work:** its generated files, links whose target is gone,
   and links it made to skills that no longer exist. Anything else in its way is reported, not
   changed. Settings changes are shown first, need your yes, and keep a backup.
 - **Tooling updates wait for you** unless you turn on `autoUpdate`, because whoever controls this
@@ -238,8 +236,6 @@ Everything beyond getting started is in the `docs/` folder:
   `cmd /c rmdir <link>`.
 - **Edit your global rules in dev-home,** in `global-rules/global-rules.md`, never in
   `~\.codex\AGENTS.md`, which setup rewrites.
-- If PowerShell says a script isn't digitally signed (after downloading this repo as a zip, for
-  example), run `Unblock-File <script>` once.
 
 ## Troubleshooting
 
@@ -248,7 +244,7 @@ Everything beyond getting started is in the `docs/` folder:
 - **`/handoff` says the operating rules aren't loaded.** Restart the agent. If it still says so,
   run setup and read its output. In the Claude desktop app's Cowork sessions, Claude Code skips
   rule folders linked from outside the session's folder, so the rules may not load there.
-- **A skill seems to be missing.** Run setup with `-Quiet`, then restart the agent.
+- **A skill seems to be missing.** Run setup with `--quiet`, then restart the agent.
 - **A skill says dev-home-tools needs Python.** Install Python 3.12 or later (see
   [Requirements](#requirements)), then run setup again.
 - **A sync says it stopped, with `git -C ... pull --ff-only` in the line.** dev-home-tools'
@@ -265,15 +261,15 @@ Everything beyond getting started is in the `docs/` folder:
 
 | Path | What it is |
 | --- | --- |
-| `setup.ps1`, `sync.py`, `update.py` | The scripts (see [The scripts](docs/reference/scripts.md)). The two Python ones are short entry points that load their code from `internal/shared/`. |
+| `setup.py`, `sync.py`, `update.py` | The scripts (see [The scripts](docs/reference/scripts.md)): short entry points that load their code from `internal/shared/`. |
 | `templates/` | Everything setup fills in with each PC's paths. |
 | `templates/operating-rules/` | The operating rules every session loads, along with your global rules. Filled in on every setup run, into `internal/.generated/`. |
 | `templates/skills/` | The skills, one folder each. Filled in on every setup run, into `internal/.generated/`. |
 | `templates/shared-skill-scripts/` | Python scripts that the skills share and only agents run. Filled in on every setup run, into `internal/.generated/`. |
 | `templates/dev-home-starter/` | The files a brand-new dev-home starts with. Filled in once, when setup creates it. |
 | `internal/` | dev-home-tools' own machinery, which nobody runs directly. |
-| `internal/shared/` | The code the scripts load, one file per job: `sync.py` and `update.py`, with `git.py`, `output.py`, `programs.py`, and `settings.py` for them, which the skills' `prepare.py` loads too; and `git.ps1` and `output.ps1` for setup, until it moves to Python. |
-| `internal/development/` | Only for changing dev-home-tools: the development tools' settings (`pyproject.toml`, `uv.lock`) and the tests (`tests/`: pytest files, and `Invoke-Tests.ps1` for the PowerShell scripts that haven't moved to Python yet). People who only use dev-home-tools never need it. |
+| `internal/shared/` | The code the scripts load, one file per job: `setup.py`, `sync.py`, and `update.py`, and the modules they share, such as `git.py` and `output.py`. The skills' `prepare.py` loads it too. |
+| `internal/development/` | Only for changing dev-home-tools: the development tools' settings (`pyproject.toml`, `uv.lock`) and the tests (`tests/`, run with pytest). People who only use dev-home-tools never need it. |
 | `docs/` | Everything this README leaves out (see [Documentation](#documentation)). |
 
 [AGENTS.md](AGENTS.md) has the rules for changing this repo, for people and agents alike, and

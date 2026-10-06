@@ -17,7 +17,7 @@ from helpers import (
     git,
     new_repo,
     run_command,
-    run_pwsh,
+    run_python,
     sandbox_for,
     skill_command,
     write_text,
@@ -107,17 +107,15 @@ def test_when_the_sync_reports_a_problem_still_prints_the_facts(
     assert result.keys == FACT_KEYS, str(result)
 
 
-def test_without_powershell_still_syncs_says_setup_did_not_run_and_prints_the_facts(
-    box: Sandbox, project: Path
-) -> None:
+def test_needs_no_powershell(box: Sandbox, project: Path) -> None:
+    # Everything runs in Python, setup included, so nothing is missing without pwsh in PATH.
     folders = os.environ["PATH"].split(os.pathsep)
     path = os.pathsep.join(f for f in folders if not shutil.which("pwsh", path=f))
     command = skill_command(box, "handoff", "prepare.py")
     result = run_command(box, command, cwd=project, env={"PATH": path})
     assert result.code == 0, str(result)
     assert result.has_line(r"^OK\s+dev-home is up to date"), str(result)
-    pattern = r"^PROBLEM\s+PowerShell 7 \(pwsh\) was not found, so setup did not run"
-    assert result.has_line(pattern), str(result)
+    assert not result.has_line(r"^PROBLEM\s"), str(result)
     assert result.keys == FACT_KEYS, str(result)
 
 
@@ -149,7 +147,7 @@ def test_runs_the_facts_that_the_syncs_setup_has_just_written(box: Sandbox, proj
         result = run_command(box, command, cwd=project)
     finally:
         write_text(template, text)
-        run_pwsh(box, "setup.ps1", "-Quiet")
+        run_python(box, "setup.py", "--quiet")
     assert result.code == 0, str(result)
     assert result.facts["environment"].startswith("(new copy) "), str(result)
 
@@ -166,7 +164,7 @@ def test_when_the_syncs_setup_changes_the_skill_says_reload_and_no_facts(
         new_command = skill_command(box, "handoff", "prepare.py")
     finally:
         write_text(skill, text)
-        run_pwsh(box, "setup.ps1", "-Quiet")
+        run_python(box, "setup.py", "--quiet")
     assert result.code == 0, str(result)
     assert result.has_line(r"^RELOAD\s+The handoff skill has changed since this session"), str(
         result

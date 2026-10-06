@@ -38,10 +38,11 @@ def stopped(error: Exception) -> str:
     """A PROBLEM line for code that couldn't load or run, with the way to install a fix by hand,
     since a sync that can't run can't install one either."""
     tools = Path(__file__).parent.as_posix()
+    launcher = "py" if sys.platform == "win32" else "python3"
     return (
         f"PROBLEM   {Path(__file__).name} stopped: {type(error).__name__}: {error}. If an update"
         f" has a fix, install it by hand: git -C {tools} pull --ff-only, then"
-        f" pwsh -NoProfile -File {tools}/setup.ps1"
+        f" {launcher} {tools}/setup.py"
     )
 
 

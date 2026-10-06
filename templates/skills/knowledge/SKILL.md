@@ -25,8 +25,8 @@ lookup reads the local copy and never syncs.
    `{{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill knowledge --stamp {{SKILL_STAMP}}`.
    It syncs dev-home with GitHub and runs setup, then checks that this skill hasn't changed since
    you loaded it. If it can't start because `{{PYTHON}}` doesn't exist, tell the user that
-   dev-home-tools needs Python 3.12 or later, and that running its `setup.ps1` says what to do,
-   then stop. Pass on anything it prints beyond `OK`:
+   dev-home-tools needs Python 3.12 or later: to install it if they have none, then run
+   `py {{TOOLS_DIR}}/setup.py` in a terminal. Then stop. Pass on anything it prints beyond `OK`:
    - `RELOAD`: this skill has changed since you loaded it, so these steps are out of date. Show
      the line, and stop: the user runs the command again to load the new steps.
    - `OFFLINE`: GitHub couldn't be reached. When the line is about dev-home, say the knowledge

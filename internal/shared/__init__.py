@@ -1,10 +1,10 @@
 """The code behind dev-home-tools' scripts, loaded by the entry points in the root and by
 prepare.py.
 
-sync.py and update.py in the root are short entry points that load this package and run its
-module of the same name. prepare.py, which every skill command that syncs starts with, loads it
-too, and runs sync inside its own process. setup.ps1 is still PowerShell, and loads git.ps1 and
-output.ps1 from this folder instead.
+setup.py, sync.py, and update.py in the root are short entry points that load this package and
+run its module of the same name. prepare.py, which every skill command that syncs starts with,
+loads it too, and runs the sync inside its own process; the sync runs update's and setup's code
+there as well.
 
 Each entry point loads this package by its path, as dev_home_tools_shared, because python -I
 leaves the script's folder off the import path. The code isn't in the root files themselves

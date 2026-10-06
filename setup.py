@@ -1,10 +1,11 @@
-"""Shows the dev-home-tools commits waiting on GitHub, and pulls them after a yes. Run it with
-Python 3.12 or later, such as:
+"""Sets up dev-home-tools on this PC: finds or creates your dev-home, fills in the skills and
+operating rules with this PC's paths, links them into Claude Code and Codex, and checks the
+settings they need. Run it with Python 3.12 or later, such as:
 
-    py C:/Users/you/dev-home-tools/update.py
+    py C:/Users/you/dev-home-tools/setup.py
 
---help says what it does. The code is in internal/shared/update.py, and this file only loads it;
-internal/shared/__init__.py says why.
+--help says what it does, and its options. The code is in internal/shared/setup.py, and this
+file only loads it; internal/shared/__init__.py says why.
 """
 
 import importlib
@@ -36,7 +37,7 @@ def load(name: str) -> ModuleType:
 
 def stopped(error: Exception) -> str:
     """A PROBLEM line for code that couldn't load or run, with the way to install a fix by hand,
-    since an update that can't run can't install one either."""
+    since setup that can't run can't install one either."""
     tools = Path(__file__).parent.as_posix()
     launcher = "py" if sys.platform == "win32" else "python3"
     return (
@@ -52,7 +53,7 @@ if __name__ == "__main__":
         if isinstance(stream, io.TextIOWrapper):
             stream.reconfigure(encoding="utf-8")
     try:
-        code = load("update").main(sys.argv[1:])
+        code = load("setup").main(sys.argv[1:])
     except Exception as error:
         print(stopped(error))
         code = 1

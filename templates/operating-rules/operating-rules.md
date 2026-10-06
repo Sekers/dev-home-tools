@@ -9,7 +9,7 @@
   in auto memory.
 - Create new personal skills in `{{CONTENT_DIR}}/skills/`, never in a tool's own skills folder,
   so every PC gets them. If a skill seems to be missing, run
-  `pwsh -NoProfile -File {{TOOLS_DIR}}/setup.ps1 -Quiet`, then try again.
+  `{{PYTHON}} -I {{TOOLS_DIR}}/setup.py --quiet`, then try again.
 - Treat my project repos as public. In their files, commits, PRs, and issues, never quote
   dev-home, paraphrase its notes, or mention that it exists. The only exceptions are a skill's
   steps that have me approve the exact words first, and even those never name dev-home.

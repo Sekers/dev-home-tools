@@ -19,7 +19,7 @@ from helpers import (
 SCRIPTS = REPO_ROOT / "templates" / "shared-skill-scripts"
 SKILLS = REPO_ROOT / "templates" / "skills"
 SHARED = REPO_ROOT / "internal" / "shared"
-ENTRY_POINTS = [REPO_ROOT / "sync.py", REPO_ROOT / "update.py"]
+ENTRY_POINTS = [REPO_ROOT / "setup.py", REPO_ROOT / "sync.py", REPO_ROOT / "update.py"]
 
 
 def scripts() -> list[Path]:

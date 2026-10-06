@@ -221,7 +221,8 @@ stops starting with it.
 skills share, `facts.py` and `prepare.py`, with `prepare.py` still running `sync.ps1`; 2.
 `sync.ps1` and `update.ps1`, loaded into `prepare.py`'s process; 3. `setup.ps1`, and then
 PowerShell is no longer needed. No phase may add script time: measure each one against the
-flow before it, and ask before anything adds time (AGENTS.md's "Speed").
+flow before it, and ask before anything adds time (AGENTS.md's "Speed"). All three phases are
+done.
 
 **The problem:** starting PowerShell is slow, and a `/handoff` started four PowerShell
 processes: about 2.6 s on one laptop, where Python started from its full path took about
@@ -239,14 +240,24 @@ with the Python install manager, since the traditional installer stops with Pyth
 floor is 3.12, which the tests need too (`os.path.isjunction`, and `shutil.rmtree`'s `onexc`).
 
 **Phase 2, measured:** on the faster PC, a plain `/knowledge`'s `prepare.py` took 1.7 to 1.8 s
-in place of 2.2 to 2.5 s, most of it the two GitHub fetches and setup's 0.6 s, which still starts
+in place of 2.2 to 2.5 s, most of it the two GitHub fetches and setup's 0.6 s, which still started
 PowerShell. A commit no longer starts PowerShell at all.
 
-**Phase 3 must keep setup from ever waiting for input nobody can give,** as `setup.ps1` never
-does. In Python, `sys.stdin.isatty()` is the wrong check on Windows: it's true for the `NUL`
-input that agents' commands get. So: `--quiet` never asks; it asks only when input is a real
-console (`GetConsoleMode` on Windows, `isatty()` elsewhere); `EOFError` counts as no; and the
+**Phase 3, measured:** on the same PC, `prepare.py` took 1.45 to 1.49 s, and setup on its own
+0.16 s in place of 0.6 s. What's left is mostly the two GitHub fetches.
+
+**Setup never waits for input nobody can give,** as `setup.ps1` never did. In Python,
+`sys.stdin.isatty()` is the wrong check on Windows: it's true for the `NUL` input that agents'
+commands get. So: `--quiet` never asks; it asks only when input comes from a real console and
+output goes to one (`GetConsoleMode` on Windows, `isatty()` elsewhere), since Python writes a
+question to the output, and output sent to a file would hide it; `EOFError` counts as no; and the
 tests run setup with input from `NUL` and from an open, silent pipe.
+
+**Phase 3, beyond the port:** setup's settings preview comes from Python's `difflib` in place
+of the hand-written diff in `setup.ps1`. It shows the same "Line N:" runs with two lines of
+context, and may now and then line up a change differently. And what needs a person (setup's
+questions, a yes or no to a settings change, and creating dev-home with gh) now has tests, with
+a fake for the person and for gh, where before it was checked only by hand.
 
 **Look again if:** a phase can't be done without adding time.
 
@@ -274,10 +285,10 @@ script's request for a version, so a project's environment can't change which Py
 
 **Why `internal/`:** it's machinery nobody runs directly, which is what `internal/` is for, and
 the root is kept to what must be there (see "What the root holds"). It isn't generated content,
-so not `internal/.generated/`; and sync's agent commands run through it too, as setup's will in
-phase 3, so not `shared-skill-scripts/`. The dot keeps it apart from Python code that
-phase 2 may put in `internal/`. Setup's cleanup of the generated files never looks inside a link,
-so a junction nearby can't lead it into the Python install.
+so not `internal/.generated/`; and sync's and setup's agent commands run through it too, so not
+`shared-skill-scripts/`. The dot keeps it apart from the Python code in `internal/shared/`.
+Setup's cleanup of the generated files never looks inside a link, so a junction nearby can't
+lead it into the Python install.
 
 **Why `-I`:** it ignores `PYTHON*` environment variables and the user's site-packages, so nothing
 in a project's environment can change what loads. It costs no measurable time. It also leaves the
@@ -379,19 +390,23 @@ author use it.
 holds the 3.12 floor, a development group (`pytest`, `pytest-xdist`, `pytest-cov`, `ruff`,
 `mypy`), and each tool's settings, and `uv.lock` beside it pins them (see "What the root holds"
 for why there). `mypy` runs in strict mode and `ruff` checks and formats from the first Python
-file. The tests in `internal/development/tests/` share `helpers.py`, and until phase 3
-`test_powershell.py` runs `Invoke-Tests.ps1` one group at a time for the scripts not moved yet.
-Fakes only stand in for what needs a person or an outside service; git and the file system stay
-real. Coverage is a report run on demand, with no minimum. A test checks that the scripts use
-only the standard library, since the test tools are importable when the tests run them.
+file. The tests in `internal/development/tests/` share `helpers.py`, and `conftest.py`, which
+gives a test that runs a script's code in its own process the script's environment, and checks
+the real profile once a worker's tests are done. Fakes only stand in for
+what needs a person or an outside service; git and the file system stay real. A test that needs
+a fake runs the script's code in the test process, loaded from the sandbox's copy, with
+pytest's `monkeypatch`. Coverage is a report run on demand, with no minimum. A test checks that
+the scripts use only the standard library, since the test tools are importable when the tests
+run them.
 
 **Why:** fixtures share one sandbox among a module's tests, `pytest-xdist` runs the groups in
-parallel (the whole suite, PowerShell groups included, in about 30 s), and the "needs a person"
-paths can get tests once they're Python, with small fakes for the person.
+parallel (the whole suite in about 30 s), and the "needs a person" paths get tests, with small
+fakes for the person.
 
 **Options set aside:**
 
-- A plain script, as `Invoke-Tests.ps1` is: every runner feature would be written by hand.
+- A plain script, as the PowerShell `Invoke-Tests.ps1` was: every runner feature would be
+  written by hand.
 - Pester: the scripts are moving to Python. An earlier version of this entry counted Pester's
   install against it, but an install isn't a reason against a development tool.
 - `unittest`: no fixtures to share a sandbox, and no parallel runs.
@@ -416,11 +431,11 @@ settings, the tests, and what the tools write: `.venv`, caches, and the test san
 - `LICENSE`: GitHub's docs put it in the root.
 - `README.md`: GitHub's front page, and where people look first. GitHub would also show one from
   `docs/` or `.github/`, so this one is convention.
-- `setup.ps1`, `sync.py`, and `update.py`: people run them by hand. The Python ones are short
-  entry points that load their code from `internal/shared/`, and setup will be one too after
-  phase 3. Python writes a `__pycache__` folder beside any file another script loads, and
-  `prepare.py` loads the sync's code into its own process, so that code in the root would put
-  that folder there. People run them as `py <path>\sync.py`, since the Python install manager's
+- `setup.py`, `sync.py`, and `update.py`: people run them by hand. They're short entry points
+  that load their code from `internal/shared/`. Python writes a `__pycache__` folder beside any
+  file another script loads, and `prepare.py` loads the sync's code into its own process, so
+  that code in the root would put that folder there. People run them as `py <path>\sync.py`,
+  since the Python install manager's
   `py` is an app execution alias in `%LocalAppData%\Microsoft\WindowsApps`, which Windows puts
   on every user's PATH by default (aliases arrived in Windows 10 version 1709), and as `python3`
   on macOS and Linux. An entry point checks the Python version before anything else, so an older
@@ -459,6 +474,8 @@ decision.
   0.1 s, on every skill command.
 - The Python code in a folder of its own, such as `internal/lib/`, with `internal/shared/` left
   to setup's PowerShell files until phase 3: two folders doing one job until then.
+- The whole of setup's code in the root: setup runs inside the sync's process too, so the same
+  `__pycache__` reason applies.
 - The tests staying in `internal/tests/`: ruff wouldn't find its settings for them.
 
 **Look again if:** dev-home-tools becomes a Python package, an editor's settings become worth a
@@ -468,8 +485,8 @@ root folder, or a `--configure` switch means nobody edits `local-settings.json` 
 
 **Decision:** the Python scripts take long options with two dashes, such as `sync.py --message`
 and `update.py --quiet`, each with exactly one spelling: no short forms such as `-m`, and no
-shortened names such as `--mess`. Setup's will follow in phase 3: `--quiet`, `--content-dir`,
-`--what-if`, and `--configure` once it's built.
+shortened names such as `--mess`. Setup's are `--quiet`, `--content-dir`, and `--what-if`, and
+`--configure` will be the same once it's built.
 
 **Why:** a skill's pre-approval matches a command's text literally, so a second spelling of an
 option could make a command ask first. Every command's text changed in phase 2 anyway, since
@@ -529,3 +546,56 @@ each part on purpose.
 
 **Look again if:** the update check moves out of the sync, or a broken shared module ever
 reaches a user.
+
+## A sync isolates setup when shared code changed
+
+**Decision:** the sync normally runs setup's code with `--quiet` inside the sync's process, as
+it does update's. When `programs.py` loads, it records every Python file's name and modification
+time in `internal/shared/`, then checks them again before setup. Setup runs as a Python process
+of its own when the sync has just installed an update, or when that check finds a change (tests
+check both cases).
+
+The second case covers two overlapping syncs. One can load its modules and wait for the other
+to release dev-home's sync lock. If the first sync installs a dev-home-tools update, the waiting
+one otherwise has old modules loaded when it reaches the new setup file. The fresh process
+loads one consistent version. An unreadable check also counts as a change, since isolation is
+the safe choice then. The same rule holds for setup's code as for the rest of
+`internal/shared/`: it changes nothing the whole process shares (a test checks), its `main`
+never raises, and its step in the sync runs in a guard.
+
+**Why:** each sync used to start a PowerShell process for setup, about 0.6 s of every skill
+command that syncs. Starting a Python process instead would still cost about 0.05 s each time.
+On this PC, the two small folder scans together took about 0.08 ms.
+
+**Options set aside:**
+
+- Run setup in a Python process of its own every time: simpler isolation, but every skill
+  command that syncs pays the process start.
+- Accept a rare, recoverable import error and let the next sync repair the generated files: the
+  failed run leaves the current setup incomplete and tells the user there is a problem when the
+  code can prevent it at negligible cost.
+
+**Look again if:** setup needs something the whole process shares, such as its own current
+folder.
+
+## Setup links folders with junctions on Windows
+
+**Decision:** on Windows, setup makes every folder link as a directory junction; on macOS and
+Linux, which have no junctions, as a symbolic link. Python makes a junction with
+`_winapi.CreateJunction`, part of Python on Windows though not documented for general use;
+Python's own tests make junctions with it, and it starts no process.
+
+**Why:** a junction needs no admin rights and no Developer Mode, so every Windows PC gets the
+same kind of link, with no branch to write, test, or explain. The Python link was already
+always a junction. On macOS and Linux, any user can make a symbolic link, so it's the same
+choice there: the one kind of link that needs no special rights. Setup checks only where a link
+points, so a symbolic link made by an older setup keeps working.
+
+**Options set aside:**
+
+- A symbolic link where Developer Mode is on, and a junction otherwise, as `setup.ps1` did:
+  links that differ between PCs, for no gain.
+- Making the junction with `cmd /c mklink /J`: a process each time, and cmd parses its
+  arguments again.
+
+**Look again if:** someone keeps dev-home on a network share, which a junction can't point to.
