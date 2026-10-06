@@ -790,6 +790,144 @@ def test_a_quiet_run_reports_dev_home_json_with_no_answer_and_changes_nothing(
     assert after == text
 
 
+# --configure without a console, as an agent runs it.
+
+
+@pytest.fixture
+def settings_kept(box: Sandbox) -> Iterator[Path]:
+    """local-settings.json, put back as it was, and its backups removed, after the test."""
+    path = box.tools / "local-settings.json"
+    before = path.read_bytes()
+    yield path
+    path.write_bytes(before)
+    for backup in path.parent.glob("local-settings.json.bak-*"):
+        backup.unlink()
+
+
+def test_configure_alone_shows_the_settings_and_how_to_change_them(
+    box: Sandbox, settings_kept: Path
+) -> None:
+    before = read(settings_kept)
+    result = run_python(box, "setup.py", "--configure")
+    assert result.code == 0, str(result)
+    assert result.has_line(r"^dev-home-tools settings$"), str(result)
+    assert result.has_line(r"^\s+2\s+Install dev-home-tools updates automatically\s+no$"), str(
+        result
+    )
+    assert result.has_line(r"^\s+6\s+Copies of dev-home in active use\s+several$"), str(result)
+    assert result.has_line(r"^\s+multiMachine=true\|false\s"), str(result)
+    assert not result.has_line("All checks passed"), str(result)
+    assert read(settings_kept) == before
+
+
+def test_configure_changes_one_setting_with_a_backup(box: Sandbox, settings_kept: Path) -> None:
+    before = read(settings_kept)
+    result = setup_configure(box, "autoUpdate=true")
+    assert result.code == 0, str(result)
+    assert result.has_line(r"^CHANGE\s+This PC's settings: "), str(result)
+    assert result.has_line(r'^\s+\+\s+"autoUpdate": true,$'), str(result)
+    assert result.has_line(r"^SET\s+This PC's settings: .* Backup of the old file: "), str(result)
+    assert json.loads(read(settings_kept))["autoUpdate"] is True
+    backups = list(settings_kept.parent.glob("local-settings.json.bak-*"))
+    assert len(backups) == 1 and read(backups[0]) == before
+    # A second run finds it already set.
+    again = setup_configure(box, "autoUpdate=true")
+    assert again.code == 0 and again.has_line(r"^OK\s+autoUpdate is already set that way"), str(
+        again
+    )
+
+
+def setup_configure(box: Sandbox, *args: str) -> Run:
+    return run_python(box, "setup.py", "--configure", *args)
+
+
+def test_configure_what_if_shows_the_change_and_makes_none(
+    box: Sandbox, settings_kept: Path
+) -> None:
+    before = read(settings_kept)
+    result = setup_configure(box, "contentCheckHours=6", "--what-if")
+    assert result.code == 0, str(result)
+    assert result.has_line(r'^\s+\+\s+"contentCheckHours": 6$'), str(result)
+    assert result.has_line(r"^What if: Save this PC's settings"), str(result)
+    assert read(settings_kept) == before
+
+
+@pytest.mark.parametrize(
+    ("setting", "says"),
+    [
+        ("colour=red", r"There is no setting named colour\."),
+        ("autoUpdate=maybe", r"autoUpdate is true or false, not maybe\."),
+        ("updateCheckHours=-1", r"updateCheckHours is a whole number of hours, 0 or more"),
+        ("claudeConfigDirs=~/.claude-x", r"claudeConfigDirs changes one folder at a time"),
+        ("autoUpdate+=true", r"autoUpdate is set with =, as in autoUpdate=<value>\."),
+        ("claudeConfigDirs+=~/.claude-missing", r"There is no Claude Code folder at "),
+        ("nothing", r"--configure takes one setting as <name>=<value>, not nothing\."),
+    ],
+)
+def test_configure_refuses_a_setting_it_cant_make(
+    box: Sandbox, settings_kept: Path, setting: str, says: str
+) -> None:
+    before = read(settings_kept)
+    result = setup_configure(box, setting)
+    assert result.code == 1, str(result)
+    assert result.has_line(rf"^PROBLEM\s+{says}.* Nothing was changed\.$"), str(result)
+    assert result.has_line(r"^\s+contentDir=<folder>\s"), str(result)
+    assert read(settings_kept) == before
+
+
+def test_configure_sets_content_dir_only_to_a_dev_home(box: Sandbox, settings_kept: Path) -> None:
+    other = box.root / "configured-dev-home"
+    write_starter_files(other)
+    git("init", "--quiet", "-b", "main", str(other))
+    plain = box.root / "configured-plain-folder"
+    write_text(plain / "notes.md", "not a dev-home\n")
+    refused = setup_configure(box, f"contentDir={plain}")
+    accepted = setup_configure(box, f"contentDir={other}", "--what-if")
+    assert refused.code == 1 and refused.has_line(r"configured-plain-folder isn't a dev-home"), str(
+        refused
+    )
+    assert accepted.has_line(r'^\s+\+\s+"contentDir": ".*configured-dev-home",$'), str(accepted)
+
+
+def test_configure_adds_and_removes_a_claude_folder(box: Sandbox, settings_kept: Path) -> None:
+    added = box.profile / ".claude-configured"
+    write_text(added / "settings.json", "{}\n")
+    try:
+        result = setup_configure(box, "claudeConfigDirs+=~/.claude-configured")
+        linked = link_target(added / "skills" / "handoff")
+        listed = json.loads(read(settings_kept))["claudeConfigDirs"]
+        removed = setup_configure(box, "claudeConfigDirs-=~/.claude-configured")
+        saved = json.loads(read(settings_kept))
+    finally:
+        remove_claude_folder(added)
+    assert result.has_line(r"^SET\s+This PC's settings"), str(result)
+    assert listed == ["~/.claude-configured"]
+    assert linked == box.generated / "skills" / "handoff"
+    assert removed.code == 0, str(removed)
+    assert saved["claudeConfigDirs"] == []
+    assert saved["declinedClaudeConfigDirs"] == ["~/.claude-configured"]
+
+
+def test_configure_switches_copies_then_commits_and_pushes_it(box: Sandbox) -> None:
+    # An agent's change was approved in chat, so nothing is asked.
+    result = setup_configure(box, "multiMachine=false")
+    back = setup_configure(box, "multiMachine=true")
+    subjects = git("-C", str(box.remote), "log", "-2", "--format=%s", "main")
+    assert result.code == 0, str(result)
+    assert result.has_line(r"^CHANGE\s+dev-home's copies: "), str(result)
+    assert result.has_line(r'^\s+\+\s+"multiMachine": false$'), str(result)
+    assert result.has_line(r'^COMMITTED\s+"dev-home: one active copy"'), str(result)
+    assert result.has_line(r"^PUSHED\s+1 commit to GitHub\."), str(result)
+    assert back.code == 0, str(back)
+    assert subjects == ["dev-home: several active copies", "dev-home: one active copy"]
+
+
+def test_configure_doesnt_go_with_quiet(box: Sandbox) -> None:
+    result = setup(box, "--configure", "autoUpdate=true")
+    assert result.code == 1, str(result)
+    assert result.has_line(r"^PROBLEM\s+--configure doesn't go with --quiet"), str(result)
+
+
 def test_reports_a_dev_home_repo_with_no_commits(box: Sandbox) -> None:
     # What a first run leaves when git init worked but the commit didn't: the starter's files,
     # with no commit.

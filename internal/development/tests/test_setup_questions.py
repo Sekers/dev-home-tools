@@ -377,6 +377,76 @@ def test_an_answered_dev_home_is_asked_nothing(box: Sandbox, person: Person) -> 
     assert person.asked == []
 
 
+# --configure's menu at a console.
+
+MENU = r"^Number to change, a to go through them all, or Enter to finish: $"
+UPDATE_HOURS = r"^Check GitHub for dev-home-tools updates every how many hours .*\[24\]: $"
+CONTENT_HOURS = r"^Check GitHub for dev-home's changes every how many hours .*\[12\]: $"
+
+
+@pytest.fixture
+def backups_removed(settings: Path) -> Iterator[Path]:
+    yield settings
+    for backup in settings.parent.glob("local-settings.json.bak-*"):
+        backup.unlink()
+
+
+def test_the_menu_changes_the_setting_picked_and_keeps_a_backup(
+    box: Sandbox, backups_removed: Path, person: Person, capsys: pytest.CaptureFixture[str]
+) -> None:
+    person.answers.update({MENU: ["9", "2", ""], r"^Pull updates automatically\? \[y/N\]: $": "y"})
+    returned = setup_here(box, "--configure")
+    out = capsys.readouterr().out
+    assert returned == 0, out
+    assert "dev-home-tools settings" in out and "Shared by every copy of dev-home" in out, out
+    assert "Type a number from 1 to 6, or a, or press Enter to finish." in out, out
+    assert json.loads(backups_removed.read_text(encoding="utf-8"))["autoUpdate"] is True
+    assert re.search(r"^SET\s+This PC's settings: .* Backup of the old file: ", out, re.M), out
+
+
+def test_the_menu_goes_through_every_setting_with_its_answer_as_the_default(
+    box: Sandbox, backups_removed: Path, person: Person, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Enter keeps each answer, except the update check's hours, set to 6.
+    content = json.loads(backups_removed.read_text(encoding="utf-8"))["contentDir"]
+    person.answers.update(
+        {
+            MENU: ["a", ""],
+            r"^Your dev-home folder \[.*\]: $": "",
+            r"^Pull updates automatically\? \[y/N\]: $": "",
+            UPDATE_HOURS: ["six", "6"],
+            CONTENT_HOURS: "",
+            ELSEWHERE.replace(r"\[y/n\]", r"\[Y/n\]"): "",
+        }
+    )
+    returned = setup_here(box, "--configure")
+    out = capsys.readouterr().out
+    saved = json.loads(backups_removed.read_text(encoding="utf-8"))
+    assert returned == 0, out
+    assert "Type a whole number of hours: 0 or more." in out, out
+    assert saved["updateCheckHours"] == 6 and "contentCheckHours" not in saved, saved
+    assert saved["contentDir"] == content and saved["autoUpdate"] is False, saved
+    assert "There are no ~/.claude-* folders to set up." in out, out
+
+
+def test_the_menu_keeps_several_copies_unless_the_others_are_retired(
+    box: Sandbox, settings: Path, person: Person, capsys: pytest.CaptureFixture[str]
+) -> None:
+    person.answers.update(
+        {
+            MENU: ["6", ""],
+            ELSEWHERE.replace(r"\[y/n\]", r"\[Y/n\]"): "n",
+            r"^Have all the other copies been retired, .*\? \[y/N\]: $": "n",
+        }
+    )
+    head = git("-C", str(box.remote), "rev-parse", "main")
+    returned = setup_here(box, "--configure")
+    out = capsys.readouterr().out
+    assert returned == 0, out
+    assert "dev-home stays set to several copies." in out, out
+    assert git("-C", str(box.remote), "rev-parse", "main") == head
+
+
 def test_a_yes_to_a_settings_change_writes_it_and_keeps_a_backup(
     box: Sandbox, person: Person, capsys: pytest.CaptureFixture[str]
 ) -> None:

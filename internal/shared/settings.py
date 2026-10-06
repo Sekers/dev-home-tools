@@ -93,10 +93,10 @@ def load_local_settings() -> LocalSettings | None:
     return settings
 
 
-def save_local_settings(settings: LocalSettings) -> None:
-    """Writes the settings back, keeping every other key the file had where it was. autoUpdate
-    is written only once it's answered, and the declined Claude folders only once there are
-    some. testHomeDir is kept when the file has it, and never added."""
+def local_settings_text(settings: LocalSettings) -> str:
+    """The file's text for the settings, keeping every other key the file had where it was.
+    autoUpdate is written only once it's answered, and the declined Claude folders only once
+    there are some. testHomeDir is kept when the file has it, and never added."""
     data = dict(settings.data)
     data["contentDir"] = settings.content_dir
     if settings.auto_update is not None:
@@ -106,5 +106,10 @@ def save_local_settings(settings: LocalSettings) -> None:
         data["declinedClaudeConfigDirs"] = list(settings.declined_claude_config_dirs)
     if settings.test_home_dir:
         data["testHomeDir"] = settings.test_home_dir
+    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+
+
+def save_local_settings(settings: LocalSettings) -> None:
+    """Writes the settings back (see local_settings_text)."""
     with SETTINGS_PATH.open("w", encoding="utf-8", newline="\n") as file:
-        file.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+        file.write(local_settings_text(settings))

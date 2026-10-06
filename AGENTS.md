@@ -192,7 +192,8 @@ Never leave it to the reader to guess which: name the repo whenever both could f
   every status line in one format, and small text helpers); `programs.py` (finding a program,
   and running setup); `settings.py` (this PC's `local-settings.json`); and setup's own parts:
   `paths.py`, `links.py`, `generated.py`, `python_link.py`, `console.py`,
-  `settings_files.py`, `claude_settings.py`, and `codex_config.py`. They write UTF-8, read
+  `settings_files.py`, `claude_settings.py`, `codex_config.py`, and `configure.py`
+  (`--configure`'s menu and assignments). They write UTF-8, read
   git's output as UTF-8, and find a program such as git by its full path in `PATH`, never in
   the current folder. Put anything the scripts would otherwise each copy there.
 - The entry points in the root stay short: they check the Python version, load `internal/shared/`
@@ -214,9 +215,12 @@ Never leave it to the reader to guess which: name the repo whenever both could f
   `cmd /c rmdir`.
 - Agents run setup.py only with `--quiet`, which never prompts: no settings changes, and no
   creating repos. sync.py runs it that way after every sync that doesn't commit, and after one
-  that commits when it brought in commits from GitHub. Only a person runs it without `--quiet`,
-  and even then it asks only when its input comes from a real console and its output goes to
-  one (`console.py`), so it never waits for an answer nobody can see or give.
+  that commits when it brought in commits from GitHub. The one other way an agent runs it is
+  `--configure '<name>=<value>'`, which changes that one setting with no prompt, after the user
+  approves the exact change in chat (`--what-if` shows it first): that chat approval stands in
+  for a typed yes. Only a person runs it otherwise, and even then it asks only when its input
+  comes from a real console and its output goes to one (`console.py`), so it never waits for an
+  answer nobody can see or give.
 - update.py pulls exactly the commit it showed the user, so nothing new can slip in between their
   yes and the pull.
 - Everything about dev-home-tools updates happens in update's code, so what the user is told and

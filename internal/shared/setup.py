@@ -59,6 +59,13 @@ Options:
                             this way: anything that needs an answer is reported instead.
     --content-dir <folder>  Your dev-home folder. Saved in local-settings.json, so later runs
                             don't need it.
+    --configure             Changes a setting after the first run. At a console, a menu shows
+                            every setting: pick one to change, or go through them all. Without
+                            a console, it shows the settings and how to change them.
+    --configure '<name>=<value>'
+                            Changes one setting, the way an agent does, with no questions, then
+                            prints only changes and problems. --configure with no setting says
+                            which names and values it takes.
     --what-if               Shows what it would change, without changing anything.
 
 It asks a question only when a person can see it and answer: never with --quiet, and only when
@@ -83,7 +90,7 @@ import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 
-from . import claude_settings, codex_config, console, generated, python_link
+from . import claude_settings, codex_config, configure, console, generated, python_link
 from .git import run_git
 from .links import is_link, link_info, make_folder_link, remove_folder_link
 from .output import GREEN, RED, YELLOW, color, describe, first_line, status_line
@@ -97,6 +104,7 @@ from .settings import (
     LocalSettings,
     hours_setting,
     load_local_settings,
+    local_settings_text,
     save_local_settings,
 )
 from .settings_files import (
@@ -134,10 +142,19 @@ class CannotGoOnError(Exception):
 class Setup:
     """One run of setup."""
 
-    def __init__(self, *, quiet: bool, what_if: bool) -> None:
-        self.quiet = quiet
+    def __init__(self, *, quiet: bool, what_if: bool, configure: str | None = None) -> None:
+        # --configure: None without it, "" alone (the menu, or the settings shown), or one
+        # assignment, such as autoUpdate=true, which an agent gives instead of answering.
+        self.configure = configure
+        self.assigned = bool(configure)
+        # An agent reads only what changed and what's wrong, as with --quiet.
+        self.quiet = quiet or self.assigned
         self.what_if = what_if
-        self.can_ask = not quiet and console.is_console()
+        self.can_ask = not self.quiet and console.is_console()
+        # dev-home.json's answer that --configure chose, which check_copies then writes.
+        self.wanted_copies: bool | None = None
+        # Set when --configure only shows the settings, so the run ends with no summary.
+        self.just_showing = False
         self.problems: list[str] = []
         self.unknown_placeholders: list[str] = []
         self.unplaced_notes: list[str] = []
@@ -174,8 +191,37 @@ class Setup:
     def confirm(self, question: str) -> bool:
         return console.confirm(question) if self.can_ask else False
 
-    def yes_or_no(self, question: str) -> bool | None:
-        return console.yes_or_no(question) if self.can_ask else None
+    def choose(self, question: str, default: bool | None = None) -> bool | None:
+        return console.choose(question, default) if self.can_ask else None
+
+    # The questions about settings, which the first run and --configure's menu both ask.
+
+    def ask_auto_update(self, current: bool | None) -> bool:
+        self.line(
+            "sync.py can pull dev-home-tools updates on every sync, or only tell you when there "
+            "are some,"
+        )
+        self.line("so you can look at them first and pull them with update.py.")
+        answer = self.choose("Pull updates automatically?", bool(current))
+        return bool(current) if answer is None else answer
+
+    def ask_claude_folder(self, folder: Path, current: bool | None) -> bool:
+        answer = self.choose(f"Also set up {folder}, for another Claude account?", bool(current))
+        return bool(current) if answer is None else answer
+
+    def ask_copies(self, current: bool | None) -> bool | None:
+        """Whether dev-home is in active use anywhere besides this PC. With no answer yet, there's
+        no default: both wrong answers cost something."""
+        self.line(
+            "dev-home can live on one PC, as a private backup with its history on GitHub, or be "
+            "used from several,"
+        )
+        self.line("which then check GitHub before each command.")
+        return self.choose(
+            "Is dev-home in active use anywhere besides this PC, such as on another PC or in a "
+            "cloud session?",
+            current,
+        )
 
     def print_diff(self, old_text: str, new_text: str) -> None:
         """The lines a change adds (+) and removes (-), with a few around them."""
@@ -195,7 +241,7 @@ class Setup:
             self.line()
             self.line("This was a preview (--what-if). Nothing was changed.", YELLOW)
         if not self.problems:
-            if not (self.quiet or self.what_if):
+            if not (self.quiet or self.what_if or self.just_showing):
                 self.line()
                 self.line("All checks passed.", GREEN)
             return 0
@@ -463,38 +509,33 @@ class Setup:
                 return
         answer = data.get("multiMachine")
         answered = isinstance(answer, bool)
-        if answered and not (answer is False and self.cloned):
-            return
-        if not self.can_ask:
-            if not answered:
-                self.status(
-                    "PROBLEM",
-                    "dev-home has no answer yet to whether it's in active use anywhere besides "
-                    "this PC, so each sync checks GitHub every time. Run "
-                    f"{by_hand('setup.py')} in a terminal, and it asks.",
-                )
-            return
-        if answered:
-            self.line(
-                "dev-home is set to one active copy, so its syncs check GitHub only every few "
-                "hours."
-            )
-            several = self.yes_or_no(
-                "Will another copy stay in use alongside this one, such as on your other PC?"
-            )
-        else:
-            self.line(
-                "dev-home can live on one PC, as a private backup with its history on GitHub, or "
-                "be used from several,"
-            )
-            self.line("which then check GitHub before each command.")
-            several = self.yes_or_no(
-                "Is dev-home in active use anywhere besides this PC, such as on another PC or in "
-                "a cloud session?"
-            )
+        # --configure's answer, already given, which a person or an agent's chat approved.
+        several: bool | None = self.wanted_copies
         if several is None:
-            self.status("PROBLEM", f"No answer came, so {path} was left as it is.")
-            return
+            if answered and not (answer is False and self.cloned):
+                return
+            if not self.can_ask:
+                if not answered:
+                    self.status(
+                        "PROBLEM",
+                        "dev-home has no answer yet to whether it's in active use anywhere "
+                        "besides this PC, so each sync checks GitHub every time. Run "
+                        f"{by_hand('setup.py')} in a terminal, and it asks.",
+                    )
+                return
+            if answered:
+                self.line(
+                    "dev-home is set to one active copy, so its syncs check GitHub only every "
+                    "few hours."
+                )
+                several = self.choose(
+                    "Will another copy stay in use alongside this one, such as on your other PC?"
+                )
+            else:
+                several = self.ask_copies(None)
+            if several is None:
+                self.status("PROBLEM", f"No answer came, so {path} was left as it is.")
+                return
         if several == answer:
             return
         new_text = json.dumps(data | {"multiMachine": several}, indent=2) + "\n"
@@ -502,7 +543,10 @@ class Setup:
         self.print_diff(old_text, new_text)
         if not self.should(path, "Write this, then commit and push it"):
             return
-        if not self.confirm("          Save it, commit it, and push it to GitHub?"):
+        # An agent's --configure was approved in chat; a person answers here.
+        if not self.assigned and not self.confirm(
+            "          Save it, commit it, and push it to GitHub?"
+        ):
             self.status(
                 "PROBLEM", f"{path} was left as it is. Run setup.py again to answer the question."
             )
@@ -779,6 +823,15 @@ class Setup:
                     f"whole number of hours, 0 or more, so it counts as {hours}. Fix it there.",
                 )
         save = False
+        if self.configure is not None:
+            try:
+                save = configure.change_settings(self, settings)
+            except configure.SettingError as error:
+                self.status("PROBLEM", f"{error} Nothing was changed.")
+                self.line(configure.USAGE)
+                raise CannotGoOnError from error
+            if self.just_showing:
+                raise CannotGoOnError
         if content_dir_option:
             wanted = forward(content_dir_option)
             if settings.content_dir != wanted:
@@ -845,12 +898,7 @@ class Setup:
             save = True
 
         if self.can_ask and settings.auto_update is None:
-            self.line(
-                "sync.py can pull dev-home-tools updates on every sync, or only tell you when "
-                "there are some,"
-            )
-            self.line("so you can look at them first and pull them with update.py.")
-            settings.auto_update = self.confirm("Pull updates automatically?")
+            settings.auto_update = self.ask_auto_update(None)
             save = True
         # Each ~/.claude-<name> folder is another Claude account, run with CLAUDE_CONFIG_DIR.
         # Setup asks about each one once, and keeps the answer, a no included.
@@ -858,7 +906,7 @@ class Setup:
         unanswered = [f for f in self.claude_folders() if not self.listed(f, answered)]
         if self.can_ask:
             for folder in unanswered:
-                if self.confirm(f"Also set up {folder}, for another Claude account?"):
+                if self.ask_claude_folder(folder, None):
                     settings.claude_config_dirs.append("~/" + folder.name)
                 else:
                     settings.declined_claude_config_dirs.append("~/" + folder.name)
@@ -877,8 +925,17 @@ class Setup:
 
         if save and self.should(SETTINGS_PATH, "Save this PC's settings"):
             try:
-                save_local_settings(settings)
-                self.status("SET", f"This PC's settings: {SETTINGS_PATH}")
+                if self.configure is None:
+                    save_local_settings(settings)
+                    saved = ""
+                else:
+                    # A change to answers already given keeps the old file, as other settings
+                    # changes do.
+                    backup = write_settings_file(
+                        SETTINGS_PATH, local_settings_text(settings), bom=False
+                    )
+                    saved = f" Backup of the old file: {backup}" if backup else " (new file)"
+                self.status("SET", f"This PC's settings: {SETTINGS_PATH}{saved}")
             except OSError as error:
                 self.status(
                     "PROBLEM", f"Could not save this PC's settings in {SETTINGS_PATH}. {error}"
@@ -1352,11 +1409,13 @@ def run_tool(program: str, *args: str) -> tuple[int, list[str]]:
     return done.returncode, done.stdout.splitlines()
 
 
-def parse_arguments(argv: Sequence[str]) -> tuple[bool, bool, str] | str:
-    """--quiet, --what-if, and --content-dir's folder, or why the arguments can't be used."""
+def parse_arguments(argv: Sequence[str]) -> tuple[bool, bool, str, str | None] | str:
+    """--quiet, --what-if, --content-dir's folder, and --configure's assignment ("" for none,
+    None without --configure), or why the arguments can't be used."""
     quiet = False
     what_if = False
     content_dir = ""
+    configure_with: str | None = None
     rest = list(argv)
     while rest:
         word = rest.pop(0)
@@ -1368,9 +1427,19 @@ def parse_arguments(argv: Sequence[str]) -> tuple[bool, bool, str] | str:
             if not rest:
                 return "--content-dir needs a folder after it."
             content_dir = rest.pop(0)
+        elif word == "--configure":
+            configure_with = rest.pop(0) if rest and not rest[0].startswith("--") else ""
         else:
-            return f"No such option: {word}. The options are --quiet, --content-dir, and --what-if."
-    return quiet, what_if, content_dir
+            return (
+                f"No such option: {word}. The options are --quiet, --content-dir, --configure, "
+                "and --what-if."
+            )
+    if configure_with is not None and (quiet or content_dir):
+        return (
+            "--configure doesn't go with --quiet or --content-dir: it shows the settings, or "
+            "changes the one it's given, such as --configure 'contentDir=C:/Users/you/dev-home'."
+        )
+    return quiet, what_if, content_dir, configure_with
 
 
 def main(argv: Sequence[str]) -> int:
@@ -1381,10 +1450,10 @@ def main(argv: Sequence[str]) -> int:
     if isinstance(parsed, str):
         status_line("PROBLEM", parsed)
         return 1
-    quiet, what_if, content_dir = parsed
+    quiet, what_if, content_dir, configure_with = parsed
     # The sync runs this inside its own process, so nothing here may raise.
     try:
-        run = Setup(quiet=quiet, what_if=what_if)
+        run = Setup(quiet=quiet, what_if=what_if, configure=configure_with)
     except Exception as error:
         with contextlib.suppress(Exception):
             status_line("PROBLEM", f"setup.py stopped: {describe(error)}")

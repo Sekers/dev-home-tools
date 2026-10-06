@@ -57,15 +57,19 @@ def confirm(question: str) -> bool:
     return re.fullmatch(r"\s*(y|yes)\s*", answer, re.IGNORECASE) is not None
 
 
-def yes_or_no(question: str) -> bool | None:
-    """True for yes and False for no, with no default: any other answer, Enter included, asks
-    again. None when input ends without an answer."""
+def choose(question: str, default: bool | None = None) -> bool | None:
+    """True for yes and False for no. Enter gives the default, shown as the capital letter; with
+    no default, Enter asks again, as any other answer does. None when input ends without an
+    answer."""
+    hint = "[y/n]" if default is None else "[Y/n]" if default else "[y/N]"
     while True:
         try:
-            answer = input(f"{question} [y/n]: ")
+            answer = input(f"{question} {hint}: ")
         except EOFError:
             return None
         if re.fullmatch(r"\s*(y|yes)\s*", answer, re.IGNORECASE):
             return True
         if re.fullmatch(r"\s*(n|no)\s*", answer, re.IGNORECASE):
             return False
+        if not answer.strip() and default is not None:
+            return default

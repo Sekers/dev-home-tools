@@ -808,8 +808,8 @@ at worst, in 50 runs on one PC, against about 500 ms for a quiet setup.
 
 ## setup.py --configure changes every setting
 
-**Status:** decided. The check that the dev-home folder looks like a dev-home is built; the rest
-isn't yet. This line goes once it's all built.
+**Status:** decided, and built in setup; the `dev-home` skill's pre-approval of it comes with
+the skills. This line goes once that's built.
 
 **Decision:** `setup.py --configure` is how people and agents change a setting after the first
 run: `contentDir`, `autoUpdate`, `updateCheckHours`, `contentCheckHours`, the answer for each

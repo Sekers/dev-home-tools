@@ -2,7 +2,7 @@
 
 | Script | What it's for |
 | --- | --- |
-| `setup.py` | Sets up this PC. Safe to run any number of times. `--what-if` previews; `--quiet` prints only changes and problems, and never asks (agents run it this way); `--content-dir <folder>` points it at a different dev-home. |
+| `setup.py` | Sets up this PC. Safe to run any number of times. `--what-if` previews; `--quiet` prints only changes and problems, and never asks (agents run it this way); `--content-dir <folder>` points it at a different dev-home; `--configure` shows a menu of every setting to change. An agent changes one with `--configure '<name>=<value>'` after you approve it, and `--configure` alone, run where nobody can answer, lists the names and values. |
 | `sync.py` | Syncs your dev-home with GitHub, and commits only the files it's given. Agents run all their git in dev-home through it. Then it checks for updates as `update.py` does, and runs setup quietly (see [When they run](#when-they-run)). You can run it too; `--help` says how to commit with it, and how `--fetch` chooses when to check GitHub for dev-home's changes. |
 | `update.py` | Shows the dev-home-tools commits waiting on GitHub, and installs them after a yes. With `--quiet`, as a sync runs it, it never asks: it reports what's waiting, and installs it only when `autoUpdate` is on. |
 

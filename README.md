@@ -137,11 +137,23 @@ just created on this PC: it's linked at the next `/handoff`, or right away when 
 with `--quiet` (see [Your own rules and skills](#your-own-rules-and-skills)).
 
 Your answers are saved in `local-settings.json` in your dev-home-tools folder, next to
-`setup.py`. To change one later, edit that file and run setup again: `autoUpdate` is `true` or
-`false`; `claudeConfigDirs` lists the extra Claude Code folders to set up, such as
-`"~/.claude-second"`; and `declinedClaudeConfigDirs` lists the ones you said no to. Take a
-folder out of that last list, and setup asks about it again. To use a different dev-home folder,
-run setup with `--content-dir <folder>`.
+`setup.py`. To change one later, run setup with `--configure`:
+
+```powershell
+py C:\Programming\dev-home-tools\setup.py --configure
+```
+
+It shows every setting with its value. Type a setting's number to change it, `a` to go through
+them all, or press Enter to finish; each question has your current answer as its default. Setup
+keeps a dated backup of the file before it saves a change.
+
+You can also edit the file and run setup again: `autoUpdate` is `true` or `false`;
+`claudeConfigDirs` lists the extra Claude Code folders to set up, such as `"~/.claude-second"`;
+`declinedClaudeConfigDirs` lists the ones you said no to, and taking a folder out of it makes
+setup ask again; and `updateCheckHours` and `contentCheckHours` say how often a sync checks
+GitHub for dev-home-tools updates (24 hours unless set) and for dev-home's changes (12 hours
+unless set, when one copy is in active use, and for a plain `/knowledge`), where 0 means every
+time. To use a different dev-home folder, run setup with `--content-dir <folder>`.
 
 ## Day to day
 
