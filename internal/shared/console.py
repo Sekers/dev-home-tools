@@ -55,3 +55,17 @@ def confirm(question: str) -> bool:
     except EOFError:
         return False
     return re.fullmatch(r"\s*(y|yes)\s*", answer, re.IGNORECASE) is not None
+
+
+def yes_or_no(question: str) -> bool | None:
+    """True for yes and False for no, with no default: any other answer, Enter included, asks
+    again. None when input ends without an answer."""
+    while True:
+        try:
+            answer = input(f"{question} [y/n]: ")
+        except EOFError:
+            return None
+        if re.fullmatch(r"\s*(y|yes)\s*", answer, re.IGNORECASE):
+            return True
+        if re.fullmatch(r"\s*(n|no)\s*", answer, re.IGNORECASE):
+            return False

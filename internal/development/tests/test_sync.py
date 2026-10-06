@@ -842,8 +842,10 @@ def test_code_that_cant_load_says_how_to_install_a_fix_by_hand(box: Sandbox, scr
 
 @pytest.fixture
 def copies(box: Sandbox) -> Iterator[Callable[[bool | None], None]]:
-    """Sets dev-home.json's answer for this test, or removes the file for None."""
+    """Sets dev-home.json's answer for this test, or removes the file for None, then puts the
+    committed file back."""
     path = box.content / "dev-home.json"
+    before = path.read_bytes()
 
     def set_copies(several: bool | None) -> None:
         path.unlink(missing_ok=True)
@@ -851,7 +853,7 @@ def copies(box: Sandbox) -> Iterator[Callable[[bool | None], None]]:
             write_text(path, json.dumps({"multiMachine": several}) + "\n")
 
     yield set_copies
-    path.unlink(missing_ok=True)
+    path.write_bytes(before)
 
 
 def age_last_fetch(repo: Path, hours: float) -> None:
@@ -980,6 +982,32 @@ def test_a_commit_pushes_without_fetching_first(box: Sandbox) -> None:
     assert result.code == 0, str(result)
     assert result.has_line(r"^PUSHED\s+1 commit to GitHub\."), str(result)
     assert not result.has_line(r"^OFFLINE\s"), str(result)
+
+
+def test_setups_commit_brings_in_commits_without_running_setup_or_the_update_check(
+    box: Sandbox, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Setup itself is running, so a sync it starts must not start setup again.
+    code = shared_module(box, "sync")
+    ran: list[str] = []
+
+    def setup_ran(fresh: bool = False) -> bool:
+        ran.append("setup")
+        return True
+
+    def update_check_ran(_self: object) -> None:
+        ran.append("update check")
+
+    monkeypatch.setattr(code, "run_setup", setup_ran)
+    monkeypatch.setattr(code.Sync, "update_tools", update_check_ran)
+    push_from_another_copy(box, "Before setup's commit.")
+    write_text(box.content / "notes" / "from-setup.md", "committed by setup's sync\n")
+    returned = code.commit_for_setup(box.content, "notes/from-setup.md", "notes: from setup")
+    out = capsys.readouterr().out
+    assert returned == 0, out
+    assert re.search(r"^MERGED\s+1 commit from GitHub", out, re.M), out
+    assert re.search(r"^PUSHED\s+2 commits to GitHub\.", out, re.M), out
+    assert ran == [], ran
 
 
 def test_the_update_check_waits_its_interval_and_uses_what_it_knows(box: Sandbox) -> None:

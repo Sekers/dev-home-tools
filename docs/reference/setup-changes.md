@@ -52,7 +52,11 @@ folder link as a directory junction, which needs no admin rights and no Develope
     leaves room.
 - **In your dev-home's own git config:** commit signing off, and pulls that merge rather than
   rebase. With signing off, a commit never stops in the middle of a sync to ask for your signing
-  passphrase. Your project repos keep signing as usual.
+  passphrase. Your project repos keep signing as usual. Setup does this only in a folder that
+  looks like a dev-home, with `global-rules\global-rules.md` and `knowledge\README.md`.
+- **In your dev-home itself,** after your yes: `dev-home.json`, which says whether dev-home is in
+  active use on one PC or on several, so each sync knows how often to check GitHub. Every copy
+  shares it, so setup commits and pushes the change; git's history is its backup.
 
 **To remove it all:** delete each link with `cmd /c rmdir <link>`, `internal\.python` included,
 delete `~\.codex\AGENTS.md`, take the added lines out of the settings files, then delete your

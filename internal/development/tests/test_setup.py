@@ -763,6 +763,33 @@ def test_says_so_when_it_cant_save_its_settings(box: Sandbox) -> None:
     assert result.has_line("There is no dev-home"), str(result)
 
 
+@pytest.mark.parametrize(
+    ("text", "says"),
+    [
+        (None, r"dev-home has no answer yet to whether it's in active use anywhere besides this "),
+        ('{"other": 1}\n', r"dev-home has no answer yet"),
+        ("[true]\n", r"dev-home\.json could not be read as a JSON object of settings, so setup "),
+    ],
+    ids=["no file", "no answer", "not an object"],
+)
+def test_a_quiet_run_reports_dev_home_json_with_no_answer_and_changes_nothing(
+    box: Sandbox, text: str | None, says: str
+) -> None:
+    path = box.content / "dev-home.json"
+    before = path.read_bytes()
+    if text is None:
+        path.unlink()
+    else:
+        write_text(path, text)
+    try:
+        result = setup(box)
+        after = path.read_text(encoding="utf-8") if path.exists() else None
+    finally:
+        path.write_bytes(before)
+    assert result.code == 1 and result.has_line(rf"^PROBLEM\s+.*{says}"), str(result)
+    assert after == text
+
+
 def test_reports_a_dev_home_repo_with_no_commits(box: Sandbox) -> None:
     # What a first run leaves when git init worked but the commit didn't: the starter's files,
     # with no commit.

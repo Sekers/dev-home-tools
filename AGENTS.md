@@ -17,7 +17,7 @@ Never leave it to the reader to guess which: name the repo whenever both could f
 | Always-on rules | `templates/operating-rules/operating-rules.md`: the operating rules, the same for everyone | `global-rules/global-rules.md`: that person's global rules |
 | Skills | `templates/skills/`: the `handoff` and `knowledge` skills. `templates/shared-skill-scripts/`: the scripts they share | `skills/`: that person's own skills |
 | `AGENTS.md`, `CLAUDE.md`, `README.md` | About dev-home-tools, and working on it | About that dev-home, and working in it |
-| Only here | `setup.py`, `sync.py`, `update.py`, `templates/dev-home-starter/`, `internal/`, `docs/` | `handoffs/`, `knowledge/` |
+| Only here | `setup.py`, `sync.py`, `update.py`, `templates/dev-home-starter/`, `internal/`, `docs/` | `handoffs/`, `knowledge/`, `dev-home.json` (settings every copy shares, which setup writes and commits) |
 
 - The root holds only what must be there, and the scripts a person runs by hand:
   `.gitattributes`, `.gitignore`, `AGENTS.md`, `CLAUDE.md`, `LICENSE`, `README.md`,
@@ -203,7 +203,9 @@ Never leave it to the reader to guess which: name the repo whenever both could f
   `internal/.python/` junction once the `python.exe` it leads to is gone, and settings files the
   person said yes to changing. A settings change is shown as a diff first, waits for a typed
   yes, saves a dated backup, and is never offered for a file the script can't fully parse, or
-  for a read-only one. sync.py never stages, commits, or discards a file it wasn't given, and
+  for a read-only one. The exception to the backup is dev-home's `dev-home.json`, whose history
+  is in git: setup commits and pushes it through the sync's `commit_for_setup`, which skips the
+  update check and setup, since setup is already running. sync.py never stages, commits, or discards a file it wasn't given, and
   runs no destructive git command: no `add -A`, stash, `reset`, `checkout`, `clean`, or rebase.
 - Never remove a link, or a folder that may hold one, with a recursive delete such as
   `Remove-Item -Recurse` or `shutil.rmtree`: whether it stops at a junction depends on the tool

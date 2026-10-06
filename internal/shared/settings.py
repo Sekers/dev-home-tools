@@ -8,6 +8,9 @@ from typing import Any
 # dev-home-tools' folder: this file is in internal/shared/, two folders below it.
 TOOLS_ROOT = Path(__file__).parent.parent.parent
 SETTINGS_PATH = TOOLS_ROOT / "local-settings.json"
+# dev-home's own settings, in its root, shared by every copy of it: for now, only multiMachine,
+# whether more than one copy is in active use.
+DEV_HOME_SETTINGS = "dev-home.json"
 
 # How long, in whole hours, a sync goes without checking GitHub, when this PC's settings don't
 # say: updateCheckHours for dev-home-tools' updates, and contentCheckHours for dev-home itself.

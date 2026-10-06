@@ -624,9 +624,9 @@ points, so a symbolic link made by an older setup keeps working.
 
 ## A dev-home has one active copy, or several
 
-**Status:** decided. The sync acts on `dev-home.json` (`sync.py --fetch auto`); the starter's
-file, setup's questions, and the skills' use of it aren't built yet. This line goes once they
-are.
+**Status:** decided. The sync acts on `dev-home.json` (`sync.py --fetch auto`), and the starter's
+file and setup's questions are built; the skills' use of it isn't yet. This line goes once it
+is.
 
 **Decision:** dev-home has two uses, and both are fully supported. With one active copy, it's
 private storage with a backup and full history on GitHub: nothing else writes to it, so the local

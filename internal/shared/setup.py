@@ -18,6 +18,11 @@ Each of its other questions, whether to pull updates automatically and whether t
 ~/.claude-* folder, is asked whenever its answer isn't saved yet, not only on the first run. A
 no to a Claude folder is saved too, so it's asked about once.
 
+dev-home.json, in dev-home, says whether dev-home is in active use on one PC or on several, and
+each sync acts on it. A new dev-home starts with one. Setup asks when the file has no answer,
+and after cloning one set to one, whether another copy stays in use. It shows the change, and
+after a yes writes that file alone, then commits and pushes it, so every copy agrees.
+
 The templates in this repo hold placeholders where paths go. Setup writes copies of the skills,
 the scripts they share, and the operating rules, with this PC's paths filled in, to
 internal/.generated/, at the same paths they have under templates/, and links the skills and
@@ -69,6 +74,7 @@ The sync runs main(["--quiet"]) inside its own process, so keep main's name and 
 """
 
 import contextlib
+import importlib
 import json
 import os
 import re
@@ -85,6 +91,7 @@ from .paths import comparable, forward, is_inside, resolve_home, same_path, unsa
 from .programs import by_hand, find_program
 from .settings import (
     DEFAULT_HOURS,
+    DEV_HOME_SETTINGS,
     SETTINGS_PATH,
     TOOLS_ROOT,
     LocalSettings,
@@ -135,6 +142,8 @@ class Setup:
         self.unknown_placeholders: list[str] = []
         self.unplaced_notes: list[str] = []
         self.generated_changes = 0
+        # Set once this run clones dev-home, which then may have another copy still in use.
+        self.cloned = False
         # The profile folder to set up: yours, unless local-settings.json sets testHomeDir.
         self.home = Path.home()
 
@@ -164,6 +173,21 @@ class Setup:
 
     def confirm(self, question: str) -> bool:
         return console.confirm(question) if self.can_ask else False
+
+    def yes_or_no(self, question: str) -> bool | None:
+        return console.yes_or_no(question) if self.can_ask else None
+
+    def print_diff(self, old_text: str, new_text: str) -> None:
+        """The lines a change adds (+) and removes (-), with a few around them."""
+        diff = line_diff(to_lines(old_text), to_lines(new_text))
+        limit = 40
+        for diff_line in diff[:limit]:
+            code = (
+                GREEN if diff_line.startswith("+ ") else RED if diff_line.startswith("- ") else ""
+            )
+            self.line("            " + diff_line, code)
+        if len(diff) > limit:
+            self.line(f"            ...and {len(diff) - limit} more lines.")
 
     def finish(self) -> int:
         """Prints the summary, and returns 0 when there were no problems, 1 otherwise."""
@@ -352,6 +376,7 @@ class Setup:
             if code != 0:
                 self.status("PROBLEM", f"Could not clone {name}. gh: {first_line(lines)}")
                 return
+            self.cloned = True
             self.status("CREATED", f"Cloned {name} into {path}")
             return
         if choice is None or not re.fullmatch(r"\s*(n|new)\s*", choice, re.IGNORECASE):
@@ -413,6 +438,98 @@ class Setup:
             )
             return
         self.status("CREATED", f"New private repo {name} on GitHub, with this PC's copy in {path}")
+
+    def check_copies(self, content_root: Path) -> None:
+        """dev-home.json says whether dev-home has one active copy or several, and the sync acts
+        on it. A new dev-home starts with one. Setup asks when the file has no answer yet, and
+        after a clone set to one, whether the copy it came from stays in use. A change is shown
+        first, then written to that file alone and committed and pushed, so every copy agrees."""
+        path = content_root / DEV_HOME_SETTINGS
+        old_text = ""
+        data: dict[str, object] = {}
+        if path.exists():
+            try:
+                old_text = path.read_text(encoding="utf-8-sig")
+                loaded = json.loads(old_text)
+                if not isinstance(loaded, dict):
+                    raise ValueError("not a JSON object")
+                data = loaded
+            except (OSError, ValueError) as error:
+                self.status(
+                    "PROBLEM",
+                    f"{path} could not be read as a JSON object of settings, so setup left it "
+                    f"alone, and each sync checks GitHub every time. Fix it by hand. {error}",
+                )
+                return
+        answer = data.get("multiMachine")
+        answered = isinstance(answer, bool)
+        if answered and not (answer is False and self.cloned):
+            return
+        if not self.can_ask:
+            if not answered:
+                self.status(
+                    "PROBLEM",
+                    "dev-home has no answer yet to whether it's in active use anywhere besides "
+                    "this PC, so each sync checks GitHub every time. Run "
+                    f"{by_hand('setup.py')} in a terminal, and it asks.",
+                )
+            return
+        if answered:
+            self.line(
+                "dev-home is set to one active copy, so its syncs check GitHub only every few "
+                "hours."
+            )
+            several = self.yes_or_no(
+                "Will another copy stay in use alongside this one, such as on your other PC?"
+            )
+        else:
+            self.line(
+                "dev-home can live on one PC, as a private backup with its history on GitHub, or "
+                "be used from several,"
+            )
+            self.line("which then check GitHub before each command.")
+            several = self.yes_or_no(
+                "Is dev-home in active use anywhere besides this PC, such as on another PC or in "
+                "a cloud session?"
+            )
+        if several is None:
+            self.status("PROBLEM", f"No answer came, so {path} was left as it is.")
+            return
+        if several == answer:
+            return
+        new_text = json.dumps(data | {"multiMachine": several}, indent=2) + "\n"
+        self.status("CHANGE", f"dev-home's copies: {path}")
+        self.print_diff(old_text, new_text)
+        if not self.should(path, "Write this, then commit and push it"):
+            return
+        if not self.confirm("          Save it, commit it, and push it to GitHub?"):
+            self.status(
+                "PROBLEM", f"{path} was left as it is. Run setup.py again to answer the question."
+            )
+            return
+        try:
+            with path.open("w", encoding="utf-8", newline="\n") as file:
+                file.write(new_text)
+        except OSError as error:
+            self.status("PROBLEM", f"Could not write {path}. {error}")
+            return
+        self.status("SET", f"dev-home's copies: {'several' if several else 'one'}, in {path}")
+        # Loaded only now, so a sync that can't load stops only this commit, not setup.
+        try:
+            sync = importlib.import_module(f"{__package__}.sync")
+            message = f"dev-home: {'several active copies' if several else 'one active copy'}"
+            code = sync.commit_for_setup(content_root, DEV_HOME_SETTINGS, message)
+        except Exception as error:
+            self.status("PROBLEM", f"Could not commit {path}: {describe(error)}")
+            return
+        if code != 0:
+            # The sync has said what went wrong.
+            self.problems.append(f"Committing {path}")
+        elif several:
+            self.line(
+                "          On each other copy, run /dev-home sync, or sync.py in a terminal, so it "
+                "starts checking GitHub before each command now."
+            )
 
     # Links
 
@@ -595,15 +712,7 @@ class Setup:
         )
         if plan.note:
             self.line("          " + plan.note)
-        diff = line_diff(to_lines(plan.file.text), to_lines(plan.new_text or ""))
-        limit = 40
-        for diff_line in diff[:limit]:
-            code = (
-                GREEN if diff_line.startswith("+ ") else RED if diff_line.startswith("- ") else ""
-            )
-            self.line("            " + diff_line, code)
-        if len(diff) > limit:
-            self.line(f"            ...and {len(diff) - limit} more lines.")
+        self.print_diff(plan.file.text, plan.new_text or "")
 
         if not self.should(path, "Change the lines shown, after asking, and keep a backup"):
             return
@@ -844,6 +953,9 @@ class Setup:
                     self.status("SET", f"dev-home git config {key} = {value}")
                 else:
                     self.status("PROBLEM", f"Could not set git config {key} in {content_root}.")
+        # With signing off, so a commit needs no prompt, and before linking skills, so a merge's
+        # new ones are linked in this run.
+        self.check_copies(content_root)
 
         # 3. Python, for the skills' scripts. A test profile has its own AppData folder.
         if settings.test_home_dir:

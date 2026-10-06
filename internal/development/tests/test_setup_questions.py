@@ -38,10 +38,11 @@ def box(request: pytest.FixtureRequest) -> Iterator[Sandbox]:
 
 
 class Person:
-    """Answers questions at the console: the answer whose pattern the question matches. A
-    question with no answer ends the input, as when a person closes the console."""
+    """Answers questions at the console: the answer whose pattern the question matches, or the
+    next of a list of them, one each time it's asked. A question with no answer ends the input,
+    as when a person closes the console."""
 
-    def __init__(self, answers: dict[str, str]) -> None:
+    def __init__(self, answers: dict[str, str | list[str]]) -> None:
         self.answers = answers
         self.asked: list[str] = []
 
@@ -49,6 +50,10 @@ class Person:
         self.asked.append(prompt)
         for pattern, answer in self.answers.items():
             if re.search(pattern, prompt):
+                if isinstance(answer, list):
+                    if not answer:
+                        break
+                    return answer.pop(0)
                 return answer
         raise EOFError
 
@@ -282,6 +287,94 @@ def test_at_a_console_enter_stops_at_a_folder_that_isnt_a_dev_home(
     pattern = r"^PROBLEM\s+Stopped: .*console-project-too doesn't look like a dev-home\."
     assert re.search(pattern, out, re.M), out
     assert settings.read_text(encoding="utf-8") == before
+
+
+# How many copies of dev-home are in active use, asked of a dev-home of the test's own.
+
+ELSEWHERE = r"^Is dev-home in active use anywhere besides this PC, .*\? \[y/n\]: $"
+ALONGSIDE = r"^Will another copy stay in use alongside this one, .*\? \[y/n\]: $"
+SAVE_COPIES = r"Save it, commit it, and push it to GitHub\? \[y/N\]: $"
+
+
+def own_dev_home(box: Sandbox, name: str, copies: str | None) -> tuple[Path, Path]:
+    """A dev-home with a remote of its own, and dev-home.json's text, if any. Returns both."""
+    remote = box.root / f"{name}.git"
+    home = box.root / name
+    git("init", "--quiet", "--bare", "-b", "main", str(remote))
+    git("clone", "--quiet", str(remote), str(home))
+    git("-C", str(home), "config", "commit.gpgsign", "false")
+    write_text(home / "global-rules" / "global-rules.md", "# My rules\n")
+    write_text(home / "knowledge" / "README.md", "# Knowledge base\n")
+    if copies is not None:
+        write_text(home / "dev-home.json", copies)
+    git("-C", str(home), "add", "--all")
+    git("-C", str(home), "commit", "--quiet", "-m", "test: dev-home")
+    git("-C", str(home), "push", "--quiet", "-u", "origin", "main")
+    return home, remote
+
+
+def check_copies(box: Sandbox, home: Path, *, cloned: bool = False) -> int:
+    """Asks setup's question about copies for one dev-home, and returns setup's exit code."""
+    run = shared_module(box, "setup").Setup(quiet=False, what_if=False)
+    run.cloned = cloned
+    run.check_copies(home)
+    returned: int = run.finish()
+    return returned
+
+
+def test_asks_how_many_copies_with_no_default_then_commits_and_pushes_the_answer(
+    box: Sandbox, person: Person, capsys: pytest.CaptureFixture[str]
+) -> None:
+    home, remote = own_dev_home(box, "copies-unanswered", None)
+    # Enter has no default, so the question comes again.
+    person.answers.update({ELSEWHERE: ["", "y"], SAVE_COPIES: "y"})
+    returned = check_copies(box, home)
+    out = capsys.readouterr().out
+    assert returned == 0, out
+    assert sum(1 for asked in person.asked if re.search(ELSEWHERE, asked)) == 2, person.asked
+    assert json.loads((home / "dev-home.json").read_text(encoding="utf-8")) == {
+        "multiMachine": True
+    }
+    assert re.search(r'^\s+\+\s+"multiMachine": true', out, re.M), out
+    assert git("-C", str(remote), "log", "-1", "--format=%s") == ["dev-home: several active copies"]
+    assert re.search(r"On each other copy, run /dev-home sync", out), out
+
+
+def test_a_no_to_saving_the_copies_answer_leaves_dev_home_as_it_is(
+    box: Sandbox, person: Person, capsys: pytest.CaptureFixture[str]
+) -> None:
+    home, remote = own_dev_home(box, "copies-not-saved", None)
+    person.answers.update({ELSEWHERE: "n", SAVE_COPIES: "n"})
+    returned = check_copies(box, home)
+    out = capsys.readouterr().out
+    assert returned == 1, out
+    assert not (home / "dev-home.json").exists()
+    assert re.search(r"^PROBLEM\s+.*dev-home\.json was left as it is\.", out, re.M), out
+    assert git("-C", str(remote), "log", "-1", "--format=%s") == ["test: dev-home"]
+
+
+@pytest.mark.parametrize(("answer", "several"), [("y", True), ("n", False)])
+def test_after_a_clone_set_to_one_copy_asks_whether_another_stays(
+    box: Sandbox, person: Person, capsys: pytest.CaptureFixture[str], answer: str, several: bool
+) -> None:
+    home, remote = own_dev_home(box, f"copies-cloned-{answer}", '{"multiMachine": false, "x": 1}\n')
+    person.answers.update({ALONGSIDE: answer, SAVE_COPIES: "y"})
+    returned = check_copies(box, home, cloned=True)
+    out = capsys.readouterr().out
+    assert returned == 0, out
+    saved = json.loads((home / "dev-home.json").read_text(encoding="utf-8"))
+    # A key setup doesn't know is kept.
+    assert saved == {"multiMachine": several, "x": 1}, saved
+    subjects = git("-C", str(remote), "log", "--format=%s")
+    assert (subjects[0] == "dev-home: several active copies") == several, subjects
+    # Without a change, nothing is shown or asked about saving.
+    assert any(re.search(SAVE_COPIES, asked) for asked in person.asked) == several
+
+
+def test_an_answered_dev_home_is_asked_nothing(box: Sandbox, person: Person) -> None:
+    home, _ = own_dev_home(box, "copies-answered", '{"multiMachine": false}\n')
+    assert check_copies(box, home) == 0
+    assert person.asked == []
 
 
 def test_a_yes_to_a_settings_change_writes_it_and_keeps_a_backup(
@@ -584,6 +677,12 @@ def test_creates_a_new_dev_home_from_the_starter(
     assert f"{tools}/sync.py" in agents
     assert subject == ["starter: new dev-home"]
     assert signing == ["false"]
+    # A new dev-home starts with one active copy, without a question.
+    assert json.loads((new_home / "dev-home.json").read_text(encoding="utf-8")) == {
+        "multiMachine": False
+    }
+    copies = (ELSEWHERE, ALONGSIDE)
+    assert not any(re.search(p, asked) for p in copies for asked in person.asked), person.asked
     create = ("repo", "create", "my-dev-home", "--private", "--source", str(new_home))
     assert any(call[: len(create)] == create for call in fake_gh.calls), fake_gh.calls
     # The only problems left come from the sandbox's other dev-home: links to it, which setup

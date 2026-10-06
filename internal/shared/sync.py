@@ -88,7 +88,13 @@ from typing import IO
 from .git import GIT_MISSING, GitResult, last_fetch_age, run_git
 from .output import commit_count, describe, first_line, status_line
 from .programs import by_hand, find_program, run_setup
-from .settings import DEFAULT_HOURS, SETTINGS_PATH, hours_setting, read_settings
+from .settings import (
+    DEFAULT_HOURS,
+    DEV_HOME_SETTINGS,
+    SETTINGS_PATH,
+    hours_setting,
+    read_settings,
+)
 
 if sys.platform == "win32":
     import msvcrt
@@ -117,8 +123,6 @@ IN_PROGRESS = {
 QUIET_STATES = {"OK", "LEFT", "STALE", "UPDATE"}
 # The values --fetch takes, the first being what a sync does without it.
 FETCH_WHEN = ("always", "auto", "when-due")
-# dev-home's own settings, shared by every copy of it.
-DEV_HOME_SETTINGS = "dev-home.json"
 
 
 def one_active_copy(root: Path) -> bool:
@@ -196,7 +200,9 @@ def one_run_at_a_time(git_dir: Path) -> Iterator[bool]:
 
 class Sync:
     """One run, on the dev-home at root. fetch_when is one of FETCH_WHEN, and check_hours is
-    contentCheckHours, how long dev-home goes without checking GitHub when it can (0: never)."""
+    contentCheckHours, how long dev-home goes without checking GitHub when it can (0: never).
+    Without then, it skips the update check and setup that otherwise follow, for a run setup
+    itself starts."""
 
     def __init__(
         self,
@@ -204,11 +210,14 @@ class Sync:
         git_dir: Path,
         fetch_when: str = FETCH_WHEN[0],
         check_hours: int = DEFAULT_HOURS["contentCheckHours"],
+        *,
+        then: bool = True,
     ) -> None:
         self.root = root
         self.git_dir = git_dir
         self.fetch_when = fetch_when
         self.check_hours = check_hours
+        self.then = then
         # Read once this run holds the lock, and again after a merge, which can change it.
         self.one_copy = False
         self.problems = 0
@@ -555,7 +564,9 @@ class Sync:
         self.step("Listing the uncommitted files", self.write_uncommitted)
         # A sync that commits usually comes right after a plain one, which just checked for
         # updates and ran setup. So it skips the check, and runs setup only for commits it
-        # brought in.
+        # brought in. A run setup started does neither: setup is already running.
+        if not self.then:
+            return
         plain = not paths
         if plain:
             self.update_tools()
@@ -658,6 +669,31 @@ def sync(argv: Sequence[str]) -> int:
     if problems:
         return 1
 
+    check_hours = hours_setting(settings or {}, "contentCheckHours")[0]
+    return sync_root(root, paths, message, fetch_when, check_hours)
+
+
+def commit_for_setup(root: Path, path: str, message: str) -> int:
+    """Commits one file in the dev-home at root, named relative to it, and syncs, as
+    sync.py --message does. Setup runs this, so it skips the update check and setup, which a sync
+    that brings in commits otherwise runs: setup would start again inside itself. Returns 0, or 1
+    when the user needs to act, and never raises."""
+    try:
+        return sync_root(root, [path], message, FETCH_WHEN[0], 0, then=False)
+    except Exception as error:
+        return problem(f"The commit of {path} stopped: {describe(error)}")
+
+
+def sync_root(
+    root: Path,
+    paths: list[str],
+    message: str,
+    fetch_when: str,
+    check_hours: int,
+    *,
+    then: bool = True,
+) -> int:
+    """One run on the dev-home at root, once the arguments are checked."""
     if find_program("git") is None:
         return problem(f"dev-home was not synced. {GIT_MISSING}")
     found = run_git(root, "rev-parse", "--absolute-git-dir")
@@ -665,7 +701,7 @@ def sync(argv: Sequence[str]) -> int:
         return problem(f"{root} is not a git repo. git: {first_line(found.err)}")
     git_dir = Path(first_line(found.out))
 
-    run = Sync(root, git_dir, fetch_when, hours_setting(settings or {}, "contentCheckHours")[0])
+    run = Sync(root, git_dir, fetch_when, check_hours, then=then)
     try:
         with one_run_at_a_time(git_dir) as owned:
             if owned:

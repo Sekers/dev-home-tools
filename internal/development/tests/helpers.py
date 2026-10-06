@@ -251,7 +251,9 @@ def new_sandbox(name: str, *, tools_repo: bool = False) -> Sandbox:
     # dev-home, with a remote and some content.
     git("init", "--quiet", "--bare", "-b", "main", str(box.remote))
     git("clone", "--quiet", str(box.remote), str(box.content))
+    # Several active copies, so a sync fetches every time unless a test says otherwise.
     files = {
+        "dev-home.json": '{\n  "multiMachine": true\n}\n',
         "global-rules/global-rules.md": "# My rules\n\n- Personal rule one.\n",
         "knowledge/README.md": "# Knowledge base\n",
         "handoffs/demo/HANDOFF.md": "# demo handoff\n",
