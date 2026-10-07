@@ -1,7 +1,7 @@
 # dev-home
 
-These sync your dev-home with GitHub when you ask, and show and change dev-home-tools' settings.
-The exact steps agents follow are in the skill itself:
+These sync your dev-home with GitHub when you ask, list the skills it sets up, and show and change
+dev-home-tools' settings. The exact steps agents follow are in the skill itself:
 [`SKILL.md`](../../templates/skills/dev-home/SKILL.md).
 
 | Command | What it does |
@@ -10,6 +10,7 @@ The exact steps agents follow are in the skill itself:
 | `/dev-home sync` | Syncs your dev-home with GitHub now, however many copies are in use: brings in commits from your other copies, pushes this PC's, and lists the files left uncommitted. Like every sync, it also checks for dev-home-tools updates and runs setup quietly. |
 | `/dev-home configure` | Shows every setting with its value, and changes one you choose. The agent shows you the exact change first, and makes it only after your yes. |
 | `/dev-home configure <change>` | The same, starting from your change, such as `/dev-home configure check GitHub every 6 hours`. |
+| `/dev-home skills` | Lists the skills dev-home sets up, dev-home-tools' own and then yours, with what each is for. It changes nothing, and works in Codex too. |
 
 - **A sync commits nothing by itself.** For a file in your dev-home that nobody has touched for
   15 minutes, the agent asks whether to commit and push it. A file changed more recently may be
@@ -24,6 +25,9 @@ The exact steps agents follow are in the skill itself:
   pushed, and the agent's question says so. Before a switch to one copy, the agent asks whether
   your other copies are retired. After a switch to several, run `/dev-home sync` on each of the
   others.
-- **In Codex, both commands change nothing,** for the same reason as
+- **The skills list reads this PC's copy,** with no sync, so a skill you added on another PC
+  shows up after the next sync. One of yours with the same name as a dev-home-tools skill isn't
+  set up, and the list says so.
+- **In Codex, `sync` and `configure` change nothing,** for the same reason as
   [handoff commands](handoff.md): on Windows, git and `gh` can't use your GitHub credentials
   there. The agent gives you the command to run in a terminal instead.

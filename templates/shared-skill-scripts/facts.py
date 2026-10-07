@@ -1,12 +1,13 @@
 """Prints facts about where a session is running, for the skills, one topic at a time.
 
-Called by: handoff
+Called by: dev-home, handoff
 
 Name the topics you want. It prints each topic's lines, as key: value, in the order asked:
 
     handoff         where the current project's handoff lives in dev-home (six lines)
     environment     the name of the computer the session is on (one line)
     newer-commits   the project's commits since the one its handoff says was checked
+    skills          the skills setup sets up: dev-home-tools' own, then the user's
 
 It only reports, and only from this PC: it changes nothing and never uses the network, which is
 what lets a skill run it without asking first. Anything a skill needs done, rather than told,
@@ -117,6 +118,24 @@ be read as "nothing changed". A git failure here never stops the script, so it c
 the handoff is. It reads dev-home's copy as it is, so run it after a sync to compare with the
 latest one.
 
+THE SKILLS TOPIC
+
+Prints one line for each skill setup sets up: dev-home-tools' own, from the generated skills
+beside this script, then the user's, from the skills folder in dev-home, each in name order. A
+skill is a folder with a SKILL.md, as setup sees one, and its description comes from the
+frontmatter, on one line:
+
+    skill: handoff (dev-home-tools): Read or update this project's private session handoff ...
+    skill: tidy (yours): Tidies a project's imports.
+
+One of the user's skills with the same name as one of dev-home-tools' isn't set up, and its line
+says so, as setup does:
+
+    skill: handoff (yours, not set up: it has the same name as a dev-home-tools skill): ...
+
+It reads only this PC's copy of dev-home, so a skill added on another PC shows up after the next
+sync. It runs anywhere: no project folder is needed.
+
 ALL TOPICS
 
 Every line is written as UTF-8, so an accented letter in a name, path, or commit subject reaches
@@ -142,7 +161,7 @@ from urllib.parse import quote, unquote
 
 # Every topic. To add one, add it here, to the description above, and to the topic functions in
 # collect, with a test for its lines.
-TOPICS = ("handoff", "environment", "newer-commits")
+TOPICS = ("handoff", "environment", "newer-commits", "skills")
 
 # The most newer-commit lines the newer-commits topic prints. Its newer line has the full count.
 MAX_NEWER_COMMITS = 10
@@ -629,6 +648,66 @@ def newer_commit_lines(place: HandoffPlace) -> list[str]:
     return lines
 
 
+def skill_folders(root: Path) -> list[Path]:
+    """Each skill in a folder, as setup sees one: a folder with a SKILL.md, in name order."""
+    try:
+        return sorted(
+            (f for f in root.iterdir() if f.is_dir() and (f / "SKILL.md").is_file()),
+            key=lambda f: f.name.lower(),
+        )
+    except OSError:
+        return []
+
+
+def skill_description(text: str) -> str:
+    """A SKILL.md's description from its frontmatter, on one line: a value on the line itself,
+    quoted or not, with any indented lines that carry it on, or a YAML block (> or |) on the
+    indented lines below. Empty text when there is none."""
+    lines = text.replace("\r\n", "\n").split("\n")
+    if lines[0].strip() != "---":
+        return ""
+    for start in range(1, len(lines)):
+        if lines[start].strip() == "---":
+            break
+        match = re.match(r"description:(.*)$", lines[start])
+        if not match:
+            continue
+        value = match.group(1).strip()
+        more: list[str] = []
+        for line in lines[start + 1 :]:
+            if not line.strip() or not line[0].isspace():
+                break
+            more.append(line.strip())
+        parts = more if value[:1] in (">", "|") else [value, *more]
+        value = " ".join(part for part in parts if part)
+        # YAML writes ' as '' inside single quotes, and " and \ with a backslash inside double.
+        if len(value) >= 2 and value[0] == value[-1] == "'":
+            value = value[1:-1].replace("''", "'")
+        elif len(value) >= 2 and value[0] == value[-1] == '"':
+            value = re.sub(r'\\(["\\])', r"\1", value[1:-1])
+        return value
+    return ""
+
+
+def skills_lines() -> list[str]:
+    """The skills topic's lines: dev-home-tools' skills, then the user's own."""
+    lines: list[str] = []
+    ours = skill_folders(GENERATED_SKILLS)
+    taken = {os.path.normcase(folder.name) for folder in ours}
+    theirs = skill_folders(Path(CONTENT_DIR) / "skills")
+    for folder in [*ours, *theirs]:
+        whose = "dev-home-tools" if folder in ours else "yours"
+        if whose == "yours" and os.path.normcase(folder.name) in taken:
+            whose += ", not set up: it has the same name as a dev-home-tools skill"
+        try:
+            text = (folder / "SKILL.md").read_text(encoding="utf-8-sig", errors="replace")
+        except OSError:
+            text = ""
+        description = skill_description(text) or "no description"
+        lines.append(f"skill: {folder.name} ({whose}): {description}")
+    return lines
+
+
 def collect(topics: Sequence[str]) -> list[str]:
     """Every line of the topics asked for, in the order asked. Checks the topics first, then
     works every one out before returning any, so a skill never gets only part of what it asked
@@ -654,6 +733,7 @@ def collect(topics: Sequence[str]) -> list[str]:
         "handoff": lambda: handoff_lines(handoff_place()),
         "environment": environment_lines,
         "newer-commits": lambda: newer_commit_lines(handoff_place()),
+        "skills": skills_lines,
     }
     lines: list[str] = []
     for topic in asked:

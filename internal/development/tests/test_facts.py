@@ -1,6 +1,7 @@
 """facts.py, run as the handoff skill runs it in Codex, from a sandbox's generated copy."""
 
 import os
+import re
 import shutil
 import sys
 from collections.abc import Iterator
@@ -106,6 +107,77 @@ def test_the_environment_topic_prints_this_computers_name(box: Sandbox, sample: 
         name = os.uname().nodename.split(".")[0]
     assert result.code == 0, str(result)
     assert result.lines == [f"environment: {name}"], str(result)
+
+
+def dev_home_skills(box: Sandbox) -> Run:
+    """The dev-home skill's command for the skills topic, word for word. It needs no project, so
+    it runs in the sandbox's root."""
+    return run_command(box, skill_command(box, "dev-home", "facts.py"), cwd=box.root)
+
+
+def test_the_skills_topic_lists_dev_home_tools_skills_then_the_users(box: Sandbox) -> None:
+    result = dev_home_skills(box)
+    ours = sorted(
+        folder.name
+        for folder in (box.tools / "templates" / "skills").iterdir()
+        if (folder / "SKILL.md").is_file()
+    )
+    listed = [re.fullmatch(r"skill: (\S+) \(([^)]*)\): (.+)", line) for line in result.lines]
+    assert result.code == 0 and all(listed), str(result)
+    assert [(m.group(1), m.group(2)) for m in listed if m] == [
+        *((name, "dev-home-tools") for name in ours),
+        ("mine", "yours"),
+    ], str(result)
+    assert any(
+        line.startswith("skill: handoff (dev-home-tools): Read or update") for line in result.lines
+    )
+    assert result.lines[-1] == "skill: mine (yours): A personal test skill.", str(result)
+
+
+def test_the_skills_topic_reads_each_description_form_and_says_what_isnt_set_up(
+    box: Sandbox,
+) -> None:
+    skills = box.content / "skills"
+    added = {
+        "folded": "---\nname: folded\ndescription: >\n  Folded onto\n  one line.\nx: y\n---\n",
+        "quoted": '---\nname: quoted\ndescription: "Quoted: with a \\"colon\\"."\n---\n',
+        "single": "---\nname: single\ndescription: 'The project''s own.'\n---\n",
+        "carried": "---\nname: carried\ndescription: Starts here\n  and carries on.\n---\n",
+        "bare": "---\nname: bare\n---\nThe body's description: not this.\n",
+        "handoff": "---\nname: handoff\ndescription: Mine too.\n---\n",
+    }
+    for name, text in added.items():
+        write_text(skills / name / "SKILL.md", text)
+    # A folder without a SKILL.md isn't a skill, as setup sees it.
+    write_text(skills / "notes" / "README.md", "Not a skill.\n")
+    try:
+        result = dev_home_skills(box)
+    finally:
+        for name in [*added, "notes"]:
+            shutil.rmtree(skills / name)
+    assert result.code == 0, str(result)
+    assert [line for line in result.lines if "(yours" in line] == [
+        "skill: bare (yours): no description",
+        "skill: carried (yours): Starts here and carries on.",
+        "skill: folded (yours): Folded onto one line.",
+        "skill: handoff (yours, not set up: it has the same name as a dev-home-tools skill): "
+        "Mine too.",
+        "skill: mine (yours): A personal test skill.",
+        'skill: quoted (yours): Quoted: with a "colon".',
+        "skill: single (yours): The project's own.",
+    ], str(result)
+
+
+def test_the_skills_topic_without_skills_of_the_users_own(box: Sandbox) -> None:
+    skills = box.content / "skills"
+    hidden = box.content / "skills-hidden"
+    skills.rename(hidden)
+    try:
+        result = dev_home_skills(box)
+    finally:
+        hidden.rename(skills)
+    assert result.code == 0, str(result)
+    assert result.lines and all("(dev-home-tools)" in line for line in result.lines), str(result)
 
 
 def test_two_topics_print_in_the_order_asked(box: Sandbox, sample: Path) -> None:

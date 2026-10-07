@@ -1,16 +1,16 @@
 ---
 name: dev-home
-description: Sync the private dev-home repo with GitHub, or see and change dev-home-tools' settings on this PC, such as how often syncs check GitHub, whether updates install themselves, or whether dev-home is in use on more than one PC. Use when the user runs /dev-home or $dev-home, asks to sync dev-home (their handoffs and knowledge base) with GitHub, or asks about or wants to change a dev-home-tools setting.
-allowed-tools: "Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill dev-home --stamp {{SKILL_STAMP}} --fetch always) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill dev-home --stamp {{SKILL_STAMP}} --fetch always) Bash({{PYTHON}} -I {{TOOLS_DIR}}/setup.py --configure) Bash({{PYTHON}} -I {{TOOLS_DIR}}/setup.py --configure *) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/setup.py --configure) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/setup.py --configure *) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *)"
+description: Sync the private dev-home repo with GitHub, list the skills it sets up, or see and change dev-home-tools' settings on this PC, such as how often syncs check GitHub, whether updates install themselves, or whether dev-home is in use on more than one PC. Use when the user runs /dev-home or $dev-home, asks to sync dev-home (their handoffs and knowledge base) with GitHub, asks which skills dev-home gives them, or asks about or wants to change a dev-home-tools setting.
+allowed-tools: "Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill dev-home --stamp {{SKILL_STAMP}} --fetch always) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill dev-home --stamp {{SKILL_STAMP}} --fetch always) Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/facts.py --skill dev-home --stamp {{SKILL_STAMP}} skills) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/facts.py --skill dev-home --stamp {{SKILL_STAMP}} skills) Bash({{PYTHON}} -I {{TOOLS_DIR}}/setup.py --configure) Bash({{PYTHON}} -I {{TOOLS_DIR}}/setup.py --configure *) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/setup.py --configure) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/setup.py --configure *) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *)"
 ---
 
 # dev-home
 
 dev-home is the user's private repo, at `{{CONTENT_DIR}}`, which keeps their handoffs, knowledge
 base, global rules, and own skills on GitHub. dev-home-tools, at `{{TOOLS_DIR}}`, is the tooling
-that syncs it and sets it up on each PC. This skill syncs dev-home when the user asks, and shows
-and changes dev-home-tools' settings. Run the commands below exactly as written; in Claude Code
-they are pre-approved.
+that syncs it and sets it up on each PC. This skill syncs dev-home when the user asks, lists the
+skills dev-home sets up, and shows and changes dev-home-tools' settings. Run the commands below
+exactly as written; in Claude Code they are pre-approved.
 
 Sessions in other projects, and Codex, use dev-home at the same time, so a file there that you
 didn't change may be someone's work in progress. Run git in dev-home only through
@@ -19,8 +19,8 @@ Never stage, commit, stash, or discard a file yourself.
 
 ## Commands
 
-The first word after `/dev-home` (`$dev-home` in Codex) picks the command: `sync` or
-`configure`.
+The first word after `/dev-home` (`$dev-home` in Codex) picks the command: `sync`, `configure`,
+or `skills`.
 
 | Command | What it does |
 | --- | --- |
@@ -28,10 +28,11 @@ The first word after `/dev-home` (`$dev-home` in Codex) picks the command: `sync
 | `/dev-home sync` | Syncs dev-home with GitHub: brings in commits from its other copies, pushes this PC's, and lists the files left uncommitted. Also checks for dev-home-tools updates, and runs setup. |
 | `/dev-home configure` | Shows dev-home-tools' settings, and changes one after the user's yes to the exact change. |
 | `/dev-home configure <change>` | The same, starting from the change the user describes, such as "check GitHub every 6 hours". |
+| `/dev-home skills` | Lists the skills dev-home sets up: dev-home-tools' own, then the user's. Changes nothing. |
 
 With `/dev-home` alone, list these commands in a short reply and run nothing, so typing the
 skill's name never reaches GitHub. Any other text is a question or a request: answer it, and when
-it asks for a sync or a settings change, follow the matching command below.
+it asks for a sync, a settings change, or the list of skills, follow the matching command below.
 
 ## When to change, commit, and push
 
@@ -112,9 +113,26 @@ backup of this PC's settings, and commits and pushes the shared one.
    After a switch to several copies, it says to run `/dev-home sync` on each other copy: pass
    that on.
 
+## Skills
+
+1. Run
+   `{{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/facts.py --skill dev-home --stamp {{SKILL_STAMP}} skills`.
+   It only reads files on this PC: no sync, and no network. It prints a `skill:` line for each
+   skill setup sets up, dev-home-tools' own first, then the user's own from
+   `{{CONTENT_DIR}}/skills/`, each with whose it is and its description. One of the user's that
+   setup doesn't set up says why. If it prints anything else, show it and stop; when it says
+   this skill has changed since you loaded it, the user runs the command again to load the new
+   steps.
+2. Show the skills in a table: the command that runs each (`/<name>`, or `$<name>` in Codex),
+   whose it is, and what it's for in one short sentence from its description. Pass on any that
+   isn't set up, with why. If the user has none of their own, say where one goes:
+   `{{CONTENT_DIR}}/skills/<name>/SKILL.md`. The list is this PC's copy, so a skill added on
+   another PC shows up after the next sync.
+
 ## In Codex
 
-Both commands change nothing in Codex. On Windows, Codex runs even approved commands inside its
-sandbox, where git and `gh` can't use the user's sign-ins. Give the user the command to run in a
-terminal instead: for `sync`, `py {{TOOLS_DIR}}/sync.py`, or `/dev-home sync` in Claude Code;
-for `configure`, `py {{TOOLS_DIR}}/setup.py --configure`, which shows a menu of every setting.
+`skills` works as written, since `facts.py` only reads files. `sync` and `configure` change
+nothing in Codex: on Windows, Codex runs even approved commands inside its sandbox, where git and
+`gh` can't use the user's sign-ins. Give the user the command to run in a terminal instead: for
+`sync`, `py {{TOOLS_DIR}}/sync.py`, or `/dev-home sync` in Claude Code; for `configure`,
+`py {{TOOLS_DIR}}/setup.py --configure`, which shows a menu of every setting.
