@@ -34,6 +34,7 @@ see skills in the [Claude Code docs](https://code.claude.com/docs/en/skills) and
 | --- | --- |
 | [`handoff`](docs/skills/handoff.md) | Keeps one private note per project in your dev-home: what's next, what's in progress, what's waiting on you or on others, and what's left to do. Start a session with `/handoff`, and the agent picks up where the last one stopped, on any of your PCs. |
 | [`knowledge`](docs/skills/knowledge.md) | Keeps your own knowledge base in your dev-home: general things you've learned about languages, tools, and AI agents, so no session has to work them out twice. Agents check it before researching or testing a general question, even partway through other work. |
+| [`dev-home`](docs/skills/dev-home.md) | Syncs your dev-home with GitHub when you ask, and shows and changes dev-home-tools' settings, such as how often syncs check GitHub. |
 
 Works with Claude Code, Codex, or both. Windows only, for now. To start, see
 [Set up a PC](#set-up-a-pc).
@@ -226,6 +227,7 @@ Everything beyond getting started is in the `docs/` folder:
 | --- | --- | --- |
 | Skills | [Handoffs](docs/skills/handoff.md) | Every `/handoff` command, with examples: when a change is committed and pushed, how issues are filed, and where handoffs are kept. |
 | Skills | [Knowledge base](docs/skills/knowledge.md) | Every `/knowledge` command, and when agents check the knowledge base or offer to add to it. |
+| Skills | [dev-home](docs/skills/dev-home.md) | `/dev-home sync` and `/dev-home configure`: syncing when you ask, and changing a setting. |
 | Reference | [The scripts](docs/reference/scripts.md) | `setup.py`, `sync.py`, and `update.py`: when each one runs, what their status words mean, and how updates are installed. |
 | Reference | [What setup changes on your PC](docs/reference/setup-changes.md) | Every link, file, and setting that setup adds, why, and how to remove it all. |
 | Development | [Design decisions](docs/development/decisions.md) | For people changing dev-home-tools: decisions made and options set aside, with the reasons. |

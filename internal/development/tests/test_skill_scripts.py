@@ -1,6 +1,6 @@
 """The Python scripts and the skills that run them, read without running anything: the skills'
-shared scripts in templates/shared-skill-scripts/, the entry points in the root, and the code
-they load from internal/shared/."""
+shared scripts in templates/shared-skill-scripts/, the scripts in a skill's own folder, the entry
+points in the root, and the code they load from internal/shared/."""
 
 import ast
 import re
@@ -30,9 +30,14 @@ def shared_modules() -> list[Path]:
     return sorted(SHARED.glob("*.py"))
 
 
+def skill_scripts() -> list[Path]:
+    """The scripts in a skill's own folder, which only that skill runs."""
+    return sorted(SKILLS.glob("*/*.py"))
+
+
 def python_files() -> list[Path]:
     """Every Python file that people or skills run."""
-    return scripts() + shared_modules() + ENTRY_POINTS
+    return scripts() + skill_scripts() + shared_modules() + ENTRY_POINTS
 
 
 def repo_path(path: Path) -> str:
@@ -180,6 +185,32 @@ def test_each_entry_point_runs_the_module_of_its_own_name(entry: Path) -> None:
 
 
 @pytest.mark.parametrize("skill", skills(), ids=lambda p: p.name)
+def test_each_python_command_a_skill_gives_is_pre_approved_for_both_tools(skill: Path) -> None:
+    # Word for word, or by an approval ending in a wildcard, for a command whose last words
+    # change each time, such as a commit message or a setting.
+    text = (skill / "SKILL.md").read_text(encoding="utf-8")
+    allowed = re.search(r'^allowed-tools:\s*"(.*)"\s*$', text, re.MULTILINE)
+    approvals = re.findall(r"(Bash|PowerShell)\(([^)]*)\)", allowed.group(1) if allowed else "")
+    commands = set(re.findall(r"`(\{\{PYTHON\}\} -I [^`]*)`", text))
+    assert commands, f"{skill.name} gives no Python command"
+
+    def approved(tool: str, command: str) -> bool:
+        return any(
+            kind == tool
+            and (rule == command or (rule.endswith(" *") and command.startswith(rule[:-1])))
+            for kind, rule in approvals
+        )
+
+    missing = [
+        f"{tool}: {command}"
+        for command in sorted(commands)
+        for tool in ("Bash", "PowerShell")
+        if not approved(tool, command)
+    ]
+    assert missing == []
+
+
+@pytest.mark.parametrize("skill", skills(), ids=lambda p: p.name)
 def test_each_skill_pre_approves_its_sync_commands_for_both_tools(skill: Path) -> None:
     # A commit message differs every time, so these end in a wildcard.
     text = (skill / "SKILL.md").read_text(encoding="utf-8")
@@ -205,6 +236,23 @@ def test_handoff_environment_edits_follow_evidence_not_session_location() -> Non
     assert "Never infer one environment's state from another." in words
     assert "not an ownership boundary" in words
     assert "current environment's subsection" in words
+
+
+def test_the_dev_home_skill_changes_settings_only_through_setup() -> None:
+    # The person's yes in chat to the exact preview is the approval, as for a commit.
+    text = (SKILLS / "dev-home" / "SKILL.md").read_text(encoding="utf-8")
+    configure = "{{PYTHON}} -I {{TOOLS_DIR}}/setup.py --configure"
+    commands = re.findall(rf"`({re.escape(configure)}[^`]*)`", text)
+    assert f"{configure} '<name>=<value>' --what-if" in commands, commands
+    assert f"{configure} '<name>=<value>'" in commands, commands
+    assert "local-settings.json" in text and "never edit a settings file yourself" in text
+
+
+def test_the_handoff_skill_checks_issue_links_with_its_script_alone() -> None:
+    # One gh request for every link, in place of a gh issue view for each.
+    text = (SKILLS / "handoff" / "SKILL.md").read_text(encoding="utf-8")
+    assert "`{{PYTHON}} -I {{SKILL_DIR}}/issue_status.py`" in text
+    assert "gh issue view" not in text
 
 
 @pytest.mark.parametrize("script", python_files(), ids=repo_path)

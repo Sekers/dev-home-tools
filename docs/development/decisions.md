@@ -507,8 +507,8 @@ root folder, or a `--configure` switch means nobody edits `local-settings.json` 
 
 **Decision:** the Python scripts take long options with two dashes, such as `sync.py --message`
 and `update.py --quiet`, each with exactly one spelling: no short forms such as `-m`, and no
-shortened names such as `--mess`. Setup's are `--quiet`, `--content-dir`, and `--what-if`, and
-`--configure` will be the same once it's built.
+shortened names such as `--mess`. Setup's are `--quiet`, `--content-dir`, `--configure`, and
+`--what-if`.
 
 **Why:** a skill's pre-approval matches a command's text literally, so a second spelling of an
 option could make a command ask first. Every command's text changed in phase 2 anyway, since
@@ -624,10 +624,6 @@ points, so a symbolic link made by an older setup keeps working.
 
 ## A dev-home has one active copy, or several
 
-**Status:** decided. The sync acts on `dev-home.json` (`sync.py --fetch auto`), and the starter's
-file and setup's questions are built; the skills' use of it isn't yet. This line goes once it
-is.
-
 **Decision:** dev-home has two uses, and both are fully supported. With one active copy, it's
 private storage with a backup and full history on GitHub: nothing else writes to it, so the local
 copy is always the latest. With several, it's the same, plus sharing between the copies, so a
@@ -730,10 +726,6 @@ first.
 
 ## How often the sync checks GitHub
 
-**Status:** decided. The sync and the update check use both settings; plain `/knowledge` starts
-waiting for `contentCheckHours` (`--fetch when-due`) with the skills' change. This line goes once
-that's built.
-
 **Decision:** two settings on each PC, in `local-settings.json`, each a whole number of hours,
 where 0 means every time:
 
@@ -808,9 +800,6 @@ at worst, in 50 runs on one PC, against about 500 ms for a quiet setup.
 
 ## setup.py --configure changes every setting
 
-**Status:** decided, and built in setup; the `dev-home` skill's pre-approval of it comes with
-the skills. This line goes once that's built.
-
 **Decision:** `setup.py --configure` is how people and agents change a setting after the first
 run: `contentDir`, `autoUpdate`, `updateCheckHours`, `contentCheckHours`, the answer for each
 `~/.claude-*` folder, and the shared `multiMachine`.
@@ -866,8 +855,6 @@ run: `contentDir`, `autoUpdate`, `updateCheckHours`, `contentCheckHours`, the an
 
 ## A dev-home skill syncs and configures
 
-**Status:** decided, not built yet. This line goes once it's built.
-
 **Decision:** a general `dev-home` skill. `/dev-home` alone lists its commands. `/dev-home sync`
 fetches, merges, and pushes in either mode, lists the files left uncommitted, and keeps to
 `updateCheckHours`. `/dev-home configure` runs `setup.py --configure`: it shows the current
@@ -891,8 +878,6 @@ when the person only wanted the list of subjects); and plain `/knowledge` never 
 **Look again if:** the skill gathers commands that don't belong together.
 
 ## The handoff update checks issue links with one script
-
-**Status:** decided, not built yet. This line goes once it's built.
 
 **Decision:** `/handoff update` finds out whether linked GitHub issues have closed with one
 script in the handoff skill's folder, not a `gh issue view` for each link. The script finds the

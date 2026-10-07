@@ -1,6 +1,6 @@
 """Prepares dev-home for a skill command: syncs it, then prints the facts asked for.
 
-Called by: handoff, knowledge
+Called by: dev-home, handoff, knowledge
 
 Every skill command that syncs dev-home starts with this script, so the agent gets what it needs
 before its own work from one call. First it runs sync, which syncs dev-home with GitHub, checks

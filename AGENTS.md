@@ -111,15 +111,19 @@ Never leave it to the reader to guess which: name the repo whenever both could f
   skill with a fingerprint of its `SKILL.md`, and the script compares the stamp it's given with
   the one on disk, so a session following steps that have changed since it loaded them is told
   to stop. Every skill command that syncs starts with `prepare.py`. Tests check all of this.
+- Run a script in the skill's own folder as `{{PYTHON}} -I {{SKILL_DIR}}/<script>.py`. It takes
+  no stamp when it runs only after the skill's start-up command, which has just checked it.
+  The shared scripts' rules for code apply to it too: Python 3.12 or later, the standard library
+  only, and ASCII only (tests check both).
 - Write steps in plain language, and write commands exactly as they will be run, with
   forward-slash paths, so they work in Git Bash, PowerShell, and Codex.
 - Leave commands that publish outside dev-home, such as `gh issue create`, out of
   `allowed-tools`. Whether they ask first is each person's choice, in their own settings.
 - Give each command both a `Bash(...)` and a `PowerShell(...)` pre-approval, as the Python
-  commands and `gh issue view` have. Add no command that starts PowerShell (`pwsh`):
-  dev-home-tools doesn't need it, and Claude Code's PowerShell tool asks before running any
-  command that starts another PowerShell, even one a `PowerShell(...)` rule matches exactly (a
-  test checks the generated skills).
+  commands and `gh issue list` have (a test checks the Python ones). Add no command that starts
+  PowerShell (`pwsh`): dev-home-tools doesn't need it, and Claude Code's PowerShell tool asks
+  before running any command that starts another PowerShell, even one a `PowerShell(...)` rule
+  matches exactly (a test checks the generated skills).
 - Each skill stands on its own. Mention another skill only where that's part of how this one
   works.
 - A skill's rules for when it may change, commit, and push live in that skill, not in the

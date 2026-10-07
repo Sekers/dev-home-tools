@@ -1,7 +1,7 @@
 ---
 name: knowledge
-description: Private general knowledge base for coding and AI work (languages, tools, platforms, and AI agents such as Claude Code and Codex), kept in the private dev-home repo. Check it before researching or testing a general question about these, or asking the user to test one, even partway through other work. Also use when the user runs /knowledge (run alone, it syncs the knowledge base with GitHub), asks to look something up in or add something to the knowledge base, or when a hard-won general finding comes up during work.
-allowed-tools: "Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill knowledge --stamp {{SKILL_STAMP}}) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill knowledge --stamp {{SKILL_STAMP}}) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *)"
+description: Private general knowledge base for coding and AI work (languages, tools, platforms, and AI agents such as Claude Code and Codex), kept in the private dev-home repo. Check it before researching or testing a general question about these, or asking the user to test one, even partway through other work. Also use when the user runs /knowledge, asks to look something up in or add something to the knowledge base, or when a hard-won general finding comes up during work.
+allowed-tools: "Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill knowledge --stamp {{SKILL_STAMP}} --fetch when-due) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill knowledge --stamp {{SKILL_STAMP}} --fetch when-due) Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill knowledge --stamp {{SKILL_STAMP}} --fetch auto) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill knowledge --stamp {{SKILL_STAMP}} --fetch auto) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *)"
 ---
 
 # Knowledge base
@@ -18,20 +18,34 @@ Never stage, commit, stash, or discard a file yourself.
 
 ## Sync with GitHub (plain /knowledge, and before adding)
 
-Run this when the user runs /knowledge with nothing after it, and as step 3 of Add or update. A
-lookup reads the local copy and never syncs.
+A lookup reads the local copy and never syncs. Plain /knowledge and adding a note sync first,
+each with its own command:
 
-1. Run
-   `{{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill knowledge --stamp {{SKILL_STAMP}}`.
-   It syncs dev-home with GitHub and runs setup, then checks that this skill hasn't changed since
-   you loaded it. If it can't start because `{{PYTHON}}` doesn't exist, tell the user that
+- Plain /knowledge, with nothing after it, runs
+  `{{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill knowledge --stamp {{SKILL_STAMP}} --fetch when-due`.
+  It checks GitHub only when dev-home's last check is a few hours old, so the list of subjects
+  is never far behind.
+- Step 3 of Add or update runs
+  `{{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill knowledge --stamp {{SKILL_STAMP}} --fetch auto`.
+  When dev-home is in active use on several copies, such as two PCs, it checks GitHub every
+  time, so the note goes into the latest knowledge base; with one, only every few hours, since
+  nothing else changes it.
+
+Either way:
+
+1. Run the command. It syncs dev-home and runs setup, then checks that this skill hasn't changed
+   since you loaded it. If it can't start because `{{PYTHON}}` doesn't exist, tell the user that
    dev-home-tools needs Python 3.12 or later: to install it if they have none, then run
    `py {{TOOLS_DIR}}/setup.py` in a terminal. Then stop. Pass on anything it prints beyond `OK`:
    - `RELOAD`: this skill has changed since you loaded it, so these steps are out of date. Show
      the line, and stop: the user runs the command again to load the new steps.
-   - `OFFLINE`: GitHub couldn't be reached. When the line is about dev-home, say the knowledge
-     base may be stale; when it's about dev-home-tools, say its updates weren't checked. Then
-     continue.
+   - `OFFLINE`: GitHub couldn't be reached. When the line says dev-home may be behind, say the
+     knowledge base may be stale too. With one active copy, it says nothing should be missing
+     instead, so don't call the knowledge base stale. When the line is about dev-home-tools, say
+     its updates weren't checked. Then continue.
+   - `SETTING`: dev-home is set to one active copy, but the sync brought in commits from
+     another. Pass the line on, with its advice to run `/dev-home configure` if another copy is
+     in use, and never change the setting yourself. Then continue.
    - `LEFT`: leave the file alone. Another session may be editing it.
    - `STALE`: nobody has touched the file for 15 minutes. Ask "Commit and push it?". On a yes, run
      `{{PYTHON}} -I {{TOOLS_DIR}}/sync.py --message "sync: <what changed>" "<path>"`.
@@ -42,7 +56,8 @@ lookup reads the local copy and never syncs.
 
 ## With no request
 
-Sync, then list the subjects in the index and ask what to look up or add.
+Sync with plain /knowledge's command (see above), then list the subjects in the index and ask
+what to look up or add.
 
 ## Look something up
 
@@ -75,8 +90,8 @@ offer:
 - your own reasoning or design choices.
 
 Offer it in one line at a natural stopping point, and wait for a yes:
-"Knowledge candidate: <folder>/<file>: <what we learned>. Evidence: <the test we ran or the page
-we read; for a pitfall, also how we know it recurs>. Add it, commit, and push?"
+`Knowledge candidate: <folder>/<file>: <what we learned>. Evidence: <the test we ran or the page
+we read; for a pitfall, also how we know it recurs>. Add it, commit, and push?`
 If you can't fill in the evidence from this session, don't offer it.
 
 ## When to change, commit, and push
@@ -122,7 +137,7 @@ commit, and push" says, or after a yes to a candidate you offered.
    the user's functions, files, or tenants. If it fails, it doesn't belong in the knowledge base:
    tell the user why, and add nothing.
 2. Read `{{SKILL_DIR}}/filing-rules.md`, unless you already did this session.
-3. Sync with GitHub (above), unless it already ran this turn.
+3. Sync with GitHub, with the `--fetch auto` command above, unless that already ran this turn.
 4. Add the finding to the matching topic file, or create one by the rules. Label its evidence
    and date it, with versions. Keep it short, because every line costs tokens each time the file
    is read, and prefer adding to an existing file over creating one. When changing an existing
@@ -142,8 +157,8 @@ config. That is not bypassing signing, and the project repos keep signing as usu
 
 In Codex: edit only, so leave "commit, and push" out of your questions: a draft ends with "Save
 this?", and a candidate with "Add it?". Skip the sync and every git step, and tell the user that
-Claude will commit and push the change: the next sync in Claude, such as a plain /knowledge,
-lists the files, and offers to commit and push them once they have been untouched for 15 minutes.
+Claude will commit and push the change: the next sync in Claude, such as `/dev-home sync`, lists
+the files, and offers to commit and push them once they have been untouched for 15 minutes.
 Mention that the local copy may be behind another PC.
 
 Never store secrets, credentials, tenant or account IDs, or personal information about anyone

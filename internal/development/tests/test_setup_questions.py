@@ -326,12 +326,13 @@ def test_asks_how_many_copies_with_no_default_then_commits_and_pushes_the_answer
     box: Sandbox, person: Person, capsys: pytest.CaptureFixture[str]
 ) -> None:
     home, remote = own_dev_home(box, "copies-unanswered", None)
-    # Enter has no default, so the question comes again.
+    # Enter has no default, so the question comes again, after saying what to type.
     person.answers.update({ELSEWHERE: ["", "y"], SAVE_COPIES: "y"})
     returned = check_copies(box, home)
     out = capsys.readouterr().out
     assert returned == 0, out
     assert sum(1 for asked in person.asked if re.search(ELSEWHERE, asked)) == 2, person.asked
+    assert re.search(r"^Type y or n\.$", out, re.M), out
     assert json.loads((home / "dev-home.json").read_text(encoding="utf-8")) == {
         "multiMachine": True
     }

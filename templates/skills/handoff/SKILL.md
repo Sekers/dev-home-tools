@@ -1,7 +1,7 @@
 ---
 name: handoff
 description: Read or update this project's private session handoff (where the work stands, what's next up, what's waiting on the user or on others, to-dos, and bugs), kept in the private dev-home repo, and file handoff items as GitHub issues when asked. Use when the user runs /handoff or $handoff, asks where things stand or where we left off, asks to update the handoff or change what's next up, or asks to file a handoff item as a GitHub issue.
-allowed-tools: "Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill handoff --stamp {{SKILL_STAMP}} handoff environment newer-commits) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill handoff --stamp {{SKILL_STAMP}} handoff environment newer-commits) Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/facts.py --skill handoff --stamp {{SKILL_STAMP}} handoff environment newer-commits) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/facts.py --skill handoff --stamp {{SKILL_STAMP}} handoff environment newer-commits) Bash(gh label list *) Bash(gh issue list *) Bash(gh issue view *) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *) PowerShell(gh label list *) PowerShell(gh issue list *) PowerShell(gh issue view *) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *)"
+allowed-tools: "Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill handoff --stamp {{SKILL_STAMP}} --fetch auto handoff environment newer-commits) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill handoff --stamp {{SKILL_STAMP}} --fetch auto handoff environment newer-commits) Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/facts.py --skill handoff --stamp {{SKILL_STAMP}} handoff environment newer-commits) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/facts.py --skill handoff --stamp {{SKILL_STAMP}} handoff environment newer-commits) Bash({{PYTHON}} -I {{SKILL_DIR}}/issue_status.py) PowerShell({{PYTHON}} -I {{SKILL_DIR}}/issue_status.py) Bash(gh label list *) Bash(gh issue list *) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *) PowerShell(gh label list *) PowerShell(gh issue list *) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *)"
 ---
 
 # Handoff
@@ -178,16 +178,23 @@ about this project doesn't belong here either.
 1. If your instructions don't include the heading "Private repo: dev-home (rules loaded)", tell
    the user that the always-on operating rules aren't loaded, then continue.
 2. In the project, run
-   `{{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill handoff --stamp {{SKILL_STAMP}} handoff environment newer-commits`.
+   `{{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill handoff --stamp {{SKILL_STAMP}} --fetch auto handoff environment newer-commits`.
    It syncs dev-home with GitHub and runs setup, checks that this skill hasn't changed since you
-   loaded it, then prints the facts that "Find this project's handoff" uses. If it can't start
-   because `{{PYTHON}}` doesn't exist, tell the user that dev-home-tools needs Python 3.12 or
-   later: to install it if they have none, then run `py {{TOOLS_DIR}}/setup.py` in a terminal.
-   Then stop. Pass on anything it prints beyond `OK` and the facts:
+   loaded it, then prints the facts that "Find this project's handoff" uses. When dev-home is in
+   active use on several copies, such as two PCs, the sync checks GitHub every time; with one,
+   only every few hours, since nothing else changes it. If it can't start because `{{PYTHON}}`
+   doesn't exist, tell the user that dev-home-tools needs Python 3.12 or later: to install it if
+   they have none, then run `py {{TOOLS_DIR}}/setup.py` in a terminal. Then stop. Pass on anything
+   it prints beyond `OK` and the facts:
    - `RELOAD`: this skill has changed since you loaded it, so these steps are out of date. Show
      the line, and stop: the user runs the command again to load the new steps.
-   - `OFFLINE`: GitHub couldn't be reached. When the line is about dev-home, say the handoff may
-     be stale; when it's about dev-home-tools, say its updates weren't checked. Then continue.
+   - `OFFLINE`: GitHub couldn't be reached. When the line says dev-home may be behind, say the
+     handoff may be stale too. With one active copy, it says nothing should be missing instead,
+     so don't call the handoff stale. When the line is about dev-home-tools, say its updates
+     weren't checked. Then continue.
+   - `SETTING`: dev-home is set to one active copy, but the sync brought in commits from
+     another. Pass the line on, with its advice to run `/dev-home configure` if another copy is
+     in use, and never change the setting yourself. Then continue.
    - `LEFT`: leave the file alone. Another session may be editing it.
    - `STALE`: nobody has touched the file for 15 minutes. Ask "Commit and push it?". On a yes, run
      `{{PYTHON}} -I {{TOOLS_DIR}}/sync.py --message "sync: <what changed>" "<path>"`.
@@ -240,7 +247,7 @@ Follow "Changing the handoff". While updating:
 - If the handoff doesn't match the template (`{{SKILL_DIR}}/template.md`), bring it in line as
   part of this update: add missing headings, put them in the template's order, and move each
   item from an old section to the one that fits now, such as Backlog or Wiki items into To do, a
-  "Local environment: <name>" section into Environments, or "Needs a live tenant" into Needs a
+  `Local environment: <name>` section into Environments, or "Needs a live tenant" into Needs a
   real system. Ask before removing an item because the project's own files already say it, or
   before moving one into them, such as a lasting decision or trap. To move an item into the
   project's files, show the exact text and where it goes, and edit those files only after a
@@ -253,15 +260,18 @@ Follow "Changing the handoff". While updating:
   new bug, an item to drop, what's next up, and so on. Put each part where it fits, and
   afterwards say where each part went. If a part is unclear, or conflicts with what you found
   this session, ask before committing.
-- For each item that links to a GitHub issue, run
-  `gh issue view <number> --repo <owner>/<repo> --json state,stateReason`, with the number and
-  repo from the link. If `gh` fails, keep the items and say they weren't checked. When an issue
-  is closed:
+- Issue links: in the same turn as the read in step 3 of "Changing the handoff", run
+  `{{PYTHON}} -I {{SKILL_DIR}}/issue_status.py` in the project. It finds every GitHub issue the
+  handoff links to and asks GitHub about all of them at once. It prints one line for each:
+  `OPEN`, `CLOSED` with GitHub's reason in parentheses, or `UNCHECKED` with why, such as `gh`
+  not signed in; or one `OK` line when the handoff links no issues. A `PROBLEM` line means
+  nothing was checked, and says why. Keep the items whose issues are open or weren't checked,
+  and say which weren't checked and why. When an issue is closed:
   - An item filed as that issue (it starts `GitHub issue [#<number>]`): remove it like any
     finished item, and say which ones you removed.
   - Any other item, such as one waiting on another project's issue: keep it. Tell the user that
-    the issue closed, why (its `stateReason`), and what the item says to do next. A close isn't
-    always a fix: a bot may close an inactive issue as not planned.
+    the issue closed, why (the reason in its line), and what the item says to do next. A close
+    isn't always a fix: a bot may close an inactive issue as not planned.
 
 After committing, offer issue candidates only if any qualify (see "Issue candidates"); most
 updates have none. File none without a yes.
@@ -334,8 +344,8 @@ test:
 - It doesn't link to an issue yet, and it isn't marked "Not for a GitHub issue".
 
 Suggest only items from To do or Bugs, and at most three; most updates have none. Ask in one line
-each: "Issue candidate: <section>: <item>. File it, decide later, or no? For later or no, I'll
-mark the item, then commit and push that."
+each: `Issue candidate: <section>: <item>. File it, decide later, or no? For later or no, I'll
+mark the item, then commit and push that.`
 
 - Yes: file it as above. The link replaces any mark.
 - Later: add `(Issue: decide later)` to the end of the item, unless it's there already. The next

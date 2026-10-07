@@ -23,7 +23,7 @@ addopts = ["-n", "auto", "--dist", "loadgroup"]
 # and some of their code inside the test process.
 patch = ["subprocess"]
 branch = true
-include = ["*/shared-skill-scripts/*.py", "*/internal/shared/*.py"]
+include = ["*/shared-skill-scripts/*.py", "*/skills/*/*.py", "*/internal/shared/*.py"]
 parallel = true
 # A test process that runs none of the scripts' code itself collects nothing of its own.
 disable_warnings = ["no-data-collected"]
@@ -32,6 +32,7 @@ disable_warnings = ["no-data-collected"]
 # Each sandbox's generated copy has the same lines as its template, and its copy of
 # internal/shared/ the same lines as this repo's.
 source = ["../../templates/shared-skill-scripts/", "*/.generated/shared-skill-scripts/"]
+skills = ["../../templates/skills/", "*/.generated/skills/"]
 shared = ["../../internal/shared/", "*/tools/internal/shared/"]
 
 [tool.ruff]
@@ -52,6 +53,7 @@ python_version = "3.12"
 files = [
     "tests",
     "../../templates/shared-skill-scripts",
+    "../../templates/skills",
     "../../internal/shared",
     "../../setup.py",
     "../../sync.py",

@@ -24,6 +24,7 @@ from helpers import (
     new_sandbox,
     remove_link,
     remove_sandbox,
+    run_command,
     run_python,
     shared_module,
     write_text,
@@ -109,7 +110,9 @@ def test_writes_this_copys_paths_into_the_commands_and_pre_approvals(box: Sandbo
         f"Bash({tools}/internal/.python/python.exe -I {tools}/internal/.generated/"
         "shared-skill-scripts/prepare.py --skill handoff --stamp "
     )
-    assert re.search(prepare + r"[0-9a-f]{12} handoff environment newer-commits\)", skill)
+    assert re.search(
+        prepare + r"[0-9a-f]{12} --fetch auto handoff environment newer-commits\)", skill
+    )
 
 
 def test_no_skill_starts_powershell(box: Sandbox) -> None:
@@ -850,6 +853,27 @@ def test_configure_what_if_shows_the_change_and_makes_none(
     assert result.has_line(r'^\s+\+\s+"contentCheckHours": 6$'), str(result)
     assert result.has_line(r"^What if: Save this PC's settings"), str(result)
     assert read(settings_kept) == before
+
+
+def test_the_dev_home_skills_configure_commands_work_as_written(
+    box: Sandbox, settings_kept: Path
+) -> None:
+    # Taken word for word from the generated skill: show, preview, then change. A shell drops the
+    # single quotes, so the setting reaches setup as one word.
+    text = read(box.generated / "skills" / "dev-home" / "SKILL.md")
+    configure = f"{box.python.as_posix()} -I {forward(box.tools)}/setup.py --configure"
+    commands = re.findall(rf"`({re.escape(configure)}[^`]*)`", text)
+    assert len(commands) == 3, commands
+    show, preview, change = (c.replace("'<name>=<value>'", "contentCheckHours=6") for c in commands)
+    before = read(settings_kept)
+    shown = run_command(box, show, cwd=box.root)
+    assert shown.code == 0 and shown.has_line(r"^dev-home-tools settings$"), str(shown)
+    previewed = run_command(box, preview, cwd=box.root)
+    assert previewed.has_line(r'^\s+\+\s+"contentCheckHours": 6$'), str(previewed)
+    assert read(settings_kept) == before
+    changed = run_command(box, change, cwd=box.root)
+    assert changed.code == 0, str(changed)
+    assert json.loads(read(settings_kept))["contentCheckHours"] == 6
 
 
 @pytest.mark.parametrize(

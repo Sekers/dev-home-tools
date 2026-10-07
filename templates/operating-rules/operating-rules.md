@@ -15,8 +15,8 @@
   steps that have me approve the exact words first, and even those never name dev-home.
 - Knowledge candidate: only a general finding we checked this session (a test or the docs), or
   a pitfall agents keep hitting in my setup with a checked fix, worth its token cost and naming
-  none of my functions, files, or tenants. Offer "Knowledge candidate: <folder/file>: <what>.
-  Evidence: <what we ran or read>. Add it, commit, and push?" Most sessions have none; don't
+  none of my functions, files, or tenants. Offer `Knowledge candidate: <folder/file>: <what>.
+  Evidence: <what we ran or read>. Add it, commit, and push?` Most sessions have none; don't
   re-offer a no.
 - Findings specific to one project go where that project's AGENTS.md says research goes.
   Anything about a project that shouldn't be public goes in its handoff.

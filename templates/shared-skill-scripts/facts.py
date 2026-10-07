@@ -30,9 +30,10 @@ why, and no facts, and exits 1. Both options are for dev-home-tools' own skills.
 
 prepare.py runs this file's code inside its own process, after a sync that may have brought in a
 newer copy of this file than the prepare.py already running. So keep the names and arguments of
-what prepare.py calls: parse_request, skill_changed, collect, and FactsError. And nothing here
-may change what the whole process shares, such as environment variables or the current folder,
-except in the block that runs only when this file is run as a script.
+what prepare.py calls: parse_request, skill_changed, collect, and FactsError. The handoff skill's
+issue_status.py loads it too, for find_handoff_place, find_program, CONTENT_DIR, and FactsError.
+And nothing here may change what the whole process shares, such as environment variables or the
+current folder, except in the block that runs only when this file is run as a script.
 
 THE HANDOFF TOPIC
 

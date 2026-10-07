@@ -59,8 +59,8 @@ def confirm(question: str) -> bool:
 
 def choose(question: str, default: bool | None = None) -> bool | None:
     """True for yes and False for no. Enter gives the default, shown as the capital letter; with
-    no default, Enter asks again, as any other answer does. None when input ends without an
-    answer."""
+    no default, Enter says to type y or n and asks again, as any other answer does. None when
+    input ends without an answer."""
     hint = "[y/n]" if default is None else "[Y/n]" if default else "[y/N]"
     while True:
         try:
@@ -73,3 +73,5 @@ def choose(question: str, default: bool | None = None) -> bool | None:
             return False
         if not answer.strip() and default is not None:
             return default
+        # Without this, the same question coming back looks as if the answer went unseen.
+        print("Type y or n.", flush=True)

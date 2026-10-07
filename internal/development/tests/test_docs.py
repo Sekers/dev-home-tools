@@ -48,6 +48,54 @@ def lines_of(path: Path) -> list[str]:
     return path.read_text(encoding="utf-8").splitlines()
 
 
+# Raw HTML as CommonMark defines it: an open tag, with any attributes, or a closing tag. GitHub
+# hides it, so <what we ran or read> vanishes from the page. Anything else in angle brackets
+# shows as written, such as <folder/file>, an autolink, or a comment.
+ATTRIBUTE = r"""\s+[A-Za-z_:][A-Za-z0-9_.:-]*(?:\s*=\s*(?:[^\s"'=<>`]+|'[^']*'|"[^"]*"))?"""
+HTML_TAG = re.compile(rf"<[A-Za-z][A-Za-z0-9-]*(?:{ATTRIBUTE})*\s*/?>|</[A-Za-z][A-Za-z0-9-]*\s*>")
+# A code span ends at the next run of exactly as many backticks, which may be on a later line of
+# the same paragraph.
+CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)", re.DOTALL)
+
+
+def html_tags(lines: list[str]) -> list[tuple[int, str]]:
+    """Each piece of text that renders as an HTML tag, with its line number, outside code: fenced
+    blocks, code spans, and a skill's frontmatter, which isn't rendered as Markdown. Lines are
+    taken a paragraph at a time, so a code span can carry on to the next line."""
+    found: list[tuple[int, str]] = []
+    start = 0
+    if lines and lines[0].strip() == "---":
+        start = next((n + 1 for n in range(1, len(lines)) if lines[n].strip() == "---"), 0)
+    paragraph: list[str] = []
+    first = start
+    in_code = False
+
+    def check(text: str, at: int) -> None:
+        # Blank out code spans and escaped brackets, keeping line breaks, so line numbers hold.
+        text = CODE_SPAN.sub(lambda m: re.sub(r"[^\n]", " ", m.group()), text.replace("\\<", "  "))
+        for match in HTML_TAG.finditer(text):
+            found.append((at + text[: match.start()].count("\n") + 1, match.group()))
+
+    for number in range(start, len(lines)):
+        line = lines[number]
+        if re.match(r"\s*(```|~~~)", line):
+            check("\n".join(paragraph), first)
+            paragraph = []
+            in_code = not in_code
+            continue
+        if in_code:
+            continue
+        if not line.strip():
+            check("\n".join(paragraph), first)
+            paragraph = []
+            continue
+        if not paragraph:
+            first = number
+        paragraph.append(line)
+    check("\n".join(paragraph), first)
+    return found
+
+
 def pages() -> list[Path]:
     return [REPO_ROOT / "README.md", *sorted(DOCS.rglob("*.md"))]
 
@@ -76,6 +124,34 @@ def test_the_link_search_finds_each_kind_and_nothing_in_code_or_on_the_web() -> 
         "A link with [`code` as its text](c.md).",
     ]
     assert markdown_links(sample) == ["docs/a.md", "#part-two", "../b.md#top", "c.md"]
+
+
+def test_the_tag_search_follows_commonmark_and_skips_code() -> None:
+    sample = [
+        "---",
+        "description: <in frontmatter>",
+        "---",
+        "Offer <what we ran or read>, and </b> closes one.",
+        "Not <folder/file>, <https://example.com>, <a@example.com>, <!-- a comment -->, or \\<x>.",
+        "Not `<in a span>`, or `a span that goes on",
+        "to the next line <name>`.",
+        "```",
+        "<fenced>",
+        "```",
+        "And <br/> on line 11.",
+    ]
+    assert html_tags(sample) == [(4, "<what we ran or read>"), (4, "</b>"), (11, "<br/>")]
+
+
+def test_no_text_renders_as_an_html_tag() -> None:
+    # GitHub would hide it. The handoff template is left out: agents copy it into new handoffs,
+    # where code formatting could end up around text that isn't code.
+    template = REPO_ROOT / "templates" / "skills" / "handoff" / "template.md"
+    files = pages() + sorted(
+        path for path in (REPO_ROOT / "templates").rglob("*.md") if path != template
+    )
+    found = [f"{name(path)}:{n}: {tag}" for path in files for n, tag in html_tags(lines_of(path))]
+    assert found == []
 
 
 def test_every_link_points_to_a_file_that_exists() -> None:
