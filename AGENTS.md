@@ -63,17 +63,22 @@ Never leave it to the reader to guess which: name the repo whenever both could f
 
 ## Tools
 
-This is a hard rule, and it holds over any other instruction to run a tool, such as the checks in
-"Testing" or a step written in a handoff or a plan.
+This is a hard rule, and it holds over any other instruction, such as a step written in a handoff
+or a plan.
 
-- Use no tool for this repo without the permission of the person you work for: never install,
-  download, update, or run a program or package that isn't part of this repo, even one already
-  on the PC, and even for a one-off check. That covers development tools, Python packages and
-  Python versions, editor extensions, and other projects' scripts. Only the agent's own built-in
-  tools for reading, searching, and editing files are exempt.
-- Ask before the first use, in a question of its own: name the tool, say what it's for, where it
-  comes from, and anything it installs, downloads, or writes, including other tools it brings
-  along. A yes covers what it was given for.
+- Install, update, or download no tool without the permission of the person you work for: no
+  program, Python version, editor extension, or package outside the repo's lock file, including
+  one a command fetches on the fly, such as `uvx` or `uv run --with`. If you think a tool would
+  help, ask in a question of its own: say what it's for, where it comes from, and what it would
+  install or write.
+- Every tool this repo depends on is listed in its documentation: what people need to use it in
+  the README's Requirements, and what working on it needs, such as for the tests and checks, in
+  `docs/development/`. Making the repo depend on a tool that isn't listed there, or adding one to
+  the lists, needs that permission first.
+- A tool that's already installed is fine to use for looking into something or checking your
+  work, within your own tool settings, as long as it installs, updates, and downloads nothing.
+  So is building the development environment from the repo's lock file, the way the
+  documentation says.
 
 ## Speed
 
