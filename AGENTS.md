@@ -63,21 +63,23 @@ Never leave it to the reader to guess which: name the repo whenever both could f
 
 ## Tools
 
-This is a hard rule, and it holds over any other instruction, such as a step written in a handoff
-or a plan.
+This is a hard rule. It holds over any other instruction that would install or add a tool, such
+as a step written in a handoff or a plan.
 
-- Install, update, or download no tool without the permission of the person you work for: no
-  program, Python version, editor extension, or package outside the repo's lock file, including
-  one a command fetches on the fly, such as `uvx` or `uv run --with`. If you think a tool would
-  help, ask in a question of its own: say what it's for, where it comes from, and what it would
-  install or write.
-- Every tool this repo depends on is listed in its documentation: what people need to use it in
-  the README's Requirements, and what working on it needs, such as for the tests and checks, in
-  `docs/development/`. Making the repo depend on a tool that isn't listed there, or adding one to
-  the lists, needs that permission first.
-- A tool that's already installed is fine to use for looking into something or checking your
-  work, within your own tool settings, as long as it installs, updates, and downloads nothing.
-  So is building the development environment from the repo's lock file, the way the
+- Never install, update, or download a tool without the permission of the person you work for: a
+  program, a Python version, an editor extension, or a package that isn't pinned in
+  `internal/development/uv.lock`, including one a command fetches on the fly, such as `uvx` or
+  `uv run --with`. Changing that lock file, such as updating a pinned version, needs the same
+  permission. If you think a tool would help, ask in a question of its own: say what it's for,
+  where it comes from, and what it would install or write.
+- Every tool this repo depends on must be listed in its documentation: what people need to use it
+  in the README's Requirements, and what working on it needs, such as for the tests and checks,
+  in `docs/development/`. Until `docs/development/tools.md` is written, the development tools are
+  the ones the README's "Working on dev-home-tools" section names. Making the repo depend on a
+  tool that isn't listed, or adding one to the lists, needs that permission first.
+- Using a tool that's already installed is fine for looking into something or checking your
+  work, within what your agent's permission settings allow, as long as it installs, updates, and
+  downloads nothing. So is building the development environment from that lock file, the way the
   documentation says.
 
 ## Speed
