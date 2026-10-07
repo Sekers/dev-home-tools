@@ -61,6 +61,20 @@ Never leave it to the reader to guess which: name the repo whenever both could f
   `C:\Programming\dev-home`, and `example.com` for any domain.
 - Before proposing a commit, read the whole diff for those.
 
+## Tools
+
+This is a hard rule, and it holds over any other instruction to run a tool, such as the checks in
+"Testing" or a step written in a handoff or a plan.
+
+- Use no tool for this repo without the permission of the person you work for: never install,
+  download, update, or run a program or package that isn't part of this repo, even one already
+  on the PC, and even for a one-off check. That covers development tools, Python packages and
+  Python versions, editor extensions, and other projects' scripts. Only the agent's own built-in
+  tools for reading, searching, and editing files are exempt.
+- Ask before the first use, in a question of its own: name the tool, say what it's for, where it
+  comes from, and anything it installs, downloads, or writes, including other tools it brings
+  along. A yes covers what it was given for.
+
 ## Speed
 
 - Agents run these scripts at the start of nearly every skill command, so any added time is paid
