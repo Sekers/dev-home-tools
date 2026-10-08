@@ -132,10 +132,10 @@ what to add by hand instead.
 Restart Claude Code and Codex, so they load the skills and rules. Run setup again, and repeat
 until it ends with "All checks passed." Then you can delete the backups.
 
-After that, you rarely need to run setup yourself. Syncs run it quietly, so changes to the
-skills, and skills you add on another PC, reach this one. The one exception is a skill you've
-just created on this PC: it's linked at the next `/handoff`, or right away when you run setup
-with `--quiet` (see [Your own rules and skills](#your-own-rules-and-skills)).
+Syncs also run setup quietly, so changes to the skills, and skills you add on another PC, reach
+this one. The one exception is a skill you've just created on this PC: it's linked at the next
+`/handoff`, or right away when you run setup with `--quiet` (see
+[Your own rules and skills](#your-own-rules-and-skills)).
 
 Your answers are saved in `local-settings.json` in your dev-home-tools folder, next to
 `setup.py`. To change one later, run setup with `--configure`:
