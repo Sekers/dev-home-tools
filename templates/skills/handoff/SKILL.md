@@ -350,13 +350,14 @@ test:
 - It doesn't link to an issue yet, and it isn't marked "Not for a GitHub issue".
 
 Suggest only items from To do or Bugs, and at most three; most updates have none. Ask in one line
-each: `Issue candidate: <section>: <item>. File it, skip (no reminder), remind me next session
-(or in N days), or no (never ask again)? I'll mark the item to match your answer, then commit and
-push any change.`
+each: `Issue candidate: <section>: <item>. Create a GitHub issue for it, skip (no reminder), remind
+me next session (or in N days), or no (never ask again)? The item stays in the handoff either way,
+as a link to the issue if you create one. I'll mark it to match your answer, then commit and push
+any change.`
 
 Each answer replaces any mark the item had, at the end of the item:
 
-- File it: file it as above. The link replaces the mark.
+- Create a GitHub issue: file it as above. The link replaces the mark.
 - Skip: no mark. The item comes up again only if a later session changes it.
 - Remind me next session: `(Issue: remind me)`. The first update in a later session suggests it
   again, even if that session didn't change it.

@@ -50,12 +50,13 @@ is your go-ahead. Some examples:
   environment's state from another.
 - **Issues.** After an update, the agent may suggest up to three items as issues, only when
   filing one really makes sense: bugs, feature requests, and concrete tasks, never a decision
-  still to make. For each, you can file it, skip it (no reminder), have it suggested again next
-  session or in a number of days, or say no (never ask again). Skip leaves no trace, so the item
-  comes up again only if a later session changes it. A reminder or a no marks the item, and the
-  mark is committed and pushed; the question says so. No item is suggested twice in one session.
-  Filing always shows you the draft and waits for your yes. Issues work in Claude Code only, for
-  projects on GitHub, with `gh` signed in.
+  still to make. For each, you can create a GitHub issue for it, skip it (no reminder), have it
+  suggested again next session or in a number of days, or say no (never ask again). Whatever you
+  answer, the item stays in the handoff; a new issue turns it into a link to the issue. Skip
+  leaves no trace, so the item comes up again only if a later session changes it. A reminder or
+  a no marks the item, and the mark is committed and pushed; the question says so. No item is
+  suggested twice in one session. Filing always shows you the draft and waits for your yes.
+  Issues work in Claude Code only, for projects on GitHub, with `gh` signed in.
 - **In Codex, handoff commands edit but don't commit.** On Windows, Codex runs even the commands
   you approve inside its sandbox, where git and `gh` can't use your GitHub credentials. So the
   next `/handoff` in Claude Code lists the file, and offers to commit and push it once nobody has

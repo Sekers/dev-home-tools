@@ -1201,12 +1201,13 @@ updates, and copied skills. Two terms:
 
 | Answer | Remembered | Asked again |
 | --- | --- | --- |
-| Yes, in the offer's own words, such as "File it" | It's done | Never, for that item |
+| Yes, in the offer's own words, such as "Create a GitHub issue for it" | It's done | Never, for that item |
 | Skip (no reminder) | Nothing | Not in this session; later only when its trigger fires again |
 | Remind me next session | Yes | The first time it comes up in a later session |
 | Remind me in N days | Yes, with the date | The first time it comes up on or after that date |
 | No (never ask again) | Yes | Never, for that item; for an item with versions, a newer version is a new offer |
 
+- The yes answer says what it does and where, never only a verb such as "File it".
 - Nothing is asked twice in one session, whatever the answer. Saying nothing changes nothing, not
   even an earlier answer: a reminder that's due stays due, so a later session asks again. Skip,
   by contrast, ends a reminder.

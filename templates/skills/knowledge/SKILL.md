@@ -96,11 +96,11 @@ If you can't fill in the evidence from this session, don't offer it.
 
 Docs first: when the finding is about a project whose docs the user can change, such as their
 own or one they contribute to, and it's a normal docs item, end the line with
-`It may belong in <project>'s docs instead. Docs, or add it here, commit, and push?` in place of
-`Add it, commit, and push?`. A minor note that would clutter the docs and confuse readers goes
-here without asking. If the user picks the docs, edit them only in a session in that project,
-after a yes to the exact text; this skill never commits them. In any other session, tell the
-user, so it can be done there.
+`It may belong in <project>'s docs instead. Docs, or add it to the knowledge base, commit, and push?`
+in place of `Add it, commit, and push?`. A minor note that would clutter the docs and confuse
+readers goes in the knowledge base without asking. If the user picks the docs, edit them only in
+a session in that project, after a yes to the exact text; this skill never commits them. In any
+other session, tell the user, so it can be done there.
 
 ## When to change, commit, and push
 
@@ -167,10 +167,11 @@ Commits in dev-home are unsigned on purpose: setup turns signing off in that rep
 config. That is not bypassing signing, and the project repos keep signing as usual.
 
 In Codex: edit only, so leave "commit, and push" out of your questions: a draft ends with "Save
-this?", and a candidate with "Add it?", or "Docs, or add it here?". Skip the sync and every git
-step, and tell the user that Claude will commit and push the change: the next sync in Claude,
-such as `/dev-home sync`, lists the files, and offers to commit and push them once they have
-been untouched for 15 minutes. Mention that the local copy may be behind another PC.
+this?", and a candidate with "Add it?", or "Docs, or add it to the knowledge base?". Skip the
+sync and every git step, and tell the user that Claude will commit and push the change: the next
+sync in Claude, such as `/dev-home sync`, lists the files, and offers to commit and push them
+once they have been untouched for 15 minutes. Mention that the local copy may be behind another
+PC.
 
 Never store secrets, credentials, tenant or account IDs, or personal information about anyone
 other than the user, such as customer or colleague data. Never copy knowledge-base text or

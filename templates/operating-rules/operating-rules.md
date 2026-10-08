@@ -19,7 +19,8 @@
   names no tenant or private detail. Offer `Knowledge candidate: <folder/file>: <what>.
   Evidence: <what we ran or read>. Add it, commit, and push?` For a normal docs item of a project
   whose docs I can change, replace that last question with `It may belong in <project>'s docs
-  instead. Docs, or add it here, commit, and push?` Most sessions have none; don't re-offer a no.
+  instead. Docs, or add it to the knowledge base, commit, and push?` Most sessions have none;
+  don't re-offer a no.
 - Findings that only help work on one project's own code go where that project's AGENTS.md says
   research goes. Anything about a project that shouldn't be public goes in its handoff.
 - My global rules in `{{CONTENT_DIR}}/global-rules/global-rules.md` add to these, and win where
