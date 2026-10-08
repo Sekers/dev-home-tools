@@ -55,6 +55,9 @@ Never leave it to the reader to guess which: name the repo whenever both could f
   versions read and document, and add no workaround or fallback for an older version. Check a
   setting or behavior in the tool's current documentation, or in its source when the
   documentation doesn't say.
+- Every question that offers something a person can take or turn down uses the answers in
+  `docs/development/decisions.md`'s "Offers use the same answers". To depart from them, ask the
+  person you work for first, then add the departure and its reason to that entry.
 
 ## Privacy
 
