@@ -11,6 +11,9 @@ dependencies = []
 
 [tool.uv]
 package = false
+# Use a Python already installed on the PC, never one of uv's own, and never download one.
+python-preference = "only-system"
+python-downloads = "never"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
