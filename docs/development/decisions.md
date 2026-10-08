@@ -944,3 +944,244 @@ with each host. Its lines can be tested with a faked `gh`.
 
 **Look again if:** reads should show closed issues too, which would put a network call on every
 read.
+
+## Setup offers recommended settings for Claude Code and Codex
+
+**Decision:** setup offers settings that dev-home-tools recommends for the tools, from a list in
+`templates/recommended-settings/recommended-settings.json`. Each entry has an id that is never
+reused, what it does, why it's recommended, and the setting for each tool that has one. The first
+two are for Claude Code: `"attribution": false` (id `attribution-off`), which leaves commits and
+pull requests without a line naming the tool, and `"feedbackSurveyRate": 0` (id
+`feedback-survey-off`), which stops the session quality survey and its request to upload the
+session's transcript.
+
+- Setup offers one only for a Claude folder whose `settings.json` lacks that setting. A value
+  already there, whatever it is, is the person's own choice, and setup never asks about it or
+  changes it.
+- Answers are saved per PC and per Claude folder, in `local-settings.json` under
+  `recommendedSettings`, such as `{"~/.claude": {"attribution-off": true}}`. A no is never asked
+  again. An answer is saved only once its change is written, so a run that stops partway records
+  nothing.
+- A settings file gets one diff for everything setup changes in it, the required lines and the
+  chosen recommendations together, with one yes and one backup.
+
+**Why:** these settings suit most people, but each changes the person's own file, so each needs
+their yes on each PC. Codex has neither: its commit and pull request attribution is a setting of
+the ChatGPT workspace, which Codex asks OpenAI for, and it has no session survey (checked in
+Codex's source at rust-v0.161.0, 2026-10-07). `"attribution": false` needs Claude Code 2.1.281
+or later, which "Only the latest versions of Claude Code and Codex" allows. Answers are per
+folder because a work account can need different settings, and a saved yes never causes a later
+write by itself, so setup never undoes an edit the person made.
+
+**Options set aside:**
+
+- Answers shared in `dev-home.json`: every PC still needs its own yes to change its files, so
+  sharing saves only a question, and adds a second record that can disagree with what a PC's
+  answer was. Recommendations tied to what a PC has installed don't fit a shared answer at all.
+- One answer for every Claude folder on a PC: a folder set up later would be changed without
+  being asked.
+- The three-key form of `attribution` (`commit`, `pr`, and `sessionUrl`), which only older
+  versions of Claude Code need.
+- Turning off telemetry: in Claude Code it also stops feature flags, which can make Remote
+  Control unavailable, so it's not a safe default for everyone.
+
+**Look again if:** Codex gains a local setting for attribution or a survey, or Claude Code's
+settings start syncing between machines.
+
+## One prompt for every optional list
+
+**Decision:** every list of optional items setup offers, recommended settings and skills now and
+later lists such as example rules, is asked with one prompt: **All**, **All recommended** (the
+default, which Enter takes), **None**, or **Ask for each**, where each item's question defaults to
+whether it's recommended (`[Y/n]` or `[y/N]`). All is left out when it would do the same as All
+recommended. The prompt covers only the items not answered yet, and chat offers the same four
+answers.
+
+**Why:** one prompt to learn, however long the lists grow, and each new list costs only its
+catalog. Someone in a hurry presses Enter, and someone careful goes through each. With every
+default matching the recommendation, pressing Enter can never record a choice dev-home-tools
+doesn't recommend.
+
+**Options set aside:** a question for each item (a long run of questions as the lists grow); all
+or nothing (no way to pick); and no default (a hurried Enter would only ask again).
+
+**Look again if:** a list needs answers other than yes or no for each item.
+
+## A run of setup by hand asks what's unanswered, then shows every setting
+
+**Decision:** every run of `setup.py` at a console goes in this order:
+
+1. dev-home first: its folder, then, when it's missing, clone or create it, with the repo's name,
+   after checking that `gh` is there and signed in. If that fails, setup stops and saves nothing.
+2. The questions not answered yet: extra Claude folders and Codex homes, automatic updates, the
+   copies question, skills, recommended settings, and each settings file's diff. The copies
+   question is always asked on a PC's first setup, with `dev-home.json`'s answer as the default,
+   since adding a PC is when that answer most often changes. Wherever a saved answer exists, a
+   question shows it as the default.
+3. The settings list that `--configure` shows, with skills and recommended settings added, so any
+   setting can be changed: a number for one, `a` for all, and Enter to go on.
+4. The work, without stopping: save this PC's answers, commit `dev-home.json` if it changed, then
+   the Python link, the generated files, the skill links, the rules, and the settings files. Each
+   settings file is read again first; if it changed since its diff was shown, setup shows the new
+   diff and asks again.
+
+Setup also detects which tools a PC has, Claude Code when `~/.claude` exists and Codex when
+`~/.codex` does, instead of always setting up `~/.claude`.
+
+**Why:** running setup by hand is a normal way to use dev-home-tools, so it should offer every
+setting, not only the unanswered ones. Questions first and the work after is what people expect
+from a setup program, and keeps every question in one place as the lists grow. dev-home comes
+first because later steps need it, and only the questions the clone needs come before it, so a
+clone that can't work stops setup after one or two answers. Committing `dev-home.json` after the
+questions, not between them, means nothing has been pushed until the work starts, so Ctrl+C
+during the questions leaves everything as it was.
+
+This changes two entries above: the menu from "setup.py --configure changes every setting" becomes
+part of every run by hand, and the copies question from "A dev-home has one active copy, or
+several" is asked on every PC's first setup.
+
+**Options set aside:**
+
+- Asking at each step, as before: questions mixed into the status lines, easy to miss.
+- Every question again on every run, with the current answers as defaults: a long run of Enters
+  as the lists grow.
+- Every question before the clone, checked afterward: the copies question would be asked blind on
+  the usual way to add a PC, and personal skills can't be listed before the clone.
+- Skipping the copies question when `dev-home.json` answers it: moving to a new PC and retiring
+  the old one would leave it at several copies for good.
+
+**Look again if:** a question comes to depend on work that setup does after the questions.
+
+## Setup installs skills per PC, and the tools show or hide them
+
+**Decision:** setup decides which skills are installed on each PC, meaning linked into each Claude
+folder's `skills/` and into `~/.agents/skills` for Codex. Claude Code's and Codex's own menus
+decide whether an installed skill is shown in an account or a project.
+
+- Each PC saves a yes or no for each skill in `local-settings.json` under `skills`. A no removes
+  setup's links for it, and its lines leave the generated always-on rules. Nothing is deleted.
+- `dev-home` is always installed. `handoff` and `knowledge` are recommended because the starter
+  dev-home makes their folders, so a change to the starter means looking at this set again.
+- The person's own skills, from `skills/` in dev-home, work like recommended skills: installed by
+  default, in the same list and prompt, and asked about once on each PC.
+- A skill can carry a `dev-home-skill.json` in its folder, with `recommended`, `alwaysInstalled`,
+  and `requires` (`tools`, `programs`, and `os`). A skill whose requirements a PC doesn't meet
+  isn't installed there, even with a yes, and setup says why. For the person's own skills the
+  file is optional: without it, a skill is recommended and needs nothing.
+- `/dev-home skills` shows each skill's state. Codex records a skill turned off by its real path,
+  inside `internal/.generated/skills/`, so that path stays fixed, and a test checks it.
+
+**Why:** checked on 2026-10-07 against Claude Code 2.1.293's docs and Codex's source at
+rust-v0.161.0:
+
+- Both tools have their own switch, saved on each PC and never synced. Claude Code's `/skills`
+  menu writes `skillOverrides` to the current project's `.claude/settings.local.json`, and for a
+  whole account `skillOverrides` goes in that account's `settings.json`. Codex's `/skills` writes
+  `[[skills.config]]` entries to that Codex home's `config.toml`, and reads none from a project.
+- So dev-home-tools adds what the tools lack, a choice of what a PC has at all, and leaves showing
+  and hiding to them. The two answer different questions, so they can't disagree, and
+  dev-home-tools never writes the tools' switches.
+- Some planned skills suit only some setups, such as one for each work tracker, and some can't
+  work everywhere: ones that use Claude Code-only features, need a program such as `gh`, or work
+  on one OS. Only an install step keeps those off a PC.
+- Per PC, because the tools' own choices are per PC, and a skill for one setup belongs on that PC.
+- Both tools list every installed skill's name and description in every session, within 1% of the
+  context window in Claude Code and 2% in Codex, so a skill a PC doesn't use costs tokens there.
+- A file in the skill's folder rather than its frontmatter: dev-home-tools' skills and the
+  person's own work the same way, setup reads JSON with Python's standard library, and a skill
+  copied from elsewhere will need a file of its own anyway, to record where it came from.
+
+This changes "/dev-home skills lists the skills dev-home sets up", whose list now shows each
+skill's state.
+
+**Options set aside:**
+
+- The tools' switches only: a skill dev-home-tools doesn't recommend would be linked and listed on
+  every PC until turned off there.
+- dev-home-tools' own on and off, ignoring the tools': two switches with the same meaning, which
+  could disagree.
+- Choices shared in `dev-home.json`, or per PC with shared defaults: a skill for one setup would
+  follow to every PC, at the cost of commits and merge conflicts.
+- `metadata` in the frontmatter: setup would need to read YAML without a library, and marking a
+  skill copied from someone else would edit their `SKILL.md`.
+- The person's own skills always installed: one made for one PC could only be hidden per tool and
+  per account.
+
+**Look again if:** people find themselves making the same choices on every PC, when a one-time
+copy of another PC's choices could help, or a tool starts syncing skill choices.
+
+## New items reach the person at a terminal, or in a NEW line
+
+**Decision:** an update or a sync can bring new items: a dev-home-tools skill or recommended
+setting, or a personal skill made on another PC.
+
+- When `update.py` runs at a console, the setup it runs afterward does too, and asks about the new
+  items right then.
+- A quiet sync installs a new recommended skill or personal skill, and nothing else. From then on,
+  every sync prints one line with the status word `NEW`, summing up what's new and what's waiting,
+  until the person answers, None included. The exit code stays 0. Skills pass the line on once
+  per session, as a line of its own.
+- One answer covers a batch, with the shared prompt's four choices, in chat or at the next run of
+  setup by hand, whichever comes first. A recommended setting still shows its diff and needs a
+  yes.
+- Quiet runs write nothing for this.
+
+**Why:** a line printed once is easy to lose in an agent's reply, and the agent decides what to
+pass on, while a new skill is already at work in every session. Repeating it until answered, once
+per session, means nothing is missed, and one answer, even no, ends it. `PROBLEM` would say
+something is broken, and set the exit code. When the person is at a terminal, asking right then
+is clearest.
+
+**Options set aside:**
+
+- One line, the first time only: easily lost, and a new skill would be at work before the person
+  heard of it.
+- Saving that the line was shown: quiet runs would start writing `local-settings.json`.
+- Nothing in syncs, only at the next run by hand: weeks could pass.
+- A line for each item: a batch, such as after months without updating or from a set of copied
+  skills, would flood the reply.
+
+**Look again if:** the reminders come to feel like noise, such as many new personal skills a week
+across several PCs.
+
+## Setup finds extra Codex homes as it finds extra Claude folders
+
+**Decision:** setup finds each `~/.codex-*` folder that holds a Codex `config.toml` or
+`auth.json`, and the folder `CODEX_HOME` names when setup runs from a Codex session. It asks once
+about each, and saves the answers in `codexHomes` and `declinedCodexHomes` in
+`local-settings.json`. A yes gets that home what `~/.codex` gets: the always-on rules in its
+`AGENTS.md`, and dev-home in its `config.toml`. A home elsewhere can be added by its path.
+
+**Why:** Codex reads its folder from `CODEX_HOME`, which can point anywhere, and each home has its
+own `config.toml`, `AGENTS.md`, and sign-in. Every home on a PC shares `~/.agents/skills` (Codex's
+source at rust-v0.161.0), so a second home already sees dev-home-tools' skills, but without the
+rules they depend on, and with dev-home's writes blocked by Codex's sandbox. Half set up is worse
+than not set up. Finding and asking the same way as for Claude folders keeps one rule for both,
+and listing `~/.codex-*` costs about what listing `~/.claude-*` does.
+
+**Options set aside:** adding homes by path only (most people would never learn the option
+exists), and supporting `~/.codex` only.
+
+**Look again if:** OpenAI adopts a naming convention for extra homes, or Codex's desktop app or
+IDE extension turns out not to honor `CODEX_HOME`, which hasn't been checked.
+
+## --configure applies a recommended setting after a yes in chat
+
+**Decision:** `setup.py --configure` can apply a recommended setting to a tool's settings file,
+not only change dev-home-tools' own settings. With `--what-if`, it prints the diff for each file
+and a fingerprint of that preview. The agent shows it, the person says yes in chat, and the agent
+runs the same command with the fingerprint. Setup writes only if the files still match what was
+shown, with a backup as usual. Only values from the recommended-settings list can be applied this
+way, never an arbitrary key, and the `dev-home` skill keeps pre-approving
+`setup.py --configure *`, as the skills pre-approve their commits.
+
+**Why:** chat is where most later questions reach people, between runs of setup by hand. The
+fingerprint makes a yes in chat as exact as a typed yes, as `update.py` pulls exactly the commit
+it showed. If Claude Code changed the file in between, such as through `/config`, nothing is
+written.
+
+**Options set aside:** the console only (every later recommendation would need a terminal), and
+chat without the fingerprint (a changed file could be written with something the person didn't
+see).
+
+**Look again if:** an agent's tool can show a diff and take the yes itself.
