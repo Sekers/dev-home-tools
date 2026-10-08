@@ -49,6 +49,12 @@ Never leave it to the reader to guess which: name the repo whenever both could f
   forward, keeps an old path working, or forwards an old script to a new one. When a change
   needs something done on each PC that's already set up, say so, so it gets done there by hand.
   `docs/development/decisions.md` says why, and when that changes.
+- Only the latest versions of Claude Code and Codex, in every current form that reads what
+  dev-home-tools sets up: their CLIs, desktop apps, and editor extensions and integrations
+  (VS Code, JetBrains IDEs, and others), and Anthropic's Agent SDK. Build on what the latest
+  versions read and document, and add no workaround or fallback for an older version. Check a
+  setting or behavior in the tool's current documentation, or in its source when the
+  documentation doesn't say.
 
 ## Privacy
 
