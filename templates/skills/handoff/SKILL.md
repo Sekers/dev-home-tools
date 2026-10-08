@@ -299,7 +299,7 @@ Setting or clearing Next up follows "Changing the handoff", changes nothing else
 ## GitHub issues
 
 `/handoff issue <item>` files a handoff item as an issue in the project's GitHub repo: a bug, a
-feature, a docs task, a design question, or anything else. Name the item by section and number,
+feature, a docs task, or anything else the user names. Name the item by section and number,
 such as `Bugs 1`, or describe it. Text that isn't in the handoff yet works too. If more than one
 item matches, ask which. File one issue per item unless the user asks to combine them. Treat the
 repo as public even if it isn't.
@@ -338,7 +338,11 @@ After an update, suggest filing an item only when it really makes sense. It must
 test:
 
 - This session added or changed it, or it's marked "Issue: decide later".
-- It's a concrete bug, feature, or task that someone outside the project would understand.
+- It's a bug, a feature request, or a concrete task someone could pick up and do, and someone
+  outside the project would understand it. A decision still to make never qualifies: an item
+  that starts "Decide whether" or similar, even after a prefix such as "README:" (see To do in
+  "Sections"). An issue would split one decision across two places. A decision already made but
+  not built yet is a task, so it can qualify.
 - It can be written without anything private.
 - It's likely to stay open beyond the next session or two.
 - It doesn't link to an issue yet, and it isn't marked "Not for a GitHub issue".
@@ -360,7 +364,9 @@ mark the item, then commit and push that.`
 Mark every item answered later or no, then commit once, as in "Changing the handoff".
 
 `/handoff issue` with nothing after it lists every item that qualifies by the tests and sections
-above, ignoring only the first test, and asks which to file.
+above, ignoring only the first test, and asks which to file. End the list by saying that
+decisions still to make aren't listed, and that `/handoff issue <item>` files one if the user
+names it.
 
 ## In Codex
 

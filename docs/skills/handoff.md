@@ -49,7 +49,8 @@ is your go-ahead. Some examples:
   report, output from there, direct inspection, or a project-wide change. It never infers one
   environment's state from another.
 - **Issues.** After an update, the agent may suggest up to three items as issues, only when
-  filing one really makes sense, and asks whether to file each, decide later, or not. Later marks
+  filing one really makes sense: bugs, feature requests, and concrete tasks, never a decision
+  still to make. It asks whether to file each, decide later, or not. Later marks
   the item so the next update asks again; no marks it so it's never suggested again. Either mark
   is committed and pushed, and the question says so. Filing always shows you the draft and waits
   for your yes. Issues work in Claude Code only, for projects on GitHub, with `gh` signed in.
