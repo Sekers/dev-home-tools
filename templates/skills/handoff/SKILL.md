@@ -337,7 +337,9 @@ the handoff, add the link where it fits.
 After an update, suggest filing an item only when it really makes sense. It must pass every
 test:
 
-- This session added or changed it, or it's marked "Issue: decide later".
+- This session added or changed it, or it carries a reminder that's due: `(Issue: remind me)`,
+  or `(Issue: remind me from <date>)` with that date today or earlier.
+- This session hasn't suggested it already.
 - It's a bug, a feature request, or a concrete task someone could pick up and do, and someone
   outside the project would understand it. A decision still to make never qualifies: an item
   that starts "Decide whether" or similar, even after a prefix such as "README:" (see To do in
@@ -348,23 +350,27 @@ test:
 - It doesn't link to an issue yet, and it isn't marked "Not for a GitHub issue".
 
 Suggest only items from To do or Bugs, and at most three; most updates have none. Ask in one line
-each: `Issue candidate: <section>: <item>. File it, decide later, or no? For later or no, I'll
-mark the item, then commit and push that.`
+each: `Issue candidate: <section>: <item>. File it, skip (no reminder), remind me next session
+(or in N days), or no (never ask again)? I'll mark the item to match your answer, then commit and
+push any change.`
 
-- Yes: file it as above. The link replaces any mark.
-- Later: add `(Issue: decide later)` to the end of the item, unless it's there already. The next
-  update suggests it again, even if that session didn't change it, and the answer then replaces
-  the mark.
-- No: add `(Not for a GitHub issue: <reason>)` to the end of the item, with the user's reason,
-  or `(Not for a GitHub issue)` if they gave none, in place of any "decide later" mark. The mark
-  records the user's decision: never suggest a marked item again. `/handoff issue` can still
-  file it, and the link replaces the mark.
-- No answer: change nothing.
+Each answer replaces any mark the item had, at the end of the item:
 
-Mark every item answered later or no, then commit once, as in "Changing the handoff".
+- File it: file it as above. The link replaces the mark.
+- Skip: no mark. The item comes up again only if a later session changes it.
+- Remind me next session: `(Issue: remind me)`. The first update in a later session suggests it
+  again, even if that session didn't change it.
+- Remind me in N days: `(Issue: remind me from <date>)`, with today's date plus N days as
+  YYYY-MM-DD. The first update on or after that date suggests it again.
+- No: `(Not for a GitHub issue: <reason>)`, with the user's reason, or `(Not for a GitHub issue)`
+  if they gave none. Never suggest a marked item again; `/handoff issue` can still file it, and
+  the link replaces the mark.
+
+No answer changes nothing, so a due reminder stays, and a later session asks again. Make every
+mark the answers call for, then commit once, as in "Changing the handoff".
 
 `/handoff issue` with nothing after it lists every item that qualifies by the tests and sections
-above, ignoring only the first test, and asks which to file. End the list by saying that
+above, ignoring the first two tests, and asks which to file. End the list by saying that
 decisions still to make aren't listed, and that `/handoff issue <item>` files one if the user
 names it.
 

@@ -1207,7 +1207,9 @@ updates, and copied skills. Two terms:
 | Remind me in N days | Yes, with the date | The first time it comes up on or after that date |
 | No (never ask again) | Yes | Never, for that item; for an item with versions, a newer version is a new offer |
 
-- Nothing is asked twice in one session, whatever the answer. Saying nothing counts as skip.
+- Nothing is asked twice in one session, whatever the answer. Saying nothing changes nothing, not
+  even an earlier answer: a reminder that's due stays due, so a later session asks again. Skip,
+  by contrast, ends a reminder.
 - A list of items of one type adds All, All recommended (when items have recommendations),
   None, and Ask for each, which asks the answers above for each item. Skip and the reminders
   can also answer the whole list. Items of different types are never in one list: each type
