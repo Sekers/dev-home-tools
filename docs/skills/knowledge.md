@@ -14,7 +14,10 @@ the skill itself: [`SKILL.md`](../../templates/skills/knowledge/SKILL.md).
 - They offer a "Knowledge candidate", with its evidence, only for a finding checked in that
   session, or a pitfall agents keep hitting. Most sessions have none. The offer ends "Add it,
   commit, and push?", and nothing is added without your yes.
-- Anything about one project stays out of the knowledge base.
+- A note has to help any project that uses the same tool, library, or service, whoever makes it,
+  your own projects included. What only helps work on one project's own code stays in that
+  project. When a finding is a normal docs item for a project whose docs you can change, the
+  offer asks whether it goes there instead.
 - Commits cover only the knowledge base. If the agent offers to fix a skill or an instructions
   file instead, it shows you the text first and never commits that file: the rules that cover
   that file decide that, meaning the skill that looks after it, if there is one, that repo's own

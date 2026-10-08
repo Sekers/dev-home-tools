@@ -1,6 +1,6 @@
 ---
 name: knowledge
-description: Private general knowledge base for coding and AI work (languages, tools, platforms, and AI agents such as Claude Code and Codex), kept in the private dev-home repo. Check it before researching or testing a general question about these, or asking the user to test one, even partway through other work. Also use when the user runs /knowledge, asks to look something up in or add something to the knowledge base, or when a hard-won general finding comes up during work.
+description: Private general knowledge base for coding and AI work (languages, tools, libraries, platforms, and AI agents such as Claude Code and Codex), kept in the private dev-home repo. Check it before researching or testing a general question about these, or asking the user to test one, even partway through other work. Also use when the user runs /knowledge, asks to look something up in or add something to the knowledge base, or when a hard-won general finding comes up during work.
 allowed-tools: "Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill knowledge --stamp {{SKILL_STAMP}} --fetch when-due) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill knowledge --stamp {{SKILL_STAMP}} --fetch when-due) Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill knowledge --stamp {{SKILL_STAMP}} --fetch auto) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill knowledge --stamp {{SKILL_STAMP}} --fetch auto) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *)"
 ---
 
@@ -94,6 +94,14 @@ Offer it in one line at a natural stopping point, and wait for a yes:
 we read; for a pitfall, also how we know it recurs>. Add it, commit, and push?`
 If you can't fill in the evidence from this session, don't offer it.
 
+Docs first: when the finding is about a project whose docs the user can change, such as their
+own or one they contribute to, and it's a normal docs item, end the line with
+`It may belong in <project>'s docs instead. Docs, or add it here, commit, and push?` in place of
+`Add it, commit, and push?`. A minor note that would clutter the docs and confuse readers goes
+here without asking. If the user picks the docs, edit them only in a session in that project,
+after a yes to the exact text; this skill never commits them. In any other session, tell the
+user, so it can be done there.
+
 ## When to change, commit, and push
 
 These rules say when you may change a file, and when you may commit and push it. They apply to
@@ -133,9 +141,12 @@ one, that repo's own rules, and the user's global rules.
 The typed command is `/knowledge add <what you learned>`. Go ahead only as "When to change,
 commit, and push" says, or after a yes to a candidate you offered.
 
-1. Apply the general test: it would still be true in a brand-new project, and it names none of
-   the user's functions, files, or tenants. If it fails, it doesn't belong in the knowledge base:
-   tell the user why, and add nothing.
+1. Apply the general test: it helps any project that uses the same language, platform, tool,
+   library, or service, whoever makes it, the user's own included, and it names no tenant,
+   personal path, or other private detail. Judge the fact, not the project where it came up.
+   What only helps work on one project's own code, such as its internals or why it was built
+   that way, fails: it goes where that project's AGENTS.md says research goes. If it fails, it
+   doesn't belong in the knowledge base: tell the user why, and add nothing.
 2. Read `{{SKILL_DIR}}/filing-rules.md`, unless you already did this session.
 3. Sync with GitHub, with the `--fetch auto` command above, unless that already ran this turn.
 4. Add the finding to the matching topic file, or create one by the rules. Label its evidence
@@ -156,10 +167,10 @@ Commits in dev-home are unsigned on purpose: setup turns signing off in that rep
 config. That is not bypassing signing, and the project repos keep signing as usual.
 
 In Codex: edit only, so leave "commit, and push" out of your questions: a draft ends with "Save
-this?", and a candidate with "Add it?". Skip the sync and every git step, and tell the user that
-Claude will commit and push the change: the next sync in Claude, such as `/dev-home sync`, lists
-the files, and offers to commit and push them once they have been untouched for 15 minutes.
-Mention that the local copy may be behind another PC.
+this?", and a candidate with "Add it?", or "Docs, or add it here?". Skip the sync and every git
+step, and tell the user that Claude will commit and push the change: the next sync in Claude,
+such as `/dev-home sync`, lists the files, and offers to commit and push them once they have
+been untouched for 15 minutes. Mention that the local copy may be behind another PC.
 
 Never store secrets, credentials, tenant or account IDs, or personal information about anyone
 other than the user, such as customer or colleague data. Never copy knowledge-base text or

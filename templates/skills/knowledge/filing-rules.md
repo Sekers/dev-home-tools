@@ -5,8 +5,8 @@ these rules live with the skill, so they update with dev-home-tools.
 
 ## Layout
 
-- One folder per subject, named for the system the facts describe, such as `powershell`,
-  `git-and-github`, `windows`, `python`, or `ai-agents`.
+- One folder per subject, named for the system, library, or service the facts describe, such as
+  `powershell`, `git-and-github`, `windows`, `python`, or `ai-agents`.
 - One file per topic.
 
 ## Names
@@ -58,8 +58,11 @@ Every section carries one, with its own date and versions:
 
 ## Content
 
-- The general test: still true in a brand-new project, and names none of your functions, files,
-  or tenants. Anything that fails it stays out of the knowledge base.
+- The general test: it helps any project that uses the same language, platform, tool, library,
+  or service, whoever makes it, your own included, and it names no tenant, personal path, or
+  other private detail. Judge the fact, not the project where it came up. What only helps work
+  on one project's own code stays in that project. Anything that fails the test stays out of the
+  knowledge base.
 - Worth its cost: the index is read on every lookup, and a file is read whole when it's opened.
   Keep entries short, add to an existing file before creating one, and remove what no longer
   earns its place.

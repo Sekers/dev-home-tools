@@ -1,8 +1,9 @@
 # Knowledge base
 
-General knowledge for coding and AI work, shared by every project and every PC. Research about
-one project stays in that project. Agents reach this through the `knowledge` skill, which holds
-the rules for files.
+General knowledge for coding and AI work, shared by every project and every PC: facts that help
+any project using the same tool, library, or service. What only helps work on one project's own
+code stays in that project. Agents reach this through the `knowledge` skill, which holds the
+rules for files.
 
 ## Index
 

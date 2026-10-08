@@ -14,11 +14,13 @@
   dev-home, paraphrase its notes, or mention that it exists. The only exceptions are a skill's
   steps that have me approve the exact words first, and even those never name dev-home.
 - Knowledge candidate: only a general finding we checked this session (a test or the docs), or
-  a pitfall agents keep hitting in my setup with a checked fix, worth its token cost and naming
-  none of my functions, files, or tenants. Offer `Knowledge candidate: <folder/file>: <what>.
-  Evidence: <what we ran or read>. Add it, commit, and push?` Most sessions have none; don't
-  re-offer a no.
-- Findings specific to one project go where that project's AGENTS.md says research goes.
-  Anything about a project that shouldn't be public goes in its handoff.
+  a pitfall agents keep hitting in my setup with a checked fix, worth its token cost. General:
+  it would help any project using the same tool, library, or service, even one of mine, and
+  names no tenant or private detail. Offer `Knowledge candidate: <folder/file>: <what>.
+  Evidence: <what we ran or read>. Add it, commit, and push?` For a normal docs item of a project
+  whose docs I can change, replace that last question with `It may belong in <project>'s docs
+  instead. Docs, or add it here, commit, and push?` Most sessions have none; don't re-offer a no.
+- Findings that only help work on one project's own code go where that project's AGENTS.md says
+  research goes. Anything about a project that shouldn't be public goes in its handoff.
 - My global rules in `{{CONTENT_DIR}}/global-rules/global-rules.md` add to these, and win where
   the two conflict.
