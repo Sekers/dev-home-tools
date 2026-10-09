@@ -22,9 +22,10 @@ Never leave it to the reader to guess which: name the repo whenever both could f
 - The root holds only what must be there, and the scripts a person runs by hand:
   `.gitattributes`, `.gitignore`, `AGENTS.md`, `CLAUDE.md`, `LICENSE`, `README.md`,
   `setup.py`, `sync.py`, `update.py`, and the folders `templates/`, `internal/`, and
-  `docs/`. Setup adds `local-settings.json` on each PC. Never add a file or folder to the
-  root, or have a script or tool create one there, without asking the person you work for
-  first, in a question of its own.
+  `docs/`. Setup adds `local-settings.json` on each PC, and beside it a dated backup each time
+  `--configure` changes it, such as `local-settings.json.bak-20261008-143000`; git ignores
+  both. Never add a file or folder to the root, or have a script or tool create one there,
+  without asking the person you work for first, in a question of its own.
 - `templates/dev-home-starter/` holds a new dev-home's first files. Setup copies them in once,
   and after that they're the person's own: a change to the starter never reaches an existing
   dev-home.

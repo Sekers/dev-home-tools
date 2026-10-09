@@ -830,7 +830,8 @@ run: `contentDir`, `autoUpdate`, `updateCheckHours`, `contentCheckHours`, the an
   console nor a setting, it prints the current settings and how to change them.
 - A change to `local-settings.json` keeps a dated backup first, as setup's changes to Claude
   Code's and Codex's settings do, and keeps any key it doesn't know. A new `contentDir` never
-  moves a folder.
+  moves a folder. The backup goes beside the file, in dev-home-tools' root, and git ignores it,
+  as it does the file.
 - The `dev-home` skill pre-approves `setup.py --configure *`, as the skills pre-approve
   `sync.py *` for commits: the person's yes in chat to the exact preview is the approval.
 - Before it sets dev-home's git config, setup checks that the folder looks like a dev-home: it
@@ -854,11 +855,19 @@ run: `contentDir`, `autoUpdate`, `updateCheckHours`, `contentCheckHours`, the an
   change would ask three times: the preview, the change, and the question in chat.
 - The dev-home check, because setup turns commit signing off in that repo, and an agent can now
   change `contentDir`, so a mistake must not reach a project's repo.
+- The backup beside the file, because every other backup setup makes is beside its file, where
+  the README teaches people to look. Git ignores it because it holds the PC's paths, and the
+  repo is public.
 
 **Options set aside:**
 
 - At a console, every question again with the current answers as defaults: six or more
   questions to change one setting, and a habitual "y" can change the wrong one.
+- The backups in a folder of their own under `internal/`: a tidier root, but more code, a
+  backup that isn't beside its file, unlike every other, and a `.gitignore` line still needed
+  for the new copy a save swaps in, which has to sit beside the file.
+- No backup of `local-settings.json`: the change is shown and waits for a yes, and every value
+  can be set again, but a wrong `contentDir` would leave no file to copy back.
 - JSON values (see above); one switch per setting, such as `--content-dir` (the list grows with
   every setting, and a person has to know each one exists); and editing the file by hand only
   (a JSON typo stops setup).

@@ -1,7 +1,8 @@
 # Written by setup.py on each PC: the skills, the scripts they share, and the rules, with this
-# PC's paths filled in, and this PC's settings. Never commit either.
+# PC's paths filled in, and this PC's settings, with --configure's dated backups of them and the
+# new copy a save swaps in. Never commit either.
 /internal/.generated/
-/local-settings.json
+/local-settings.json*
 
 # This PC's link to the Python the skills run, which setup.py makes.
 /internal/.python/

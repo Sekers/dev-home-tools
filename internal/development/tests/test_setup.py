@@ -842,6 +842,21 @@ def test_configure_changes_one_setting_with_a_backup(box: Sandbox, settings_kept
     )
 
 
+def test_git_ignores_this_pcs_settings_and_what_saving_them_leaves_beside_them(
+    box: Sandbox,
+) -> None:
+    # They hold this PC's paths, and the repo is public.
+    repo = box.root / "ignore-check"
+    git("init", "--quiet", str(repo))
+    shutil.copyfile(box.tools / ".gitignore", repo / ".gitignore")
+    names = [
+        "local-settings.json",
+        "local-settings.json.bak-20261008-143000",
+        "local-settings.json.dev-home-new",
+    ]
+    assert git("-C", str(repo), "check-ignore", "--no-index", *names) == names
+
+
 def setup_configure(box: Sandbox, *args: str) -> Run:
     return run_python(box, "setup.py", "--configure", *args)
 
