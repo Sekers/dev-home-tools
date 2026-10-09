@@ -1350,8 +1350,8 @@ that no item mentioned had no step looking for it. Two updates in one session mi
 three things: a built decision with no entry here, a to-do still describing what that session
 had changed, and preferences the person showed. The person found them only by asking. An agent
 reading the handoff cold can't find these, since it never saw the session (see the next entry).
-Across 13 updates measured on one PC, an update averaged 7.6 model calls; the review adds a few
-thousand tokens and at most one more call, about a tenth.
+Across 13 updates measured on one PC from 2026-10-03 to 2026-10-08, an update averaged 7.6 model
+calls; the review adds a few thousand tokens and at most one more call, about a tenth.
 
 **Options set aside:**
 
@@ -1381,13 +1381,18 @@ xhigh. There is no setting for either.
 **Why:**
 
 - An update fixes what its session did, so items that earlier sessions left out of date pile up.
-  On a 900-line handoff, a second agent found four such problems that every update had kept.
+  On a 900-line handoff, on 2026-10-08, a second agent found four such problems that every update
+  had kept.
 - It fixes rather than only proposing, because a handoff is a status note kept in git, and
   `update` already edits on a typed command. Claude Code's `/doctor prompt-audit` only proposes,
   because the instruction files it edits change every later session.
-- On request, because of the cost: on that handoff, one audit took 0.6 to 15 minutes, and $0.03
-  to $1.12 at API prices, by model and effort.
-- Model and effort, from 11 runs on the same handoff, scored against 12 known problems:
+- On request, because of the cost: on that handoff, on 2026-10-08 with Claude Code 2.1.295, one
+  audit took 0.6 to 15 minutes, and $0.03 to $1.12 at that day's API prices, by model and effort.
+- The first real audit, later the same day on the same handoff, ran on Opus 5.5 at xhigh: 3.6
+  minutes and about $1.44 at the same prices. It found 7 of the 9 known problems still there,
+  plus 3 no test run had reported, and nothing it reported was wrong.
+- Model and effort, from 11 runs on the same handoff on 2026-10-08, with Opus 5.5, Sonnet 5.5,
+  and Haiku 5.5, scored against 12 known problems:
   - Effort mattered more than the model: Sonnet found 2 at medium and 8 at xhigh, and Haiku found
     4 and 6. Opus found 6 at both medium and xhigh, at medium in under half the time.
   - Max was slower and found no more.
@@ -1395,8 +1400,9 @@ xhigh. There is no setting for either.
   - Naming the kinds of problems in the prompt didn't raise the scores, but it made the runs cover
     every section, and gives the skill one list of what counts.
 - A model named without an effort runs at xhigh, because Claude Code would otherwise run it at the
-  level saved for that model, or its default, which is medium for the 5.5 models. The session's
-  own effort can't be read by a script, so the skill can't carry it over to another model.
+  level saved for that model, or its default, which is medium for the 5.5 models (Claude Code
+  2.1.295, 2026-10-08). The session's own effort can't be read by a script, so the skill can't
+  carry it over to another model.
 - The name: Claude Code uses "audit" for the same kind of check; "check" is used loosely across
   the skill; and "review" is both tools' command for reviewing code.
 
@@ -1414,4 +1420,4 @@ xhigh. There is no setting for either.
 - The names `check`, `review`, and `fresh-read`.
 
 **Look again if:** people type the same options on most audits, Codex runs second agents in the
-background, or a new model changes what effort it needs.
+background, or new models or prices change which model and effort suit an audit.

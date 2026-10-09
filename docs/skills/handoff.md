@@ -91,7 +91,8 @@ the chat waits.
 
 **Choosing a model and effort:** an audit runs on your session's model and effort. To choose
 others, name them: `/handoff audit sonnet xhigh`. A model named on its own runs at xhigh. In
-Claude Code, on one long handoff:
+Claude Code, on one long handoff, tested on 2026-10-08 with the 5.5 models (newer models and
+prices may change this):
 
 - **Opus at medium:** quick and thorough; the best balance of time and results.
 - **Sonnet at xhigh:** the most thorough, and about as slow as Opus at xhigh.
