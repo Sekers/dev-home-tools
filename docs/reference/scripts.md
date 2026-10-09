@@ -78,3 +78,31 @@ to look first. So an update is always installed the same way:
 
 To switch `autoUpdate`, set it to `true` or `false` in `local-settings.json`, in your
 dev-home-tools folder.
+
+### Where updates come from
+
+Updates come from the repo your copy was cloned from: git's `origin`, which the branch you're on
+follows. dev-home-tools' own settings don't name it; git keeps it in `.git/config`, in your
+dev-home-tools folder. To see it:
+
+```powershell
+git -C C:\Programming\dev-home-tools remote -v
+```
+
+To get updates from somewhere else, run one of these in your dev-home-tools folder:
+
+| You want updates from | Run |
+| --- | --- |
+| Your own fork, after cloning the original | `git remote set-url origin <your fork's address>` |
+| The original, after cloning your fork | `git remote add upstream <the original's address>`, then `git fetch upstream`, then `git branch --set-upstream-to=upstream/main main` |
+| The same repo at a new address, after it's renamed or moved | `git remote set-url origin <the new address>` |
+
+The original's address is the one in the README's clone command. The next `update.py`, or the
+next sync's check, uses the new source.
+
+- **With your fork as the source,** updates arrive only after you sync the fork with the
+  original, such as with GitHub's "Sync fork" button or `gh repo sync <you>/dev-home-tools`.
+- **With the original as the source while you keep a fork,**
+  `git config remote.pushDefault origin` keeps your own pushes going to the fork. Once you have
+  commits of your own, though, an update can't simply move your copy forward, so you merge each
+  one by hand, as above.

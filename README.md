@@ -92,6 +92,9 @@ better place, such as `D:\Programming`.
 gh repo clone Sekers/dev-home-tools C:\Programming\dev-home-tools
 ```
 
+Cloning your own fork instead? Updates then come from it. See
+[Where updates come from](docs/reference/scripts.md#where-updates-come-from) to change that.
+
 ### 3. Run setup
 
 ```powershell
@@ -228,7 +231,7 @@ Everything beyond getting started is in the `docs/` folder:
 | Skills | [Handoffs](docs/skills/handoff.md) | Every `/handoff` command, with examples: when a change is committed and pushed, how issues are filed, and where handoffs are kept. |
 | Skills | [Knowledge base](docs/skills/knowledge.md) | Every `/knowledge` command, and when agents check the knowledge base or offer to add to it. |
 | Skills | [dev-home](docs/skills/dev-home.md) | `/dev-home sync`, `configure`, and `skills`: syncing when you ask, changing a setting, and listing your skills. |
-| Reference | [The scripts](docs/reference/scripts.md) | `setup.py`, `sync.py`, and `update.py`: when each one runs, what their status words mean, and how updates are installed. |
+| Reference | [The scripts](docs/reference/scripts.md) | `setup.py`, `sync.py`, and `update.py`: when each one runs, what their status words mean, how updates are installed, and where they come from. |
 | Reference | [What setup changes on your PC](docs/reference/setup-changes.md) | Every link, file, and setting that setup adds, why, and how to remove it all. |
 | Development | [Design decisions](docs/development/decisions.md) | For people changing dev-home-tools: decisions made and options set aside, with the reasons. |
 
