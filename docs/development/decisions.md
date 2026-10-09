@@ -1386,6 +1386,11 @@ xhigh. There is no setting for either.
 - It fixes rather than only proposing, because a handoff is a status note kept in git, and
   `update` already edits on a typed command. Claude Code's `/doctor prompt-audit` only proposes,
   because the instruction files it edits change every later session.
+- The session reads only the parts of the handoff that the findings point to, not the whole file
+  again. In the first real audit, on 2026-10-08, re-reading all 900 lines was three-quarters of
+  what the session itself read, and its share came to about half of what the second agent cost.
+  An edit that replaces only its target keeps what other sessions changed elsewhere, and Claude
+  Code 2.1.295 lets a file be edited after reading only part of it (checked on 2026-10-09).
 - On request, because of the cost: on that handoff, on 2026-10-08 with Claude Code 2.1.295, one
   audit took 0.6 to 15 minutes, and $0.03 to $1.12 at that day's API prices, by model and effort.
 - The first real audit, later the same day on the same handoff, ran on Opus 5.5 at xhigh: 3.6

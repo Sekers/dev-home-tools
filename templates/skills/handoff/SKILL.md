@@ -340,18 +340,21 @@ it can. It follows "Changing the handoff", with these steps for the edit:
    > For each, quote the item's first few words, say what's wrong, and give the evidence: a file
    > and line, or a commit. Report only real problems, and say "none" for a section with none.
    > Keep the report under 600 words.
-4. When it reports, read the handoff again, as step 3 of "Changing the handoff" says, and check
-   each finding against the handoff and the project's files as they are now. Drop any finding you
-   can't confirm, or whose text has changed since.
+4. When it reports, read only the parts of the handoff its findings point to: each item it
+   quotes, and both items of a contradiction. Find each by its first words, since its line may
+   have moved. This takes the place of step 3 of "Changing the handoff": an edit that replaces
+   only the text it targets keeps whatever another session changed elsewhere. Check each finding
+   against those parts and the project's files as they are now, and drop any finding you can't
+   confirm, or whose text has changed since.
 5. Fix each finding that the handoff or the project's files settle, such as a pointer by the
    wrong name, or an item that a later decision has overtaken. When two items contradict each
    other and a recorded decision settles which is right, follow the later decision, and say so.
    Never change Next up, and never reword text the user approved word for word: when a finding
    touches either, ask instead. A fix in the project's own files is shown as exact text first, as
    in "Update".
-6. Commit as in "Changing the handoff". Then tell the user each change and why, and list what
-   only they can answer, such as a missing reason, ending with "Answer any of these and I'll add
-   it, commit, and push." When nothing is wrong, say so, and commit nothing.
+6. Commit as in "Changing the handoff". Then tell the user each change and why, in one line
+   each, and list what only they can answer, such as a missing reason, ending with "Answer any of
+   these and I'll add it, commit, and push." When nothing is wrong, say so, and commit nothing.
 
 ## Next up
 
