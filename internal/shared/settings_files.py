@@ -10,6 +10,13 @@ from pathlib import Path
 
 from .links import link_info
 
+# Windows refuses to move a file over one that another program has open, such as antivirus
+# scanning it for a moment: access denied (5) when it's the file being replaced, and a sharing
+# violation (32) when it's the new copy. The move is tried again until this many seconds have
+# passed.
+REPLACE_WAIT_SECONDS = 3.0
+IN_USE_ERRORS = (5, 32)
+
 
 @dataclass
 class SettingsFile:
@@ -87,7 +94,7 @@ def write_settings_file(path: Path, text: str, *, bom: bool) -> str:
             if not os.access(path, os.W_OK):
                 raise PermissionError(f"{path} is read-only.")
             backup = new_backup(path)
-        temp.replace(path)
+        move_into_place(temp, path)
         replaced = True
         return str(backup) if backup else ""
     finally:
@@ -95,6 +102,24 @@ def write_settings_file(path: Path, text: str, *, bom: bool) -> str:
         # When the original is still in place, a backup of it is only clutter.
         if backup is not None and not replaced:
             backup.unlink(missing_ok=True)
+
+
+def move_into_place(temp: Path, path: Path) -> None:
+    """Moves temp over path in one step. While Windows refuses because another program has one
+    of them open, tries again, waiting a little longer each time, for up to
+    REPLACE_WAIT_SECONDS."""
+    deadline = time.monotonic() + REPLACE_WAIT_SECONDS
+    pause = 0.05
+    while True:
+        try:
+            temp.replace(path)
+            return
+        except OSError as error:
+            in_use = getattr(error, "winerror", None) in IN_USE_ERRORS
+            if not in_use or time.monotonic() + pause > deadline:
+                raise
+        time.sleep(pause)
+        pause = min(pause * 2, 0.5)
 
 
 def new_backup(path: Path) -> Path:

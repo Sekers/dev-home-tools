@@ -9,6 +9,8 @@ import re
 import shutil
 import stat
 import sys
+import threading
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -1265,3 +1267,41 @@ def test_a_read_only_settings_file_is_never_planned_or_written(box: Sandbox) -> 
     assert plan.reason == "it is read-only", plan.reason
     assert path.read_bytes() == b"{}\n"
     assert left == ["read-only.json"], "no backup and no new file left beside it"
+
+
+def test_a_settings_file_held_open_for_a_moment_is_still_replaced(box: Sandbox) -> None:
+    # Windows refuses to replace a file another program has open, as antivirus may for a moment.
+    path = box.root / "plans" / "held.json"
+    path.parent.mkdir(exist_ok=True)
+    path.write_bytes(b"{}\n")
+    held = path.open("rb")
+    timer = threading.Timer(0.3, held.close)
+    started = time.monotonic()
+    timer.start()
+    try:
+        backup = shared_module(box, "settings_files").write_settings_file(path, "[]\n", bom=False)
+    finally:
+        timer.cancel()
+        held.close()
+    waited = time.monotonic() - started
+    assert path.read_bytes() == b"[]\n"
+    assert Path(backup).read_bytes() == b"{}\n"
+    Path(backup).unlink()
+    if sys.platform == "win32":
+        assert waited >= 0.3, "it waited for the file to be closed, rather than failing"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="only Windows refuses to replace an open file")
+def test_a_settings_file_held_open_too_long_is_left_as_it_was(
+    box: Sandbox, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings_files = shared_module(box, "settings_files")
+    monkeypatch.setattr(settings_files, "REPLACE_WAIT_SECONDS", 0.3)
+    path = box.root / "plans" / "held-long.json"
+    path.parent.mkdir(exist_ok=True)
+    path.write_bytes(b"{}\n")
+    with path.open("rb"), pytest.raises(PermissionError):
+        settings_files.write_settings_file(path, "[]\n", bom=False)
+    assert path.read_bytes() == b"{}\n"
+    left = sorted(entry.name for entry in path.parent.glob("held-long.json*"))
+    assert left == ["held-long.json"], "no backup and no new file left beside it"
