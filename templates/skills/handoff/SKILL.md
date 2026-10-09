@@ -1,7 +1,7 @@
 ---
 name: handoff
 description: Read, update, or audit this project's private session handoff (where the work stands, what's next up, what's waiting on the user or on others, to-dos, and bugs), kept in the private dev-home repo, and file handoff items as GitHub issues when asked. Use when the user runs /handoff or $handoff, asks where things stand or where we left off, asks to update or audit the handoff or change what's next up, or asks to file a handoff item as a GitHub issue.
-allowed-tools: "Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill handoff --stamp {{SKILL_STAMP}} --fetch auto handoff environment newer-commits) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill handoff --stamp {{SKILL_STAMP}} --fetch auto handoff environment newer-commits) Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/facts.py --skill handoff --stamp {{SKILL_STAMP}} handoff environment newer-commits) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/facts.py --skill handoff --stamp {{SKILL_STAMP}} handoff environment newer-commits) Bash({{PYTHON}} -I {{SKILL_DIR}}/issue_status.py) PowerShell({{PYTHON}} -I {{SKILL_DIR}}/issue_status.py) Bash(gh label list *) Bash(gh issue list *) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *) PowerShell(gh label list *) PowerShell(gh issue list *) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *)"
+allowed-tools: "Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill handoff --stamp {{SKILL_STAMP}} --fetch auto handoff environment newer-commits settings) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill handoff --stamp {{SKILL_STAMP}} --fetch auto handoff environment newer-commits settings) Bash({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/facts.py --skill handoff --stamp {{SKILL_STAMP}} handoff environment newer-commits settings) PowerShell({{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/facts.py --skill handoff --stamp {{SKILL_STAMP}} handoff environment newer-commits settings) Bash({{PYTHON}} -I {{SKILL_DIR}}/issue_status.py) PowerShell({{PYTHON}} -I {{SKILL_DIR}}/issue_status.py) Bash(gh label list *) Bash(gh issue list *) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) Bash({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *) PowerShell(gh label list *) PowerShell(gh issue list *) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py) PowerShell({{PYTHON}} -I {{TOOLS_DIR}}/sync.py *)"
 ---
 
 # Handoff
@@ -142,8 +142,9 @@ about this project doesn't belong here either.
 ## Find this project's handoff
 
 1. Read step 2's command ends by printing the facts (in Codex, the command in "In Codex" prints
-   only them): the lines of three `facts.py` topics, worked out from the project's git repo and
-   dev-home's copy of its handoff, without the network. The steps below use them by name:
+   only them): the lines of four `facts.py` topics, worked out from the project's git repo,
+   dev-home's copy of its handoff, and this PC's settings, without the network. The steps below
+   use them by name:
    - `service`: where the project is hosted: `github`, `gitlab`, `bitbucket`, `azure-devops`,
      `other` for anywhere else, or `local` for a project with no remote.
    - `name`: the project's name, such as `you/tool`. For `other` and `local`, it's the folder
@@ -160,6 +161,8 @@ about this project doesn't belong here either.
    - `behind`: how many commits `checked` has that this checkout doesn't, or `unknown`.
    - `newer-commit`: one line for each newer commit, newest first and at most ten, with its short
      hash and subject.
+   - `offerSecurityBugs`: `true` or `false`, this PC's setting for whether issue candidates
+     include security bugs (see "Issue candidates").
 
    `link` and `project` are already encoded as link targets, such as `%20` for a space, and
    already in the form that opens where you're running (see "Commands").
@@ -181,7 +184,7 @@ about this project doesn't belong here either.
 1. If your instructions don't include the heading "Private repo: dev-home (rules loaded)", tell
    the user that the always-on operating rules aren't loaded, then continue.
 2. In the project, run
-   `{{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill handoff --stamp {{SKILL_STAMP}} --fetch auto handoff environment newer-commits`.
+   `{{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/prepare.py --skill handoff --stamp {{SKILL_STAMP}} --fetch auto handoff environment newer-commits settings`.
    It syncs dev-home with GitHub and runs setup, checks that this skill hasn't changed since you
    loaded it, then prints the facts that "Find this project's handoff" uses. When dev-home is in
    active use on several copies, such as two PCs, the sync checks GitHub every time; with one,
@@ -283,15 +286,33 @@ Follow "Changing the handoff". While updating:
 - Issue links: in the same turn as the read in step 3 of "Changing the handoff", run
   `{{PYTHON}} -I {{SKILL_DIR}}/issue_status.py` in the project. It finds every GitHub issue the
   handoff links to and asks GitHub about all of them at once. It prints one line for each:
-  `OPEN`, `CLOSED` with GitHub's reason in parentheses, or `UNCHECKED` with why, such as `gh`
-  not signed in; or one `OK` line when the handoff links no issues. A `PROBLEM` line means
-  nothing was checked, and says why. Keep the items whose issues are open or weren't checked,
-  and say which weren't checked and why. When an issue is closed:
-  - An item filed as that issue (it starts `GitHub issue [#<number>]`): remove it like any
-    finished item, and say which ones you removed.
-  - Any other item, such as one waiting on another project's issue: keep it. Tell the user that
-    the issue closed, why (the reason in its line), and what the item says to do next. A close
-    isn't always a fix: a bot may close an inactive issue as not planned.
+  `OPEN`; `CLOSED` with GitHub's reason in parentheses; or `UNCHECKED` with why, such as `gh`
+  not signed in; or one `OK` line when the handoff links no issues. A duplicate's line names the
+  issue it duplicates, that issue's state, and its title. The line for an issue closed as not
+  planned says who closed it and when, and `COMMENT` lines follow it with its last comments. A
+  `PROBLEM` line means nothing was checked, and says why.
+
+  An issue link after "See also:" in an item is there for what that issue holds: its state
+  changes nothing, so the script leaves it out. Every other issue link is one the item tracks:
+  the issue it was filed as (the item starts `GitHub issue [#<number>]`), or one it's waiting
+  on, such as another project's. Keep the items whose tracked issues are open or weren't
+  checked, and say which weren't checked and why. When a tracked issue is closed:
+  - As completed, or with no reason: remove an item filed as that issue, like any finished item,
+    and say which ones you removed. Keep any other item, and tell the user that the issue closed
+    and what the item says to do next.
+  - As a duplicate: GitHub shows the duplicate on the original's page, so the original is where
+    the work goes on. Replace the link with one to the original, from the line, and for an item
+    filed as the duplicate, its title too. If another item already tracks the original, merge
+    the two. If the original is closed too, link to it all the same and say so: the next update
+    goes on from the original's own line. Tell the user what you changed.
+  - As not planned: keep the item. A close isn't always a decision: a bot may close an inactive
+    issue, or someone may have moved the work to another issue. After committing, tell the user
+    who closed it and what the comments say, then ask: `Remove it, link it to <the issue the
+    comments name> instead, or keep it with that issue under See also? I'll commit and push any
+    change.` Leave out the middle choice when the comments name no issue. To keep it, write the
+    item in its own words, with the closed issue's link after "See also:", so it stops coming
+    up. Make the change the answer calls for, and commit as in "Changing the handoff". With no
+    answer, change nothing, and a later update asks again.
 
 After committing, list what this session decided, built, changed, and learned, and what it left
 unfinished, each with where it went, so the user can spot a gap. Then offer issue candidates
@@ -404,14 +425,17 @@ It follows "Changing the handoff", with these steps before the edit:
    - If the project has issue templates in `.github/ISSUE_TEMPLATE/`, follow the one that fits.
    - Keep double quotes, backticks, and dollar signs out of the title.
 4. Show the draft, and file it only after the user says yes to that exact text. If you change
-   it, show it again.
+   it, show it again. For a security bug (see "Issue candidates"), whatever `offerSecurityBugs`
+   says, put the warning that "Issue candidates" gives above the draft.
 5. Write the body to `{{CONTENT_DIR}}/<draft>`, which git ignores, then run
    `gh issue create --repo <owner>/<repo> --title "<title>" --body-file "{{CONTENT_DIR}}/<draft>" --label "<label>"`,
    with one `--label` for each label. If it fails, show the error and change nothing.
 
 The edit: replace the item with `GitHub issue [#<number>](<issue URL>): <title>` in the same
 place, and keep under it only the notes that couldn't go in the issue. For text that wasn't in
-the handoff, add the link where it fits.
+the handoff, add the link where it fits. When the work needs another issue that the new one
+doesn't link to, such as a related issue that holds part of what's known, keep a link to it
+after "See also:" in the item: it stays until the item is removed (see "Update").
 
 ### Issue candidates
 
@@ -421,20 +445,29 @@ test:
 - This session added or changed it, or it carries a reminder that's due: `(Issue: remind me)`,
   or `(Issue: remind me from <date>)` with that date today or earlier.
 - This session hasn't suggested it already.
-- It's a bug, a feature request, or a concrete task someone could pick up and do, and someone
-  outside the project would understand it. A decision still to make never qualifies: an item
-  that starts "Decide whether" or similar, even after a prefix such as "README:" (see To do in
-  "Sections"). An issue would split one decision across two places. A decision already made but
-  not built yet is a task, so it can qualify.
+- It's a bug, a feature, or an improvement to the project itself, such as tests, docs,
+  refactoring, performance, or upgrading what it depends on, decided or not, and someone outside
+  the project would understand it. So a proposal or idea still to decide qualifies too, such as
+  an item that starts "Decide whether": an issue is where others can weigh in. Work done outside
+  the project doesn't, such as a release, an account to set up, or a step of the user's own
+  workflow.
 - It can be written without anything private.
 - It's likely to stay open beyond the next session or two.
 - It doesn't link to an issue yet, and it isn't marked "Not for a GitHub issue".
+- It isn't a security bug while `offerSecurityBugs` from the facts is `false`. A security bug is
+  one that could let someone read, change, or do what they shouldn't, such as a leak of private
+  data, an injection, or a way around a sign-in or a permission check.
 
 Suggest only items from To do or Bugs, and at most three; most updates have none. Ask in one line
 each: `Issue candidate: <section>: <item>. Create a GitHub issue for it, skip (no reminder), remind
 me next session (or in N days), or no (never ask again)? The item stays in the handoff either way,
 as a link to the issue if you create one. I'll mark it to match your answer, then commit and push
 any change.`
+
+For a security bug, put this warning first, in its own line: `This is a security bug: a public
+issue tells everyone about the hole before it's fixed. GitHub's draft security advisories keep it
+private until a fix is out.` After the question, add once: `To stop these offers, set
+offerSecurityBugs to false in dev-home-tools' settings.`
 
 Each answer replaces any mark the item had, at the end of the item:
 
@@ -452,16 +485,17 @@ No answer changes nothing, so a due reminder stays, and a later session asks aga
 mark the answers call for, then commit once, as in "Changing the handoff".
 
 `/handoff issue` with nothing after it lists every item that qualifies by the tests and sections
-above, ignoring the first two tests, and asks which to file. End the list by saying that
-decisions still to make aren't listed, and that `/handoff issue <item>` files one if the user
-names it.
+above, ignoring the first two tests, and asks which to file. Put the warning above before each
+security bug it lists, and when it lists any, the line about stopping these offers once, at the
+end. When `offerSecurityBugs` left a security bug out, end the list by saying so, and that
+`/handoff issue <item>` still files one if the user names it.
 
 ## In Codex
 
 Read, `update`, `next`, and `audit` work, but edit only, so leave "commit, and push" out of your
 questions: a draft ends with "Save this?". Skip every sync, git, and `gh` step, including the
 issue link checks. In place of Read step 2's command, run
-`{{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/facts.py --skill handoff --stamp {{SKILL_STAMP}} handoff environment newer-commits`,
+`{{PYTHON}} -I {{SHARED_SKILL_SCRIPTS_DIR}}/facts.py --skill handoff --stamp {{SKILL_STAMP}} handoff environment newer-commits settings`,
 which prints the same facts and only reads files. If it prints an error instead, show it and
 stop, as for a `PROBLEM` line about `facts.py`. Tell the user that Claude will commit and push
 the change: the next /handoff in Claude lists the file, and offers to commit and push it once it

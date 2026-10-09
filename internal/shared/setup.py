@@ -98,6 +98,7 @@ from .paths import comparable, forward, is_inside, resolve_home, same_path, unsa
 from .programs import by_hand, find_program
 from .settings import (
     DEFAULT_HOURS,
+    DEFAULT_SWITCHES,
     DEV_HOME_SETTINGS,
     SETTINGS_PATH,
     TOOLS_ROOT,
@@ -105,6 +106,7 @@ from .settings import (
     hours_setting,
     load_local_settings,
     local_settings_text,
+    switch_setting,
 )
 from .settings_files import (
     Plan,
@@ -820,6 +822,13 @@ class Setup:
                     "PROBLEM",
                     f"{key} in {SETTINGS_PATH} is {json.dumps(settings.data[key])}, which isn't a "
                     f"whole number of hours, 0 or more, so it counts as {hours}. Fix it there.",
+                )
+        for key, yes in DEFAULT_SWITCHES.items():
+            if not switch_setting(settings.data, key)[1]:
+                self.status(
+                    "PROBLEM",
+                    f"{key} in {SETTINGS_PATH} is {json.dumps(settings.data[key])}, which isn't "
+                    f"true or false, so it counts as {json.dumps(yes)}. Fix it there.",
                 )
         save = False
         if self.configure is not None:

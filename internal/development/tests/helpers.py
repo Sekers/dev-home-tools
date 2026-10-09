@@ -510,6 +510,7 @@ REPORTING_IMPORTS = {
     "dataclasses",
     "functools",
     "io",
+    "json",
     "os",
     "pathlib",
     "re",

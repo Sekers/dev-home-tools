@@ -24,12 +24,14 @@ from .output import CYAN, GREEN, color, status_line
 from .paths import comparable, forward, is_inside, resolve_home, same_path, unsafe_reason
 from .settings import (
     DEFAULT_HOURS,
+    DEFAULT_SWITCHES,
     DEV_HOME_SETTINGS,
     SETTINGS_PATH,
     TOOLS_ROOT,
     LocalSettings,
     hours_setting,
     local_settings_text,
+    switch_setting,
 )
 
 if TYPE_CHECKING:
@@ -41,6 +43,7 @@ NAMES = (
     "updateCheckHours",
     "contentCheckHours",
     "claudeConfigDirs",
+    "offerSecurityBugs",
     "multiMachine",
 )
 ASSIGNMENT = re.compile(r"([A-Za-z]+)(\+=|-=|=)(.*)", re.DOTALL)
@@ -57,6 +60,8 @@ quotes, which every shell passes on as they are:
                                active copy, and for a plain /knowledge. 0 checks every time.
   claudeConfigDirs+=<folder>   Set up another Claude Code folder, such as ~/.claude-second.
   claudeConfigDirs-=<folder>   Stop setting one up.
+  offerSecurityBugs=true|false Whether the handoff skill offers a security bug as a GitHub
+                               issue, with a warning. false never offers one.
   multiMachine=true|false      Whether dev-home is in active use anywhere besides this PC.
                                Every copy shares it, so setup commits and pushes the change.
 
@@ -116,6 +121,16 @@ def hours_value(settings: LocalSettings, key: str) -> str:
     return text
 
 
+def switch_value(settings: LocalSettings, key: str) -> str:
+    yes, usable = switch_setting(settings.data, key)
+    text = "yes" if yes else "no"
+    if key not in settings.data:
+        return text + " (the default)"
+    if not usable:
+        return f"{text} (the file says {json.dumps(settings.data[key])}, which isn't true or false)"
+    return text
+
+
 def folder_answers(run: "Setup", settings: LocalSettings) -> list[tuple[str, bool | None]]:
     """Each Claude folder setup knows of, as written in the settings, with its answer: each
     ~/.claude-* folder found, then any other folder listed."""
@@ -158,6 +173,7 @@ def overview(run: "Setup", settings: LocalSettings) -> list[str]:
         ("Check GitHub for dev-home-tools updates", hours_value(settings, "updateCheckHours")),
         ("Check GitHub for dev-home's changes", hours_value(settings, "contentCheckHours")),
         ("Claude Code folders to set up", folders),
+        ("Offer security bugs as GitHub issues", switch_value(settings, "offerSecurityBugs")),
     ]
     shared = [("Copies of dev-home in active use", copies)]
     width = max(len(label) for label, _ in this_pc + shared) + 2
@@ -183,7 +199,8 @@ def menu(run: "Setup", settings: LocalSettings) -> bool:
         "3": change_update_hours,
         "4": change_content_hours,
         "5": change_claude_folders,
-        "6": change_copies,
+        "6": change_security_bugs,
+        "7": change_copies,
     }
     changed = False
     while True:
@@ -280,6 +297,24 @@ def change_claude_folders(run: "Setup", settings: LocalSettings) -> bool:
     return changed
 
 
+def change_security_bugs(run: "Setup", settings: LocalSettings) -> bool:
+    key = "offerSecurityBugs"
+    current = switch_setting(settings.data, key)[0]
+    run.line(
+        "After an update, the handoff skill can offer a bug as a GitHub issue. For a security "
+        "bug, it warns"
+    )
+    run.line("that a public issue tells everyone about the hole before it's fixed.")
+    answer = run.choose("Offer security bugs as GitHub issues, with that warning?", current)
+    if answer is None:
+        return False
+    # A default left unwritten moves with the default.
+    if settings.data.get(key) is answer or (key not in settings.data and answer == current):
+        return False
+    settings.data[key] = answer
+    return True
+
+
 def change_copies(run: "Setup", settings: LocalSettings) -> bool:
     """Chooses dev-home.json's answer, which setup writes, commits, and pushes later in its run.
     Changes nothing in this PC's settings."""
@@ -323,11 +358,13 @@ def assign(run: "Setup", settings: LocalSettings, text: str) -> bool:
     if name != "claudeConfigDirs" and operator != "=":
         raise SettingError(f"{name} is set with =, as in {name}=<value>.")
     before = copy.deepcopy(settings)
-    if name in ("autoUpdate", "multiMachine"):
+    if name in ("autoUpdate", "multiMachine", *DEFAULT_SWITCHES):
         if value.lower() not in ("true", "false"):
             raise SettingError(f"{name} is true or false, not {value}.")
         yes = value.lower() == "true"
-        if name == "autoUpdate":
+        if name in DEFAULT_SWITCHES:
+            settings.data[name] = yes
+        elif name == "autoUpdate":
             settings.auto_update = yes
         else:
             answer, readable = copies_answer(settings)

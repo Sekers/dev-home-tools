@@ -36,6 +36,7 @@ FACT_KEYS = [
     "checked",
     "newer",
     "behind",
+    "offerSecurityBugs",
 ]
 
 

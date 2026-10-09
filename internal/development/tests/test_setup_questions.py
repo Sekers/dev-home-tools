@@ -431,6 +431,7 @@ def test_a_copies_answer_that_cant_be_saved_leaves_dev_home_as_it_is(
 MENU = r"^Number to change, a to go through them all, or Enter to finish: $"
 UPDATE_HOURS = r"^Check GitHub for dev-home-tools updates every how many hours .*\[24\]: $"
 CONTENT_HOURS = r"^Check GitHub for dev-home's changes every how many hours .*\[12\]: $"
+SECURITY_BUGS = r"^Offer security bugs as GitHub issues, with that warning\? \[Y/n\]: $"
 
 
 @pytest.fixture
@@ -448,7 +449,7 @@ def test_the_menu_changes_the_setting_picked_and_keeps_a_backup(
     out = capsys.readouterr().out
     assert returned == 0, out
     assert "dev-home-tools settings" in out and "Shared by every copy of dev-home" in out, out
-    assert "Type a number from 1 to 6, or a, or press Enter to finish." in out, out
+    assert "Type a number from 1 to 7, or a, or press Enter to finish." in out, out
     assert json.loads(backups_removed.read_text(encoding="utf-8"))["autoUpdate"] is True
     assert re.search(r"^SET\s+This PC's settings: .* Backup of the old file: ", out, re.M), out
 
@@ -465,6 +466,7 @@ def test_the_menu_goes_through_every_setting_with_its_answer_as_the_default(
             r"^Pull updates automatically\? \[y/N\]: $": "",
             UPDATE_HOURS: ["six", "6"],
             CONTENT_HOURS: "",
+            SECURITY_BUGS: "",
             ELSEWHERE.replace(r"\[y/n\]", r"\[Y/n\]"): "",
         }
     )
@@ -474,8 +476,20 @@ def test_the_menu_goes_through_every_setting_with_its_answer_as_the_default(
     assert returned == 0, out
     assert "Type a whole number of hours: 0 or more." in out, out
     assert saved["updateCheckHours"] == 6 and "contentCheckHours" not in saved, saved
+    assert "offerSecurityBugs" not in saved, saved
     assert saved["contentDir"] == content and saved["autoUpdate"] is False, saved
     assert "There are no ~/.claude-* folders to set up." in out, out
+
+
+def test_the_menu_turns_off_offering_security_bugs(
+    box: Sandbox, backups_removed: Path, person: Person, capsys: pytest.CaptureFixture[str]
+) -> None:
+    person.answers.update({MENU: ["6", ""], SECURITY_BUGS: "n"})
+    returned = setup_here(box, "--configure")
+    out = capsys.readouterr().out
+    assert returned == 0, out
+    assert "For a security bug, it warns" in out, out
+    assert json.loads(backups_removed.read_text(encoding="utf-8"))["offerSecurityBugs"] is False
 
 
 def test_the_menu_keeps_several_copies_unless_the_others_are_retired(
@@ -483,7 +497,7 @@ def test_the_menu_keeps_several_copies_unless_the_others_are_retired(
 ) -> None:
     person.answers.update(
         {
-            MENU: ["6", ""],
+            MENU: ["7", ""],
             ELSEWHERE.replace(r"\[y/n\]", r"\[Y/n\]"): "n",
             r"^Have all the other copies been retired, .*\? \[y/N\]: $": "n",
         }

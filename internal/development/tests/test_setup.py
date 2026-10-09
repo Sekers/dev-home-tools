@@ -113,7 +113,7 @@ def test_writes_this_copys_paths_into_the_commands_and_pre_approvals(box: Sandbo
         "shared-skill-scripts/prepare.py --skill handoff --stamp "
     )
     assert re.search(
-        prepare + r"[0-9a-f]{12} --fetch auto handoff environment newer-commits\)", skill
+        prepare + r"[0-9a-f]{12} --fetch auto handoff environment newer-commits settings\)", skill
     )
 
 
@@ -728,6 +728,39 @@ def test_reports_a_check_interval_that_isnt_whole_hours(box: Sandbox) -> None:
         assert result.has_line(pattern), str(result)
 
 
+def test_reports_a_switch_that_isnt_true_or_false(box: Sandbox) -> None:
+    settings = box.tools / "local-settings.json"
+    before = read(settings)
+    edited = json.loads(before)
+    edited["offerSecurityBugs"] = "no"
+    write_text(settings, json.dumps(edited, indent=2) + "\n")
+    try:
+        result = setup(box)
+    finally:
+        write_text(settings, before)
+    assert result.code == 1, str(result)
+    pattern = (
+        r'^PROBLEM\s+offerSecurityBugs in .* is "no", which isn\'t true or false, so it counts '
+        r"as true\."
+    )
+    assert result.has_line(pattern), str(result)
+
+
+@pytest.mark.parametrize(
+    ("value", "yes", "usable"),
+    [
+        (None, True, True),
+        (False, False, True),
+        (True, True, True),
+        ("no", True, False),
+        (0, True, False),
+    ],
+)
+def test_reads_a_switch(box: Sandbox, value: object, yes: bool, usable: bool) -> None:
+    data = {} if value is None else {"offerSecurityBugs": value}
+    assert shared_module(box, "settings").switch_setting(data, "offerSecurityBugs") == (yes, usable)
+
+
 @pytest.mark.parametrize(
     ("value", "hours", "usable"),
     [(None, 12, True), (0, 0, True), (6, 6, True), (True, 12, False), (1.5, 12, False)],
@@ -819,7 +852,11 @@ def test_configure_alone_shows_the_settings_and_how_to_change_them(
     assert result.has_line(r"^\s+2\s+Install dev-home-tools updates automatically\s+no$"), str(
         result
     )
-    assert result.has_line(r"^\s+6\s+Copies of dev-home in active use\s+several$"), str(result)
+    assert result.has_line(
+        r"^\s+6\s+Offer security bugs as GitHub issues\s+yes \(the default\)$"
+    ), str(result)
+    assert result.has_line(r"^\s+7\s+Copies of dev-home in active use\s+several$"), str(result)
+    assert result.has_line(r"^\s+offerSecurityBugs=true\|false\s"), str(result)
     assert result.has_line(r"^\s+multiMachine=true\|false\s"), str(result)
     assert not result.has_line("All checks passed"), str(result)
     assert read(settings_kept) == before
@@ -840,6 +877,15 @@ def test_configure_changes_one_setting_with_a_backup(box: Sandbox, settings_kept
     assert again.code == 0 and again.has_line(r"^OK\s+autoUpdate is already set that way"), str(
         again
     )
+
+
+def test_configure_turns_off_offering_security_bugs(box: Sandbox, settings_kept: Path) -> None:
+    result = setup_configure(box, "offerSecurityBugs=false")
+    assert result.code == 0, str(result)
+    assert result.has_line(r'^\s+\+\s+"offerSecurityBugs": false$'), str(result)
+    assert json.loads(read(settings_kept))["offerSecurityBugs"] is False
+    shown = run_python(box, "setup.py", "--configure")
+    assert shown.has_line(r"^\s+6\s+Offer security bugs as GitHub issues\s+no$"), str(shown)
 
 
 def test_git_ignores_this_pcs_settings_and_what_saving_them_leaves_beside_them(
@@ -898,6 +944,7 @@ def test_the_dev_home_skills_configure_commands_work_as_written(
     [
         ("colour=red", r"There is no setting named colour\."),
         ("autoUpdate=maybe", r"autoUpdate is true or false, not maybe\."),
+        ("offerSecurityBugs=no", r"offerSecurityBugs is true or false, not no\."),
         ("updateCheckHours=-1", r"updateCheckHours is a whole number of hours, 0 or more"),
         ("claudeConfigDirs=~/.claude-x", r"claudeConfigDirs changes one folder at a time"),
         ("autoUpdate+=true", r"autoUpdate is set with =, as in autoUpdate=<value>\."),

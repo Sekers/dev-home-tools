@@ -17,6 +17,11 @@ DEV_HOME_SETTINGS = "dev-home.json"
 # 0 means every time.
 DEFAULT_HOURS = {"updateCheckHours": 24, "contentCheckHours": 12}
 
+# Yes-or-no settings, with what each is when this PC's settings don't say: offerSecurityBugs is
+# whether the handoff skill offers a security bug as a GitHub issue candidate, with a warning.
+# facts.py's settings topic reports it to the skill, with the same default (a test checks).
+DEFAULT_SWITCHES = {"offerSecurityBugs": True}
+
 
 def read_settings() -> dict[str, Any] | None:
     """The settings, or None when the file is missing or isn't a JSON object."""
@@ -36,6 +41,18 @@ def hours_setting(data: dict[str, Any], key: str) -> tuple[int, bool]:
     value = data[key]
     # In Python, true and false are numbers too.
     if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value, True
+    return default, False
+
+
+def switch_setting(data: dict[str, Any], key: str) -> tuple[bool, bool]:
+    """A yes-or-no setting, and whether the file's value could be used. A missing key, or a
+    value that isn't true or false, means the default."""
+    default = DEFAULT_SWITCHES[key]
+    if key not in data:
+        return default, True
+    value = data[key]
+    if isinstance(value, bool):
         return value, True
     return default, False
 

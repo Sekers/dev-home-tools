@@ -8,6 +8,7 @@ Name the topics you want. It prints each topic's lines, as key: value, in the or
     environment     the name of the computer the session is on (one line)
     newer-commits   the project's commits since the one its handoff says was checked
     skills          the skills setup sets up: dev-home-tools' own, then the user's
+    settings        this PC's settings that skills act on (one line each)
 
 It only reports, and only from this PC: it changes nothing and never uses the network, which is
 what lets a skill run it without asking first. Anything a skill needs done, rather than told,
@@ -136,6 +137,18 @@ says so, as setup does:
 It reads only this PC's copy of dev-home, so a skill added on another PC shows up after the next
 sync. It runs anywhere: no project folder is needed.
 
+THE SETTINGS TOPIC
+
+Prints each of this PC's settings that a skill acts on, from local-settings.json in
+dev-home-tools' folder, one line each, by the setting's own name:
+
+    offerSecurityBugs: true
+
+offerSecurityBugs is whether the handoff skill offers a security bug as a GitHub issue
+candidate, with a warning. A setting that's missing, or whose value can't be used, prints its
+default, as setup's code reads it; setup says when a value can't be used. It runs anywhere: no
+project folder is needed.
+
 ALL TOPICS
 
 Every line is written as UTF-8, so an accented letter in a name, path, or commit subject reaches
@@ -149,6 +162,7 @@ internal/.python/python.exe in dev-home-tools' folder, and of this script.
 
 import functools
 import io
+import json
 import os
 import re
 import shutil
@@ -161,7 +175,7 @@ from urllib.parse import quote, unquote
 
 # Every topic. To add one, add it here, to the description above, and to the topic functions in
 # collect, with a test for its lines.
-TOPICS = ("handoff", "environment", "newer-commits", "skills")
+TOPICS = ("handoff", "environment", "newer-commits", "skills", "settings")
 
 # The most newer-commit lines the newer-commits topic prints. Its newer line has the full count.
 MAX_NEWER_COMMITS = 10
@@ -178,6 +192,13 @@ SERVICES = {
 
 # dev-home's folder, filled in by setup.
 CONTENT_DIR = "{{CONTENT_DIR}}"
+
+# This PC's settings, in dev-home-tools' folder, filled in by setup.
+LOCAL_SETTINGS = "{{TOOLS_DIR}}/local-settings.json"
+
+# The settings topic's settings, each with its default. internal/shared/settings.py has the same
+# defaults, for setup and the sync (a test checks).
+SETTING_DEFAULTS = {"offerSecurityBugs": True}
 
 # The generated skills, beside the folder setup writes this script to, so that setup alone
 # decides where the generated files go.
@@ -708,6 +729,22 @@ def skills_lines() -> list[str]:
     return lines
 
 
+def settings_lines() -> list[str]:
+    """The settings topic's lines. A missing or unreadable file, or a value that isn't true or
+    false, gives the default, as setup's code reads it."""
+    try:
+        data = json.loads(Path(LOCAL_SETTINGS).read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    lines: list[str] = []
+    for key, default in SETTING_DEFAULTS.items():
+        value = data.get(key)
+        lines.append(f"{key}: {json.dumps(value if isinstance(value, bool) else default)}")
+    return lines
+
+
 def collect(topics: Sequence[str]) -> list[str]:
     """Every line of the topics asked for, in the order asked. Checks the topics first, then
     works every one out before returning any, so a skill never gets only part of what it asked
@@ -734,6 +771,7 @@ def collect(topics: Sequence[str]) -> list[str]:
         "environment": environment_lines,
         "newer-commits": lambda: newer_commit_lines(handoff_place()),
         "skills": skills_lines,
+        "settings": settings_lines,
     }
     lines: list[str] = []
     for topic in asked:

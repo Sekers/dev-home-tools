@@ -53,15 +53,51 @@ def load(box: Sandbox) -> ModuleType:
 
 
 class FakeGh:
-    """gh's GraphQL request, answering with what a test gives, and recording each query."""
+    """gh's GraphQL requests, answering each with the next answer a test gives, the last one
+    again once they run out, and recording each query."""
 
     def __init__(self, module: ModuleType, code: int, out: object, err: str = "") -> None:
-        self.result = module.GhResult(code, out if isinstance(out, str) else json.dumps(out), err)
+        self.module = module
+        self.results: list[Any] = []
         self.queries: list[str] = []
+        self.then(code, out, err)
+
+    def then(self, code: int, out: object, err: str = "") -> "FakeGh":
+        """Adds the answer to the next request."""
+        text = out if isinstance(out, str) else json.dumps(out)
+        self.results.append(self.module.GhResult(code, text, err))
+        return self
 
     def __call__(self, gh: str, text: str) -> Any:
         self.queries.append(text)
-        return self.result
+        return self.results[min(len(self.queries), len(self.results)) - 1]
+
+
+def closed(reason: str, original: object = None) -> dict[str, object]:
+    """GitHub's answer for an issue closed for a reason, such as NOT_PLANNED."""
+    return {"issue": {"state": "CLOSED", "stateReason": reason, "duplicateOf": original}}
+
+
+def close_details(closer: str, *comments: tuple[str | None, str]) -> dict[str, object]:
+    """GitHub's answer to the second request for one issue: who closed it on 2026-10-01, and its
+    comments, each an author (None for an account that's gone) and a body."""
+    return {
+        "issue": {
+            "timelineItems": {
+                "nodes": [{"createdAt": "2026-10-01T10:00:00Z", "actor": {"login": closer}}]
+            },
+            "comments": {
+                "nodes": [
+                    {
+                        "createdAt": f"2026-09-{20 + n}T08:00:00Z",
+                        "author": None if author is None else {"login": author},
+                        "body": body,
+                    }
+                    for n, (author, body) in enumerate(comments)
+                ]
+            },
+        }
+    }
 
 
 def run_here(
@@ -103,11 +139,11 @@ def test_says_whether_each_link_is_open_or_closed_and_why_once_each(
     module = load(box)
     answer = {
         "data": {
-            "i0": {"issue": {"state": "OPEN", "stateReason": None}},
-            "i1": {"issue": {"state": "CLOSED", "stateReason": "COMPLETED"}},
-            "i2": {"issue": {"state": "CLOSED", "stateReason": "NOT_PLANNED"}},
+            "i0": {"issue": {"state": "OPEN", "stateReason": None, "duplicateOf": None}},
+            "i1": closed("COMPLETED"),
+            "i2": closed("NOT_PLANNED"),
             "i3": None,
-            "i4": {"issue": {"state": "CLOSED", "stateReason": "DUPLICATE"}},
+            "i4": closed("DUPLICATE"),
             "i5": {"issue": {"state": "CLOSED", "stateReason": None}},
         },
         "errors": [
@@ -118,23 +154,132 @@ def test_says_whether_each_link_is_open_or_closed_and_why_once_each(
             }
         ],
     }
+    details = {
+        "data": {
+            "viewer": {"login": "you-on-github"},
+            "c0": close_details(
+                "octocat", ("you-on-github", "Still\n\nseeing this."), (None, "x" * 600)
+            ),
+        }
+    }
     # gh exits 1 when any part of the query fails, and still prints what GitHub answered.
-    gh = FakeGh(module, 1, answer, "gh: Could not resolve to a Repository")
+    gh = FakeGh(module, 1, answer, "gh: Could not resolve to a Repository").then(0, details)
     lines = run_here(box, project, monkeypatch, capsys, gh, module)
     assert lines == [
         "OPEN      https://github.com/you/tool/issues/1",
         "CLOSED    https://github.com/you/tool/issues/2 (completed)",
-        "CLOSED    https://github.com/other/lib/issues/3 (not planned)",
+        "CLOSED    https://github.com/other/lib/issues/3 (not planned, by octocat on 2026-10-01)",
+        "COMMENT   https://github.com/other/lib/issues/3 you on 2026-09-20: Still seeing this.",
+        "COMMENT   https://github.com/other/lib/issues/3 an account that's gone on 2026-09-21: "
+        + "x" * 500
+        + "... (cut)",
         "UNCHECKED https://github.com/gone/repo/issues/4 (GitHub didn't return it: Could not "
         "resolve to a Repository with the name 'gone/repo'.)",
         "CLOSED    https://github.com/you/tool/issues/5 (duplicate)",
         "CLOSED    https://github.com/x/y/issues/6",
     ], lines
-    assert len(gh.queries) == 1, gh.queries
+    assert len(gh.queries) == 2, gh.queries
     query = gh.queries[0]
     assert query.startswith('query { i0: repository(owner: "you", name: "tool") '), query
-    assert "{ issue(number: 1) { state stateReason } }" in query, query
+    assert (
+        "{ issue(number: 1) { state stateReason duplicateOf { url title state stateReason } } }"
+        in query
+    ), query
     assert "i6:" not in query and "mutation" not in query, query
+    # The second asks only about the issue closed as not planned.
+    second = gh.queries[1]
+    assert second.startswith(
+        'query { viewer { login } c0: repository(owner: "other", name: "lib") { issue(number: 3) '
+    ), second
+    assert "comments(last: 3)" in second and "c1:" not in second, second
+    assert "mutation" not in second, second
+
+
+def test_a_duplicate_names_the_issue_it_duplicates_its_state_and_title(
+    box: Sandbox,
+    project: Path,
+    handoff: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    write_text(
+        handoff, "https://github.com/you/tool/issues/9\nhttps://github.com/you/tool/issues/8\n"
+    )
+    module = load(box)
+    url = "https://github.com/you/tool/issues/"
+    answer = {
+        "data": {
+            "i0": closed(
+                "DUPLICATE", {"url": url + "4", "title": "Imports  fail", "state": "OPEN"}
+            ),
+            "i1": closed(
+                "DUPLICATE",
+                {"url": url + "2", "title": "Old", "state": "CLOSED", "stateReason": "COMPLETED"},
+            ),
+        }
+    }
+    gh = FakeGh(module, 0, answer)
+    assert run_here(box, project, monkeypatch, capsys, gh, module) == [
+        f"CLOSED    {url}9 (duplicate of {url}4, which is open: Imports fail)",
+        f"CLOSED    {url}8 (duplicate of {url}2, which is closed as completed: Old)",
+    ]
+    assert len(gh.queries) == 1, "no second request without a not-planned close"
+
+
+@pytest.mark.parametrize(
+    ("second", "says"),
+    [
+        (
+            (0, {"data": {"viewer": {"login": "me"}, "c0": close_details("me")}}),
+            ["(not planned, by you on 2026-10-01)", "COMMENT   {url} (no comments)"],
+        ),
+        (
+            (4, "", "To get started with GitHub CLI, please run:  gh auth login"),
+            [
+                "(not planned; who closed it, and why, couldn't be read: gh isn't signed in to "
+                "GitHub: the user runs gh auth login)"
+            ],
+        ),
+        (
+            (1, {"data": {"viewer": {"login": "me"}, "c0": None}}),
+            ["(not planned; who closed it, and why, couldn't be read: GitHub didn't return it)"],
+        ),
+    ],
+    ids=["closed by the signed-in account, no comments", "signed out since", "not returned"],
+)
+def test_a_not_planned_close_says_who_closed_it_or_why_that_couldnt_be_read(
+    box: Sandbox,
+    project: Path,
+    handoff: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    second: tuple[Any, ...],
+    says: list[str],
+) -> None:
+    url = "https://github.com/you/tool/issues/3"
+    write_text(handoff, f"- Waiting on {url}.\n")
+    module = load(box)
+    gh = FakeGh(module, 0, {"data": {"i0": closed("NOT_PLANNED")}}).then(*second)
+    lines = run_here(box, project, monkeypatch, capsys, gh, module)
+    assert lines[0] == f"CLOSED    {url} {says[0]}", lines
+    assert lines[1:] == [line.format(url=url) for line in says[1:]], lines
+
+
+def test_leaves_out_links_after_see_also_in_their_item(box: Sandbox) -> None:
+    module = load(box)
+    url = "https://github.com/you/tool/issues/"
+    text = (
+        f"- GitHub issue [#1]({url}1): a bug. See also: [#2]({url}2)\n"
+        f"  and {url}3, on the item's next line.\n"
+        f"- Waiting on {url}4. See also, without a colon, {url}5\n"
+        f"- The next item: {url}2\n"
+        "\n"
+        f"A new paragraph: {url}3\n"
+        f"SEE ALSO: {url}6\n"
+        f"## A heading, which ends the item: {url}7\n"
+    )
+    found = [issue.url for issue in module.issue_links(text)]
+    assert found == [url + n for n in ("1", "4", "5", "2", "3", "7")], found
 
 
 @pytest.mark.parametrize("text", ["# tool handoff\n\nNo issues here.\n", None])

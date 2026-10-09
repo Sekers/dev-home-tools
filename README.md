@@ -157,7 +157,9 @@ You can also edit the file and run setup again: `autoUpdate` is `true` or `false
 setup ask again; and `updateCheckHours` and `contentCheckHours` say how often a sync checks
 GitHub for dev-home-tools updates (24 hours unless set) and for dev-home's changes (12 hours
 unless set, when one copy is in active use, and for a plain `/knowledge`), where 0 means every
-time. To use a different dev-home folder, run setup with `--content-dir <folder>`.
+time; and `offerSecurityBugs` is `false` to stop the handoff skill suggesting security bugs as
+GitHub issues (it suggests them, with a warning, unless set). To use a different dev-home
+folder, run setup with `--content-dir <folder>`.
 
 ## Day to day
 

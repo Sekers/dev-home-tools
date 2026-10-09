@@ -1426,3 +1426,129 @@ xhigh. There is no setting for either.
 
 **Look again if:** people type the same options on most audits, Codex runs second agents in the
 background, or new models or prices change which model and effort suit an audit.
+
+## Issue candidates are bugs, features, and improvements, decided or not
+
+**Decision:** an item can be offered as a GitHub issue when it's a bug, a feature, or an
+improvement to the project itself, such as tests, docs, refactoring, performance, or upgrading
+what it depends on, whether or not the person has decided on it, and someone outside the project
+would understand it. Work done outside the project, such as a release, an account to set up, or
+a step of the person's own workflow, isn't offered. The other tests stay as they were.
+
+**Why:**
+
+- It matches what the platforms say issues are for, checked on 2026-10-09: GitHub's docs name
+  "ideas, feedback, tasks, or bugs", and its default issue types are task, bug, and feature;
+  GitLab's name "feature proposals, tasks, support requests, and bug reports", and
+  "decision-making"; Bitbucket's issue kinds are bug, enhancement, proposal, and task (from
+  third-party references to its API).
+- "Task" was too broad. On GitHub it's the catch-all for whatever isn't a bug or a feature,
+  such as releases and routine maintenance, which make poor candidates from a handoff. What's
+  worth offering from that bucket is work on the project itself, which "improvement" names.
+- The old wording, "a bug, a feature request, or a concrete task someone could pick up and do",
+  filtered nothing by kind: candidates come only from To do and Bugs, which hold bugs, planned
+  work, and decisions, and decisions were excluded by name. Its only effect was "pick up and
+  do", which an agent read as "doable today", turning away items with a part still waiting on
+  other work, though issues track blocked work all the time.
+- "Feature request" fits only what someone asked for; "feature" also covers what the person
+  planned themselves.
+- An undecided request or proposal is what issues are most often for: deciding is what triage
+  does. The worry that an issue would split one decision across two places holds less than it
+  seemed, since filing replaces the item with a link to the issue.
+
+This reverses the handoff skill's earlier rule that a decision still to make is never offered.
+That rule wasn't recorded here.
+
+**Options set aside:**
+
+- Keeping "task": see above.
+- Keeping decisions out: an undecided request could never be offered.
+- A test of whether a pull request could close the item: that's how bugs, features, and
+  improvements end, not what "task" means, so it named the wrong thing.
+- A test of whether an issue would help anyone besides the person: more judgment, so less
+  consistent from session to session, and "no (never ask again)" already turns down one item
+  for good.
+
+**Look again if:** offers of undecided items come to feel like noise.
+
+## A security bug is offered with a warning, and each PC can turn the offers off
+
+**Decision:** the handoff skill offers a security bug as an issue candidate like any other bug,
+with a warning first: a public issue tells everyone about the hole before it's fixed, and
+GitHub's draft security advisories keep it private until a fix is out. Filing one by name with
+`/handoff issue <item>` shows the same warning above the draft. A setting on each PC,
+`offerSecurityBugs` in `local-settings.json`, `true` unless set, turns the offers off when
+`false`; filing by name still works. Setup's `--configure` changes it, and `facts.py`'s new
+`settings` topic reports it, in the handoff's start-up call.
+
+**Why:**
+
+- A security bug can be harmless, or already public, so the person decides; the warning makes
+  sure they decide knowing what a public issue does.
+- Some people never want them offered, so a setting, rather than an answer per item.
+- In `local-settings.json` because the person chose it: it sits with dev-home-tools' other
+  settings, and a change commits nothing.
+- The skill learns the setting from a fact, since reading it takes no judgment (see AGENTS.md).
+  The topic reads one small file: 0.08 ms at the median in 200 reads on one PC.
+
+**Options set aside:**
+
+- Never offering security bugs: the person couldn't choose.
+- `dev-home.json`, shared by every copy: it would follow the person to every PC, at the cost of
+  a commit for each change and making setup's `dev-home.json` code handle a second setting.
+- A question in setup's first run: the default suits most people, and `--configure` and the
+  settings list of every run by hand reach it.
+
+**Look again if:** people set it the same way on every PC and find one they missed.
+
+## A closed duplicate follows the original, and a not-planned close is shown and asked about
+
+**Decision:** `issue_status.py` asks GitHub, in its one request, for the issue each duplicate
+duplicates, and prints it with its state and title. When any linked issue closed as not planned,
+a second request asks who closed each one and when, and for its last three comments, which it
+prints as `COMMENT` lines. In the handoff, a link after "See also:" in an item is there for what
+that issue holds, its state changes nothing, and the script leaves it out; every other issue link
+is one the item tracks. When a tracked issue closes:
+
+- as completed: as before, an item filed as it is removed, and any other is kept and reported;
+- as a duplicate: the link moves to the original, and an item already tracking the original is
+  merged with it;
+- as not planned: the item stays, and after committing, the agent says who closed it and what the
+  comments say, and asks whether to remove it, link it to where the work moved, or keep it with
+  the closed issue under "See also:", where it stops coming up.
+
+An item keeps a "See also:" link to another issue the work needs only when its own issue doesn't
+link to it, and keeps it until the item is removed.
+
+**Why:**
+
+- GitHub shows a duplicate on the original's page: on 2026-10-09, each of five recent duplicates
+  in `cli/cli` appeared on its original as "marked as duplicate" and as a cross-reference. So the
+  original is where the work, and the duplicate's information, can be found, and the handoff
+  needn't keep the old link. A related issue that GitHub doesn't link is a different matter, and
+  only the handoff can keep the two together.
+- A not-planned close can be a decision, a bot closing an inactive issue, or the work moving to
+  another issue, and when someone else closed it, the person may not know which. The comments
+  usually say. Removing the item, or keeping it without the reason, left the person to go and
+  look.
+- Saying that an issue closed and moved belongs in the update's report, not the item: a handoff
+  holds the current state, and git keeps the history (rule 2 of the handoff skill).
+- The second request took 0.63 s in one run on one PC on 2026-10-09, about what the first takes
+  (0.49 to 0.56 s in three runs). It runs only while a linked issue is closed as not planned,
+  which ends once the person answers.
+
+This changes "The handoff update checks issue links with one script": one `gh` request becomes
+two when an issue closed as not planned.
+
+**Options set aside:**
+
+- Removing a not-planned item and reporting it: the person may not know why it closed.
+- The closer and comments in the first request, for every issue: more data on every update, for
+  issues that are mostly open.
+- The agent running `gh issue view` for what it needs: the skill's steps would grow with each
+  host, and the script is the one place that learns each host's tool.
+- Keeping the closed duplicate's link beside the original's: GitHub already links them.
+- A note in the item that its issue moved: history, which the handoff leaves to git.
+
+**Look again if:** GitHub stops showing duplicates on the original, or issues on other hosts are
+checked.

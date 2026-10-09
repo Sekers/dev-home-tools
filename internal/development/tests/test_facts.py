@@ -1,5 +1,7 @@
 """facts.py, run as the handoff skill runs it in Codex, from a sandbox's generated copy."""
 
+import importlib.util
+import json
 import os
 import re
 import shutil
@@ -9,7 +11,17 @@ from pathlib import Path
 
 import pytest
 
-from helpers import Run, Sandbox, git, new_repo, run_command, sandbox_for, skill_command, write_text
+from helpers import (
+    Run,
+    Sandbox,
+    git,
+    new_repo,
+    run_command,
+    sandbox_for,
+    shared_module,
+    skill_command,
+    write_text,
+)
 
 pytestmark = pytest.mark.xdist_group("facts")
 
@@ -179,6 +191,54 @@ def test_the_skills_topic_without_skills_of_the_users_own(box: Sandbox) -> None:
         hidden.rename(skills)
     assert result.code == 0, str(result)
     assert result.lines and all("(dev-home-tools)" in line for line in result.lines), str(result)
+
+
+# The settings topic, which reads the sandbox's local-settings.json. It needs no project.
+
+
+def settings_facts(box: Sandbox, text: str) -> Run:
+    """The settings topic, with local-settings.json holding the text given, then put back."""
+    settings = box.tools / "local-settings.json"
+    before = settings.read_bytes()
+    write_text(settings, text)
+    try:
+        return facts(box, box.root, "settings")
+    finally:
+        settings.write_bytes(before)
+
+
+@pytest.mark.parametrize(
+    ("value", "printed"),
+    [(None, "true"), (False, "false"), (True, "true"), ("no", "true")],
+    ids=["unset", "false", "true", "not true or false"],
+)
+def test_the_settings_topic_prints_each_setting_or_its_default(
+    box: Sandbox, value: object, printed: str
+) -> None:
+    data = json.loads((box.tools / "local-settings.json").read_text(encoding="utf-8"))
+    data.pop("offerSecurityBugs", None)
+    if value is not None:
+        data["offerSecurityBugs"] = value
+    result = settings_facts(box, json.dumps(data, indent=2) + "\n")
+    assert result.code == 0, str(result)
+    assert result.lines == [f"offerSecurityBugs: {printed}"], str(result)
+
+
+def test_the_settings_topic_with_settings_it_cant_read_prints_the_defaults(box: Sandbox) -> None:
+    for text in ("{ not json", "[]"):
+        result = settings_facts(box, text)
+        assert result.code == 0, str(result)
+        assert result.lines == ["offerSecurityBugs: true"], str(result)
+
+
+def test_the_settings_topics_defaults_are_setups(box: Sandbox) -> None:
+    # facts.py doesn't load setup's code, so each keeps its own copy of the defaults.
+    path = box.generated / "shared-skill-scripts" / "facts.py"
+    spec = importlib.util.spec_from_file_location("facts_defaults_" + box.root.name[-8:], path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.SETTING_DEFAULTS == shared_module(box, "settings").DEFAULT_SWITCHES
 
 
 def test_two_topics_print_in_the_order_asked(box: Sandbox, sample: Path) -> None:
