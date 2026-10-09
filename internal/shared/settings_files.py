@@ -74,14 +74,14 @@ def to_lines(text: str) -> list[str]:
     return lines
 
 
-def write_settings_file(path: Path, text: str, *, bom: bool) -> str:
+def write_settings_file(path: Path, text: str, *, bom: bool, backup: bool) -> str:
     """Writes the new text to a file next to the original and reads it back, copies the original
-    to a dated backup, then moves the new file into place in one step, so the file is never
-    missing or half written. Returns the backup's path, or "" when there was no file before."""
+    to a dated backup when backup is set, then moves the new file into place in one step, so the
+    file is never missing or half written. Returns the backup's path, or "" when it made none."""
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_name(path.name + ".dev-home-new")
     encoding = "utf-8-sig" if bom else "utf-8"
-    backup: Path | None = None
+    kept: Path | None = None
     replaced = False
     try:
         with temp.open("w", encoding=encoding, newline="") as file:
@@ -93,15 +93,16 @@ def write_settings_file(path: Path, text: str, *, bom: bool) -> str:
             # Moving a file over a read-only one works on some systems, so check first.
             if not os.access(path, os.W_OK):
                 raise PermissionError(f"{path} is read-only.")
-            backup = new_backup(path)
+            if backup:
+                kept = new_backup(path)
         move_into_place(temp, path)
         replaced = True
-        return str(backup) if backup else ""
+        return str(kept) if kept else ""
     finally:
         temp.unlink(missing_ok=True)
         # When the original is still in place, a backup of it is only clutter.
-        if backup is not None and not replaced:
-            backup.unlink(missing_ok=True)
+        if kept is not None and not replaced:
+            kept.unlink(missing_ok=True)
 
 
 def move_into_place(temp: Path, path: Path) -> None:

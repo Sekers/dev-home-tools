@@ -1260,7 +1260,9 @@ def test_a_read_only_settings_file_is_never_planned_or_written(box: Sandbox) -> 
     try:
         plan = shared_module(box, "claude_settings").plan(path, ENTRIES)
         with pytest.raises(PermissionError):
-            shared_module(box, "settings_files").write_settings_file(path, "[]\n", bom=False)
+            shared_module(box, "settings_files").write_settings_file(
+                path, "[]\n", bom=False, backup=True
+            )
         left = sorted(entry.name for entry in path.parent.glob("read-only.json*"))
     finally:
         path.chmod(stat.S_IREAD | stat.S_IWRITE)
@@ -1279,7 +1281,9 @@ def test_a_settings_file_held_open_for_a_moment_is_still_replaced(box: Sandbox) 
     started = time.monotonic()
     timer.start()
     try:
-        backup = shared_module(box, "settings_files").write_settings_file(path, "[]\n", bom=False)
+        backup = shared_module(box, "settings_files").write_settings_file(
+            path, "[]\n", bom=False, backup=True
+        )
     finally:
         timer.cancel()
         held.close()
@@ -1301,7 +1305,20 @@ def test_a_settings_file_held_open_too_long_is_left_as_it_was(
     path.parent.mkdir(exist_ok=True)
     path.write_bytes(b"{}\n")
     with path.open("rb"), pytest.raises(PermissionError):
-        settings_files.write_settings_file(path, "[]\n", bom=False)
+        settings_files.write_settings_file(path, "[]\n", bom=False, backup=True)
     assert path.read_bytes() == b"{}\n"
     left = sorted(entry.name for entry in path.parent.glob("held-long.json*"))
     assert left == ["held-long.json"], "no backup and no new file left beside it"
+
+
+def test_a_settings_file_saved_without_a_backup_gets_none(box: Sandbox) -> None:
+    path = box.root / "plans" / "no-backup.json"
+    path.parent.mkdir(exist_ok=True)
+    path.write_bytes(b"{}\n")
+    written = shared_module(box, "settings_files").write_settings_file(
+        path, "[]\n", bom=False, backup=False
+    )
+    assert written == ""
+    assert path.read_bytes() == b"[]\n"
+    left = sorted(entry.name for entry in path.parent.glob("no-backup.json*"))
+    assert left == ["no-backup.json"], "no backup and no new file left beside it"

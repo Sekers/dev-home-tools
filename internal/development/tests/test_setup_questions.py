@@ -257,6 +257,32 @@ def test_asks_each_question_whose_answer_isnt_saved_yet_then_never_again(
     assert written["declinedClaudeConfigDirs"] == ["~/.claude-later"]
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="only Windows refuses to replace an open file")
+def test_an_answer_that_cant_be_saved_leaves_the_old_settings_whole(
+    box: Sandbox,
+    settings: Path,
+    person: Person,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Saved by swapping in a new copy, so a save that can't finish, here because another program
+    # holds the file open, leaves the old file as it was rather than half written.
+    monkeypatch.setattr(shared_module(box, "settings_files"), "REPLACE_WAIT_SECONDS", 0.2)
+    saved = json.loads(settings.read_text(encoding="utf-8"))
+    saved.pop("autoUpdate", None)
+    write_text(settings, json.dumps(saved, indent=2) + "\n")
+    before = settings.read_bytes()
+    person.answers[r"^Pull updates automatically\? \[y/N\]: $"] = "n"
+    with settings.open("rb"):
+        returned = setup_here(box)
+    out = capsys.readouterr().out
+    assert returned == 1, out
+    assert re.search(r"^PROBLEM\s+Could not save this PC's settings", out, re.M), out
+    assert settings.read_bytes() == before
+    left = sorted(entry.name for entry in settings.parent.glob("local-settings.json*"))
+    assert left == ["local-settings.json"], "no backup and no new file left beside it"
+
+
 NOT_A_DEV_HOME = r"^Your dev-home folder, or Enter to stop: $"
 
 
@@ -376,6 +402,28 @@ def test_an_answered_dev_home_is_asked_nothing(box: Sandbox, person: Person) -> 
     home, _ = own_dev_home(box, "copies-answered", '{"multiMachine": false}\n')
     assert check_copies(box, home) == 0
     assert person.asked == []
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="only Windows refuses to replace an open file")
+def test_a_copies_answer_that_cant_be_saved_leaves_dev_home_as_it_is(
+    box: Sandbox,
+    person: Person,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(shared_module(box, "settings_files"), "REPLACE_WAIT_SECONDS", 0.2)
+    home, remote = own_dev_home(box, "copies-held-open", '{"multiMachine": false}\n')
+    path = home / "dev-home.json"
+    before = path.read_bytes()
+    person.answers.update({ALONGSIDE: "y", SAVE_COPIES: "y"})
+    with path.open("rb"):
+        returned = check_copies(box, home, cloned=True)
+    out = capsys.readouterr().out
+    assert returned == 1, out
+    assert re.search(r"^PROBLEM\s+Could not write .*dev-home\.json\. ", out, re.M), out
+    assert path.read_bytes() == before
+    assert sorted(entry.name for entry in home.glob("dev-home.json*")) == ["dev-home.json"]
+    assert git("-C", str(remote), "log", "-1", "--format=%s") == ["test: dev-home"]
 
 
 # --configure's menu at a console.

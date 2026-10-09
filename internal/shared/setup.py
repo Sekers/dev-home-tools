@@ -105,7 +105,6 @@ from .settings import (
     hours_setting,
     load_local_settings,
     local_settings_text,
-    save_local_settings,
 )
 from .settings_files import (
     Plan,
@@ -552,8 +551,8 @@ class Setup:
             )
             return
         try:
-            with path.open("w", encoding="utf-8", newline="\n") as file:
-                file.write(new_text)
+            # No backup: git's history is dev-home.json's.
+            write_settings_file(path, new_text, bom=False, backup=False)
         except OSError as error:
             self.status("PROBLEM", f"Could not write {path}. {error}")
             return
@@ -774,7 +773,7 @@ class Setup:
                     "The file changed while setup was waiting for an answer, so it was left "
                     "alone. Run setup.py again."
                 )
-            backup = write_settings_file(path, plan.new_text or "", bom=plan.file.bom)
+            backup = write_settings_file(path, plan.new_text or "", bom=plan.file.bom, backup=True)
             saved = f" Backup of the old file: {backup}" if backup else " (new file)"
             self.status("SET", f"{subject}: changed {path}.{saved}")
         except (OSError, ValueError) as error:
@@ -926,13 +925,15 @@ class Setup:
         if save and self.should(SETTINGS_PATH, "Save this PC's settings"):
             try:
                 if self.configure is None:
-                    save_local_settings(settings)
+                    write_settings_file(
+                        SETTINGS_PATH, local_settings_text(settings), bom=False, backup=False
+                    )
                     saved = ""
                 else:
                     # A change to answers already given keeps the old file, as other settings
                     # changes do.
                     backup = write_settings_file(
-                        SETTINGS_PATH, local_settings_text(settings), bom=False
+                        SETTINGS_PATH, local_settings_text(settings), bom=False, backup=True
                     )
                     saved = f" Backup of the old file: {backup}" if backup else " (new file)"
                 self.status("SET", f"This PC's settings: {SETTINGS_PATH}{saved}")

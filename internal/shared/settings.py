@@ -107,9 +107,3 @@ def local_settings_text(settings: LocalSettings) -> str:
     if settings.test_home_dir:
         data["testHomeDir"] = settings.test_home_dir
     return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
-
-
-def save_local_settings(settings: LocalSettings) -> None:
-    """Writes the settings back (see local_settings_text)."""
-    with SETTINGS_PATH.open("w", encoding="utf-8", newline="\n") as file:
-        file.write(local_settings_text(settings))
