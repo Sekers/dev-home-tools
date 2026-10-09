@@ -275,10 +275,10 @@ as a step written in a handoff or a plan.
   version of the code throughout. So nothing in `internal/shared/` changes what the whole
   process shares, such as environment variables, the current folder, the import path, or sys's
   streams, outside an `if __name__ == "__main__":` block (a test checks). Their `main`
-  functions return a number, and never raise or call `sys.exit`. And keep the name and
-  arguments of what `prepare.py` calls,
-  `main(argv)` in `sync.py`: the `prepare.py` running may be a generated copy older than the
-  code on disk.
+  functions return a number, and never raise or call `sys.exit`. Ctrl+C (`KeyboardInterrupt`)
+  passes through them on purpose: the entry points catch it, so it stops a whole sync. And keep
+  the name and arguments of what `prepare.py` calls, `main(argv)` in `sync.py`: the
+  `prepare.py` running may be a generated copy older than the code on disk.
 
 ## Docs (README.md and docs/)
 

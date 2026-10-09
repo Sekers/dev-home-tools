@@ -837,6 +837,21 @@ def test_code_that_cant_load_says_how_to_install_a_fix_by_hand(box: Sandbox, scr
     assert not result.has_line("Traceback"), str(result)
 
 
+@pytest.mark.parametrize("script", ["setup.py", "sync.py", "update.py"])
+def test_ctrl_c_says_the_script_stopped_instead_of_a_traceback(box: Sandbox, script: str) -> None:
+    # Ctrl+C at a console raises KeyboardInterrupt in whatever code is running.
+    code = box.tools / "internal" / "shared" / script
+    before = code.read_bytes()
+    write_text(code, "def main(argv):\n    raise KeyboardInterrupt\n")
+    try:
+        result = run_python(box, script)
+    finally:
+        code.write_bytes(before)
+    assert result.code == 130, str(result)
+    assert result.has_line(rf"^{re.escape(script)} stopped: Ctrl\+C was pressed\.$"), str(result)
+    assert not result.has_line("Traceback"), str(result)
+
+
 # When a sync checks GitHub. Last in this file: these leave updates waiting.
 
 

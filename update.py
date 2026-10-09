@@ -56,4 +56,10 @@ if __name__ == "__main__":
     except Exception as error:
         print(stopped(error))
         code = 1
+    except KeyboardInterrupt:
+        # Ctrl+C isn't an Exception, so it's caught on its own, the same way setup.py and sync.py
+        # catch it.
+        # 130 is what shells report for a program Ctrl+C stopped.
+        print(f"\n{Path(__file__).name} stopped: Ctrl+C was pressed.")
+        code = 130
     sys.exit(code)
