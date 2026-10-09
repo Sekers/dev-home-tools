@@ -337,15 +337,16 @@ it can. It follows "Changing the handoff", with these steps for the edit:
    > - a decision made but not built, without its reasons and the options set aside; or a
    >   decision said to be built, whose reasons aren't in the project's files
    >
-   > For each, quote the item's first few words, say what's wrong, and give the evidence: a file
-   > and line, or a commit. Report only real problems, and say "none" for a section with none.
-   > Keep the report under 600 words.
+   > For each, give the item's line in the handoff and quote its first few words, say what's
+   > wrong, and give the evidence: a file and line, or a commit. Report only real problems, and
+   > say "none" for a section with none. Keep the report under 600 words.
 4. When it reports, read only the parts of the handoff its findings point to: each item it
-   quotes, and both items of a contradiction. Find each by its first words, since its line may
-   have moved. This takes the place of step 3 of "Changing the handoff": an edit that replaces
-   only the text it targets keeps whatever another session changed elsewhere. Check each finding
-   against those parts and the project's files as they are now, and drop any finding you can't
-   confirm, or whose text has changed since.
+   quotes, and both items of a contradiction. Read each at the line the finding gives, and when
+   its first words aren't there, search for them, since another session may have moved it. This
+   takes the place of step 3 of "Changing the handoff": an edit that replaces only the text it
+   targets keeps whatever another session changed elsewhere. Check each finding against those
+   parts and the project's files as they are now, and drop any finding you can't confirm, or
+   whose text has changed since.
 5. Fix each finding that the handoff or the project's files settle, such as a pointer by the
    wrong name, or an item that a later decision has overtaken. When two items contradict each
    other and a recorded decision settles which is right, follow the later decision, and say so.
