@@ -8,13 +8,15 @@ steps agents follow are in the skill itself:
 | --- | --- |
 | `/handoff` | Syncs your dev-home with GitHub, then summarizes this project's handoff, starting with Next up, with a link to the file. If the project has commits since the one the handoff last checked, it says how many and what they cover. If this copy of the project lacks commits that check had, it says to pull first. |
 | `/handoff <question>` | The same, then answers the question. |
-| `/handoff update` | Brings the whole handoff up to date. If Next up looks done, asks before clearing it. |
+| `/handoff update` | Brings the whole handoff up to date, including what this session decided, built, changed, and learned, and lists where each went so you can spot a gap. If Next up looks done, asks before clearing it. |
 | `/handoff update <text>` | The same, with your text worked in, in any words. The text can also set, add to, or clear Next up. |
 | `/handoff next` | Shows Next up. |
 | `/handoff next <text>` | Replaces Next up. Nothing else changes. |
 | `/handoff next clear` | Empties Next up. |
 | `/handoff issue` | Lists the items that could become GitHub issues. |
 | `/handoff issue <item>` | Files an item as an issue in the project's GitHub repo, and replaces the item with a link to it. For now, only in Claude Code, for projects on GitHub, with `gh` signed in. |
+| `/handoff audit` | Has a fresh agent read the handoff as a new session would, then fixes what it can and asks you about the rest. See [Audits](#audits). |
+| `/handoff audit <model> <effort>` | The same, on that model or at that effort, or both, such as `/handoff audit sonnet xhigh`. |
 
 A command that changes the handoff saves, commits, and pushes only that file: typing the command
 is your go-ahead. Some examples:
@@ -28,6 +30,7 @@ is your go-ahead. Some examples:
 | `/handoff next clear the old wiki pages` | Next up becomes "Clear the old wiki pages". Only `clear` on its own empties Next up. |
 | `/handoff next steps?` | Reads as a question, so the agent answers it and asks before changing anything. |
 | `/handoff issue Bugs 1` | Drafts an issue from that item, files it after your yes, and replaces the item with a link. |
+| `/handoff audit the to-dos` | Reads as a question, so the agent answers it and asks before starting an audit. |
 
 - **A command changes the handoff right away,** and commits and pushes it. So does a request in
   plain words that matches one command exactly, such as "update the handoff"; the agent says
@@ -61,6 +64,43 @@ is your go-ahead. Some examples:
   you approve inside its sandbox, where git and `gh` can't use your GitHub credentials. So the
   next `/handoff` in Claude Code lists the file, and offers to commit and push it once nobody has
   touched it for 15 minutes. The same goes for anything you edit by hand in dev-home.
+
+## Audits
+
+**`/handoff audit` has a second agent read the handoff as a new session would.** That agent knows
+nothing about your sessions. It reads the whole handoff and the project files its items point
+to, then reports every item a new session couldn't act on without asking you: one that's out of
+date, one that contradicts another item or your project's files, or one that doesn't say what to
+do next, or why. Your agent then checks each finding, fixes what the handoff or your project's
+files settle, commits, and lists what it changed and what only you can answer. It never changes
+Next up, and never rewords text you approved; it asks instead.
+
+An update fixes what the current session changed. An audit finds what earlier sessions left
+behind. Neither can find something nobody wrote down.
+
+**When it's worth running:**
+
+- before someone else, another PC, or another AI tool picks up the work
+- after many sessions since the last audit, or when the handoff has grown long
+- when a session was misled by something wrong in the handoff
+
+**What it costs:** it takes minutes rather than seconds, and costs more than most commands. The
+longer the handoff, and the more project files its items name, the more it costs. So run one now
+and then, not after every update. In Claude Code you can keep working while it runs; in Codex,
+the chat waits.
+
+**Choosing a model and effort:** an audit runs on your session's model and effort. To choose
+others, name them: `/handoff audit sonnet xhigh`. A model named on its own runs at xhigh. In
+Claude Code, on one long handoff:
+
+- **Opus at medium:** quick and thorough; the best balance of time and results.
+- **Sonnet at xhigh:** the most thorough, and about as slow as Opus at xhigh.
+- **Haiku at xhigh:** the cheapest by far, but the slowest of the useful choices.
+- **Avoid** low or medium effort on Sonnet or Haiku, which missed most problems, and max on any
+  model, which was slower and found no more.
+
+No audit found every problem, and two identical audits found different ones, so a second audit
+often finds more.
 
 ## Where handoffs are kept
 

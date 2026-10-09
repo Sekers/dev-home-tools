@@ -129,7 +129,8 @@ def test_the_skills_topic_lists_dev_home_tools_skills_then_the_users(box: Sandbo
         ("mine", "yours"),
     ], str(result)
     assert any(
-        line.startswith("skill: handoff (dev-home-tools): Read or update") for line in result.lines
+        line.startswith("skill: handoff (dev-home-tools): Read, update, or audit")
+        for line in result.lines
     )
     assert result.lines[-1] == "skill: mine (yours): A personal test skill.", str(result)
 
