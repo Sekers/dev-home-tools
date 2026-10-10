@@ -1118,6 +1118,12 @@ write by itself, so setup never undoes an edit the person made.
   versions of Claude Code need.
 - Turning off telemetry: in Claude Code it also stops feature flags, which can make Remote
   Control unavailable, so it's not a safe default for everyone.
+- Turning off Claude Code's built-in git instructions (`"includeGitInstructions": false`): the
+  one line in them that's a matter of choice, "If on the default branch, branch first", is for
+  each repo to settle in its own instruction files, and `attribution-off` already covers the
+  attribution lines. Turning them off would also drop the git status snapshot at the start of a
+  session, and on a PC without the PowerShell tool, perhaps every built-in git safety line (not
+  tested; seen with Claude Code 2.1.296 on 2026-10-10).
 
 **Look again if:** Codex gains a local setting for attribution or a survey, or Claude Code's
 settings start syncing between machines.
