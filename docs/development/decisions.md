@@ -1089,13 +1089,22 @@ pull requests without a line naming the tool, and `"feedbackSurveyRate": 0` (id
 `feedback-survey-off`), which stops the session quality survey and its request to upload the
 session's transcript.
 
-- Setup offers one only for a Claude folder whose `settings.json` lacks that setting. A value
-  already there, whatever it is, is the person's own choice, and setup never asks about it or
-  changes it.
+- Setup offers one for each Claude folder whose `settings.json` doesn't already have the
+  recommended value: the setting is missing, set to something else, or written more than once.
+- Each offer says what the value there now does and what the recommended value would change,
+  fitted to what's there. For `attribution-off`: when it's missing, commits get a co-author line,
+  pull requests get "Generated with Claude Code", and cloud and Remote Control sessions add a
+  link to the session; the older form with empty `commit` and `pr` hides the first two but not
+  the link; and text the person wrote would be removed, which the offer says, so someone keeping
+  it can answer no.
+- A setting written more than once: Claude Code silently uses only the last copy (Claude Code
+  2.1.296, tested 2026-10-10). The offer shows every copy, and accepting leaves one, with the
+  recommended value. When setup changes a file in which some other key is written more than
+  once, its diff keeps the last copy of that key, the one Claude Code uses, and says so.
 - Answers are saved per PC and per Claude folder, in `local-settings.json` under
   `recommendedSettings`, such as `{"~/.claude": {"attribution-off": true}}`. A no is never asked
-  again. An answer is saved only once its change is written, so a run that stops partway records
-  nothing.
+  again. If the value changes after a yes, setup asks again rather than changing it back. An
+  answer is saved only once its change is written, so a run that stops partway records nothing.
 - A settings file gets one diff for everything setup changes in it, the required lines and the
   chosen recommendations together, with one yes and one backup.
 
@@ -1105,7 +1114,9 @@ the ChatGPT workspace, which Codex asks OpenAI for, and it has no session survey
 Codex's source at rust-v0.161.0, 2026-10-07). `"attribution": false` needs Claude Code 2.1.281
 or later, which "Only the latest versions of Claude Code and Codex" allows. Answers are per
 folder because a work account can need different settings, and a saved yes never causes a later
-write by itself, so setup never undoes an edit the person made.
+write by itself, so setup never undoes an edit the person made. A value already there gets an
+offer too, because it isn't always a choice: an older form can hide less than the person meant,
+and a setting written twice keeps only its last copy, without a word.
 
 **Options set aside:**
 
@@ -1114,6 +1125,9 @@ write by itself, so setup never undoes an edit the person made.
   answer was. Recommendations tied to what a PC has installed don't fit a shared answer at all.
 - One answer for every Claude folder on a PC: a folder set up later would be changed without
   being asked.
+- Offering only where the setting is missing, and treating any value already there as the
+  person's choice: it left an older form that hides less than the person meant, and a setting
+  written more than once, as they were.
 - The three-key form of `attribution` (`commit`, `pr`, and `sessionUrl`), which only older
   versions of Claude Code need.
 - Turning off telemetry: in Claude Code it also stops feature flags, which can make Remote
